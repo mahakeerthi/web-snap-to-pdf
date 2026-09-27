@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-boot>
 <head>
   <meta charset="utf-8">
   <title>PageSnap PDF</title>
@@ -9,106 +9,208 @@
   <header class="top">
     <img src="../../icons/icon32.png" alt="" width="28" height="28">
     <div class="title-block">
-      <h1>PageSnap PDF</h1>
-      <p id="page-title" class="muted" title="">Reading page…</p>
+      <h1 data-i18n="extName">PageSnap PDF</h1>
+      <p id="page-title" data-i18n="popup_pageTitleLoading">Reading page…</p>
     </div>
-    <button type="button" id="open-options" class="icon-btn" title="Settings" aria-label="Settings">
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    <button type="button" id="theme-toggle" class="icon-btn" data-mode="system" aria-label="Theme: System" title="Theme: System">
+      <svg class="i-system" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg>
+      <svg class="i-light" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <svg class="i-dark" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.1A8.5 8.5 0 1 1 9.9 3.5a6.6 6.6 0 0 0 10.6 10.6z"/></svg>
+    </button>
+    <button type="button" id="open-options" class="icon-btn" title="Settings" aria-label="Settings" data-i18n-title="popup_settings" data-i18n-aria-label="popup_settings">
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
   </header>
 
-  <div id="blocked" class="notice hidden" role="status">
+  <div id="blocked" class="notice hidden" role="status" data-i18n="popup_blocked">
     This page can’t be converted. Chrome blocks extensions on browser pages, the Web Store and other extensions.
   </div>
 
   <main id="main">
-    <section class="row">
-      <div class="seg" data-key="contentMode" role="group" aria-label="Content">
-        <button type="button" data-value="page" class="active" aria-pressed="true">Full page</button>
-        <button type="button" data-value="article" aria-pressed="false">Article only</button>
+    <section id="actions" class="actions" role="group" aria-label="Export" data-i18n-aria-label="popup_actions">
+      <div class="card">
+        <button type="button" id="act-page" class="card-main">
+          <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/></svg></span>
+          <span class="card-text">
+            <span class="card-title" data-i18n="action_fullPage">Full page</span>
+            <span class="card-desc" data-i18n="action_fullPageDesc">The whole page, top to bottom</span>
+          </span>
+        </button>
+        <button type="button" id="act-page-preview" class="card-alt" title="Preview the full page in a new tab instead of downloading" aria-label="Preview the full page in a new tab instead of downloading" data-i18n-title="action_previewFullPage" data-i18n-aria-label="action_previewFullPage">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
       </div>
-      <div class="seg" data-key="layout" role="group" aria-label="Layout">
-        <button type="button" data-value="paged" class="active" aria-pressed="true">Page breaks</button>
-        <button type="button" data-value="single" aria-pressed="false">Single page</button>
+      <div class="card">
+        <button type="button" id="act-article" class="card-main">
+          <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg></span>
+          <span class="card-text">
+            <span class="card-title" data-i18n="action_article">Article only</span>
+            <span class="card-desc" data-i18n="action_articleDesc">Main content, without menus or ads</span>
+          </span>
+        </button>
+        <button type="button" id="act-article-preview" class="card-alt" title="Preview the article in a new tab instead of downloading" aria-label="Preview the article in a new tab instead of downloading" data-i18n-title="action_previewArticle" data-i18n-aria-label="action_previewArticle">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="card">
+        <button type="button" id="act-select" class="card-main">
+          <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a2 2 0 0 0-2 2M19 3a2 2 0 0 1 2 2M5 21a2 2 0 0 1-2-2M9 3h1M9 21h2M14 3h1M3 9v1M21 9v2M3 14v1"/><path d="m12 12 4 10 1.7-4.3L22 16z"/></svg></span>
+          <span class="card-text">
+            <span class="card-title" data-i18n="action_select">Select element</span>
+            <span class="card-desc" data-i18n="action_selectDesc">Pick one part of the page to save</span>
+          </span>
+        </button>
+      </div>
+      <div class="tools-row">
+        <button type="button" id="act-remove" class="ghost" title="Click ads, banners or anything else to remove it before saving" data-i18n-title="action_removeTitle">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+          <span data-i18n="action_remove">Remove elements</span>
+        </button>
+        <button type="button" id="act-reset" class="link hidden" title="Put back every element you removed" data-i18n-title="action_resetTitle">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span id="reset-label">Reset page (0)</span>
+        </button>
+      </div>
+      <!-- Experimental: only shown when settings.markdownEnabled was switched on in the options. -->
+      <div id="md-row" class="md-row hidden" role="group" aria-label="Export as Markdown" data-i18n-aria-label="action_markdownLabel">
+        <span class="md-label">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 15V9l3 3 3-3v6"/><path d="M17 9v6m-2.5-2.5L17 15l2.5-2.5"/></svg>
+          <span data-i18n="action_markdown">Markdown</span>
+        </span>
+        <button type="button" id="md-page" class="ghost" title="Export the full page as Markdown" data-i18n-title="action_markdownPageTitle"><span data-i18n="action_markdownPage">Full page</span></button>
+        <button type="button" id="md-article" class="ghost" title="Export the article as Markdown" data-i18n-title="action_markdownArticleTitle"><span data-i18n="action_markdownArticle">Article</span></button>
       </div>
     </section>
 
-    <section class="grid2">
-      <label>Paper size
-        <select id="format"></select>
-      </label>
-      <div class="field">
-        <span id="orientation-label">Orientation</span>
-        <div class="seg small" data-key="orientation" role="group" aria-labelledby="orientation-label">
-          <button type="button" data-value="portrait" class="active" aria-pressed="true">Portrait</button>
-          <button type="button" data-value="landscape" aria-pressed="false">Landscape</button>
+    <section id="settings-panel" class="panel">
+      <div class="layout-row">
+        <span id="layout-label" class="row-label" data-i18n="layout_label">Layout</span>
+        <div class="seg" data-key="layout" role="group" aria-labelledby="layout-label">
+          <button type="button" data-value="paged" class="active" aria-pressed="true" data-i18n="layout_paged">Page breaks</button>
+          <button type="button" data-value="single" aria-pressed="false" data-i18n="layout_single">Single page</button>
         </div>
       </div>
-    </section>
+      <p id="summary" class="summary" aria-label="Current export settings" data-i18n-aria-label="summary_label"></p>
 
-    <section class="grid2">
-      <label>Margins
-        <select id="marginPreset">
-          <option value="none">None</option>
-          <option value="minimal">Minimal (5 mm)</option>
-          <option value="default">Default (10 mm)</option>
-          <option value="wide">Wide (20 mm)</option>
-          <option value="custom">Custom…</option>
-        </select>
-      </label>
-      <label>Layout width
-        <select id="layoutWidth"></select>
-      </label>
-    </section>
+      <button type="button" id="toggle-advanced" class="disclosure" aria-expanded="false" aria-controls="advanced">
+        <svg class="d-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        <span data-i18n="settings_toggle">Export settings</span>
+        <svg class="chevron" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
 
-    <section id="custom-margins" class="grid4 hidden" role="group" aria-label="Custom margins in millimetres">
-      <label>Top <input type="number" id="m-top" min="0" max="100" step="1"></label>
-      <label>Right <input type="number" id="m-right" min="0" max="100" step="1"></label>
-      <label>Bottom <input type="number" id="m-bottom" min="0" max="100" step="1"></label>
-      <label>Left <input type="number" id="m-left" min="0" max="100" step="1"></label>
-      <p class="muted span4">Millimetres</p>
-    </section>
+      <div id="advanced" class="advanced" hidden>
+        <div class="group" role="group" aria-labelledby="g-paper">
+          <h2 id="g-paper" class="caption" data-i18n="group_paper">Paper</h2>
+          <label class="field"><span data-i18n="field_paperSize">Size</span>
+            <select id="format"></select>
+          </label>
+          <div class="inline-row">
+            <span id="orientation-label" class="field-label" data-i18n="field_orientation">Orientation</span>
+            <div class="seg" data-key="orientation" role="group" aria-labelledby="orientation-label">
+              <button type="button" data-value="portrait" class="active" aria-pressed="true" data-i18n="orientation_portrait">Portrait</button>
+              <button type="button" data-value="landscape" aria-pressed="false" data-i18n="orientation_landscape">Landscape</button>
+            </div>
+          </div>
+        </div>
 
-    <section id="scale-row" class="range-row">
-      <label for="scale">Scale <span id="scale-value" class="muted">100%</span></label>
-      <input type="range" id="scale" min="10" max="200" step="5">
-    </section>
+        <div class="group" role="group" aria-labelledby="g-margins">
+          <h2 id="g-margins" class="caption" data-i18n="group_margins">Margins</h2>
+          <select id="marginPreset" aria-labelledby="g-margins">
+            <option value="none" data-i18n="margin_none">None</option>
+            <option value="minimal" data-i18n="margin_minimal">Minimal (5 mm)</option>
+            <option value="default" data-i18n="margin_default">Default (10 mm)</option>
+            <option value="wide" data-i18n="margin_wide">Wide (20 mm)</option>
+            <option value="custom" data-i18n="margin_custom">Custom…</option>
+          </select>
+          <div id="custom-margins" class="custom-margins hidden" role="group" aria-label="Custom margins in millimetres" data-i18n-aria-label="margin_customLabel">
+            <div class="grid4">
+              <label class="field"><span data-i18n="margin_top">Top</span><input type="number" id="m-top" min="0" max="100" step="1"></label>
+              <label class="field"><span data-i18n="margin_right">Right</span><input type="number" id="m-right" min="0" max="100" step="1"></label>
+              <label class="field"><span data-i18n="margin_bottom">Bottom</span><input type="number" id="m-bottom" min="0" max="100" step="1"></label>
+              <label class="field"><span data-i18n="margin_left">Left</span><input type="number" id="m-left" min="0" max="100" step="1"></label>
+            </div>
+            <p class="hint" data-i18n="margin_unit">All values in millimetres</p>
+          </div>
+        </div>
 
-    <section class="toggles">
-      <label class="toggle"><input type="checkbox" id="printBackground"><span>Print background colours and images</span></label>
-      <label class="toggle"><input type="checkbox" id="mediaScreen"><span>Use screen styles instead of print styles</span></label>
-      <label class="toggle"><input type="checkbox" id="hideFixed"><span>Hide sticky and fixed bars</span></label>
-      <label class="toggle"><input type="checkbox" id="loadLazy"><span>Scroll page to load lazy images</span></label>
-      <label class="toggle"><input type="checkbox" id="outline"><span>Add PDF bookmarks from headings</span></label>
-      <label class="toggle"><input type="checkbox" id="headerFooter"><span>Header and footer</span></label>
-      <div id="hf-options" class="chips hidden" role="group" aria-label="Header and footer contents">
-        <label class="chip"><input type="checkbox" id="hfTitle"><span>Title</span></label>
-        <label class="chip"><input type="checkbox" id="hfDate"><span>Date</span></label>
-        <label class="chip"><input type="checkbox" id="hfUrl"><span>URL</span></label>
-        <label class="chip"><input type="checkbox" id="hfPageNumbers"><span>Page numbers</span></label>
-      </div>
-      <label id="ranges-row" class="inline">Pages to include
-        <input type="text" id="pageRanges" placeholder="All (e.g. 1-3, 5)">
-      </label>
-    </section>
+        <div class="group" role="group" aria-labelledby="g-fit">
+          <h2 id="g-fit" class="caption" data-i18n="group_fit">Fit</h2>
+          <label class="field"><span data-i18n="field_layoutWidth">Layout width</span>
+            <select id="layoutWidth"></select>
+          </label>
+          <div id="scale-row" class="range-row">
+            <label for="scale" class="range-label"><span data-i18n="field_scale">Scale</span> <output id="scale-value" for="scale">100%</output></label>
+            <input type="range" id="scale" min="10" max="200" step="5">
+          </div>
+        </div>
 
-    <section class="tools" aria-labelledby="tools-heading">
-      <h2 id="tools-heading">Page tools</h2>
-      <div class="tool-grid">
-        <button type="button" id="tool-select" class="tool" title="Click any part of the page to save only that element">Select element</button>
-        <button type="button" id="tool-remove" class="tool" title="Click ads, banners or anything else to remove it before saving">Remove elements</button>
-        <button type="button" id="tool-reset" class="tool hidden" title="Undo all removed elements">Reset page (<span id="removed-count">0</span>)</button>
+        <div class="group" role="group" aria-labelledby="g-content">
+          <h2 id="g-content" class="caption" data-i18n="group_content">Content</h2>
+          <div class="toggles">
+            <label class="toggle"><input type="checkbox" id="printBackground"><span data-i18n="content_backgrounds">Print background colours and images</span></label>
+            <label class="toggle"><input type="checkbox" id="mediaScreen"><span data-i18n="content_screenStyles">Use screen styles instead of print styles</span></label>
+            <label class="toggle"><input type="checkbox" id="hideFixed"><span data-i18n="content_hideFixed">Hide sticky and fixed bars</span></label>
+            <label class="toggle"><input type="checkbox" id="loadLazy"><span data-i18n="content_loadLazy">Scroll page to load lazy images</span></label>
+            <label class="toggle"><input type="checkbox" id="outline"><span data-i18n="content_outline">Add PDF bookmarks from headings</span></label>
+          </div>
+        </div>
+
+        <div class="group" role="group" aria-labelledby="g-hf">
+          <h2 id="g-hf" class="caption" data-i18n="group_headerFooter">Header &amp; footer</h2>
+          <label class="toggle"><input type="checkbox" id="headerFooter"><span data-i18n="hf_enable">Add a header and footer</span></label>
+          <div id="hf-options" class="chips hidden" role="group" aria-label="Header and footer contents" data-i18n-aria-label="hf_contents">
+            <label class="chip"><input type="checkbox" id="hfTitle"><span data-i18n="hf_title">Title</span></label>
+            <label class="chip"><input type="checkbox" id="hfDate"><span data-i18n="hf_date">Date</span></label>
+            <label class="chip"><input type="checkbox" id="hfUrl"><span data-i18n="hf_url">URL</span></label>
+            <label class="chip"><input type="checkbox" id="hfPageNumbers"><span data-i18n="hf_pageNumbers">Page numbers</span></label>
+          </div>
+        </div>
+
+        <div id="ranges-row" class="group" role="group" aria-labelledby="g-pages">
+          <h2 id="g-pages" class="caption" data-i18n="group_pages">Pages to include</h2>
+          <input type="text" id="pageRanges" aria-labelledby="g-pages" placeholder="All pages (e.g. 1-3, 5)" data-i18n-placeholder="pages_placeholder" spellcheck="false">
+        </div>
       </div>
     </section>
   </main>
 
-  <footer>
+  <footer class="foot">
     <div id="status" class="status" aria-live="polite"></div>
-    <div class="actions">
-      <button type="button" id="btn-open" class="secondary">Preview</button>
-      <button type="button" id="btn-download" class="primary">Download PDF</button>
+    <div class="foot-row">
+      <button type="button" id="btn-help" class="foot-link">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <span data-i18n="footer_help">Help</span>
+      </button>
+      <button type="button" id="btn-shortcuts" class="foot-link" title="Change keyboard shortcuts" data-i18n-title="footer_shortcutsTitle">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+        <span data-i18n="footer_shortcuts">Shortcuts</span>
+      </button>
+      <span class="spacer"></span>
+      <label class="lang" title="Language" data-i18n-title="footer_language">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5a14.5 14.5 0 0 1 0 19 14.5 14.5 0 0 1 0-19z"/></svg>
+        <span class="sr-only" data-i18n="footer_language">Language</span>
+        <select id="language"></select>
+      </label>
+      <span id="version" class="version"></span>
     </div>
   </footer>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <h2 id="help-title" data-i18n="help_title">How it works</h2>
+    <ul>
+      <li data-i18n="help_fullPage">Full page saves everything on the page as a PDF, with working links.</li>
+      <li data-i18n="help_article">Article only keeps the main text and images and drops menus, sidebars and ads.</li>
+      <li data-i18n="help_select">Select element lets you click one part of the page and export just that part.</li>
+      <li data-i18n="help_remove">Remove elements lets you click anything you don’t want before saving. Reset page brings it back.</li>
+      <li data-i18n="help_preview">The eye button opens a preview tab instead of downloading.</li>
+      <li data-i18n="help_settings">Paper, margins and other options are under Export settings. The line above it always shows what will be used.</li>
+    </ul>
+    <p class="hint" data-i18n="help_privacy">Everything runs on your device. Nothing is uploaded.</p>
+    <div class="dialog-actions">
+      <button type="button" id="help-shortcuts" class="btn" data-i18n="footer_shortcutsTitle">Change keyboard shortcuts</button>
+      <button type="button" id="help-close" class="btn primary" data-i18n="help_close">Close</button>
+    </div>
+  </dialog>
 
   <script type="module" src="popup.js"></script>
 </body>

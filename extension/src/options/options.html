@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-boot>
 <head>
   <meta charset="utf-8">
   <title>PageSnap PDF settings</title>
@@ -7,44 +7,97 @@
 </head>
 <body>
   <main>
-    <h1>PageSnap PDF settings</h1>
-    <p class="muted">Paper, margins and layout options live in the toolbar popup. These are the defaults that apply everywhere.</p>
+    <header class="page-head">
+      <img src="../../icons/icon48.png" alt="" width="36" height="36">
+      <div>
+        <h1 data-i18n="options_pageTitle">PageSnap PDF settings</h1>
+        <p class="muted" data-i18n="options_intro">Paper, margins and layout live in the toolbar popup under Export settings. The options below apply everywhere.</p>
+      </div>
+    </header>
 
-    <section>
-      <h2>Saving</h2>
+    <section aria-labelledby="h-appearance">
+      <h2 id="h-appearance" data-i18n="options_appearance">Appearance</h2>
+      <div class="grid2">
+        <div class="field">
+          <label for="theme" data-i18n="options_theme">Theme</label>
+          <select id="theme">
+            <option value="system" data-i18n="theme_system">System</option>
+            <option value="light" data-i18n="theme_light">Light</option>
+            <option value="dark" data-i18n="theme_dark">Dark</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="language" data-i18n="options_language">Language</label>
+          <select id="language"></select>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-saving">
+      <h2 id="h-saving" data-i18n="options_saving">Saving</h2>
       <div class="field">
-        <label for="filenameTemplate">File name pattern</label>
+        <label for="filenameTemplate" data-i18n="options_filename">File name pattern</label>
         <input type="text" id="filenameTemplate" placeholder="{title}" aria-describedby="filename-hint" spellcheck="false">
-        <span id="filename-hint" class="hint">Placeholders: <code>{title}</code> <code>{domain}</code> <code>{date}</code> <code>{time}</code>. Preview: <b id="filename-preview"></b></span>
+        <span id="filename-hint" class="hint"><span data-i18n="options_placeholders">Placeholders:</span> <code>{title}</code> <code>{domain}</code> <code>{date}</code> <code>{time}</code>. <span data-i18n="options_filenamePreview">Preview:</span> <b id="filename-preview"></b></span>
       </div>
-      <label class="toggle"><input type="checkbox" id="saveAs"><span>Ask where to save each PDF</span></label>
+      <label class="toggle"><input type="checkbox" id="saveAs"><span data-i18n="options_saveAs">Ask where to save each PDF</span></label>
       <div class="field">
-        <label for="output">Default action</label>
+        <label for="output" data-i18n="options_defaultAction">Default action</label>
         <select id="output" aria-describedby="output-hint">
-          <option value="download">Download the PDF</option>
-          <option value="open">Open a preview tab</option>
+          <option value="download" data-i18n="options_actionDownload">Download the PDF</option>
+          <option value="open" data-i18n="options_actionOpen">Open a preview tab</option>
         </select>
-        <span id="output-hint" class="hint">Used by the keyboard shortcut, the right-click menu and the in-page tools.</span>
+        <span id="output-hint" class="hint" data-i18n="options_defaultActionHint">Used by the keyboard shortcuts, the right-click menu and the in-page tools.</span>
+      </div>
+      <div class="field">
+        <label for="imageScale" data-i18n="options_imageScale">Image resolution (PNG / JPEG)</label>
+        <select id="imageScale" aria-describedby="imageScale-hint">
+          <option value="1">1× (screen size)</option>
+          <option value="2">2× (sharp, default)</option>
+          <option value="3">3× (largest)</option>
+        </select>
+        <span id="imageScale-hint" class="hint" data-i18n="options_imageScaleHint">Pixels per CSS pixel when a selected element is exported as an image.</span>
       </div>
     </section>
 
-    <section>
-      <h2>Page handling</h2>
-      <label class="toggle"><input type="checkbox" id="expandScroll"><span>Expand inner scrollable areas so nothing is clipped (chat apps, docs sites)</span></label>
-      <label class="toggle"><input type="checkbox" id="preferCssPageSize"><span>Let the page's own <code>@page</code> CSS size override the chosen paper size</span></label>
+    <section aria-labelledby="h-page">
+      <h2 id="h-page" data-i18n="options_pageHandling">Page handling</h2>
+      <label class="toggle"><input type="checkbox" id="expandScroll"><span data-i18n="options_expandScroll">Expand inner scrollable areas so nothing is clipped (chat apps, docs sites)</span></label>
+      <label class="toggle"><input type="checkbox" id="preferCssPageSize"><span data-i18n="options_preferCssPageSize">Let the page’s own @page CSS size override the chosen paper size</span></label>
     </section>
 
-    <section>
-      <h2>Keyboard shortcuts</h2>
-      <p>Default: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> saves the page, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> saves the article only.</p>
-      <button type="button" id="open-shortcuts" class="secondary">Change shortcuts</button>
+    <section aria-labelledby="h-shortcuts">
+      <h2 id="h-shortcuts" data-i18n="options_shortcuts">Keyboard shortcuts</h2>
+      <ul class="shortcuts">
+        <li><span class="keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span> <span data-i18n="options_shortcutPage">saves the page</span></li>
+        <li><span class="keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></span> <span data-i18n="options_shortcutArticle">saves the article only</span></li>
+      </ul>
+      <button type="button" id="open-shortcuts" data-i18n="options_changeShortcuts">Change shortcuts</button>
     </section>
 
-    <section>
-      <h2>About</h2>
-      <p>PageSnap PDF renders pages with Chrome's built-in print engine, entirely on your device. Nothing is uploaded anywhere.</p>
-      <p class="hint">Chrome shows a “PageSnap PDF started debugging this browser” bar while a PDF is being generated. That is how Chrome exposes its PDF engine to extensions; it disappears as soon as the PDF is ready.</p>
-      <button type="button" id="reset" class="danger">Reset all settings</button>
+    <section aria-labelledby="h-experimental">
+      <h2 id="h-experimental" data-i18n="experimental_title">Experimental</h2>
+      <p class="hint" data-i18n="experimental_intro">Features that are still being tested. They are off by default.</p>
+      <label class="toggle"><input type="checkbox" id="markdownEnabled" aria-describedby="markdown-hint"><span data-i18n="experimental_markdown">Enable Markdown export (experimental)</span></label>
+      <span id="markdown-hint" class="hint indent" data-i18n="experimental_markdownHint">Adds a Markdown option to the popup and the element preview.</span>
+      <div id="markdown-confirm" class="confirm hidden" role="alertdialog" aria-labelledby="markdown-confirm-title" aria-describedby="markdown-confirm-text">
+        <h3 id="markdown-confirm-title" data-i18n="experimental_confirmTitle">Turn on Markdown export?</h3>
+        <p id="markdown-confirm-text" data-i18n="experimental_confirmText">The Markdown converter is best-effort. Tables, embedded media and complex layouts may not convert well, so check the result before relying on it.</p>
+        <div class="confirm-actions">
+          <button type="button" id="markdown-cancel" data-i18n="experimental_confirmCancel">Cancel</button>
+          <button type="button" id="markdown-enable" class="primary" data-i18n="experimental_confirmEnable">Enable</button>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-about">
+      <h2 id="h-about" data-i18n="options_about">About</h2>
+      <p data-i18n="options_aboutText">PageSnap PDF renders pages with Chrome’s built-in print engine, entirely on your device. Nothing is uploaded anywhere.</p>
+      <p class="hint" data-i18n="options_debuggerNote">Chrome shows a “PageSnap PDF started debugging this browser” bar while a PDF is being generated. That is how Chrome exposes its PDF engine to extensions; it disappears as soon as the PDF is ready.</p>
+      <div class="about-row">
+        <button type="button" id="reset" class="danger" data-i18n="options_reset">Reset all settings</button>
+        <span id="version" class="hint"></span>
+      </div>
     </section>
     <p id="saved" class="saved" aria-live="polite"></p>
   </main>

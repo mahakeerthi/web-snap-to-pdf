@@ -1,0 +1,826 @@
+{
+  "extName": {
+    "message": "PageSnap PDF",
+    "description": "Extension name (manifest, popup header)"
+  },
+  "extDescription": {
+    "message": "वेब पेज को एक क्लिक में PDF में सेव करें। स्टाइल और लिंक बने रहते हैं, पेज ब्रेक के साथ या एक लंबे पेज में। Chrome से 100% लोकल।",
+    "description": "Extension description (manifest, Web Store)"
+  },
+  "actionTitle": {
+    "message": "PageSnap PDF - यह पेज PDF के रूप में सेव करें",
+    "description": "Toolbar button tooltip"
+  },
+  "cmdSavePdf": {
+    "message": "मौजूदा पेज को अपनी सेव की गई सेटिंग के साथ PDF के रूप में सेव करें",
+    "description": "Keyboard shortcut description"
+  },
+  "cmdSaveArticle": {
+    "message": "मौजूदा पेज का सिर्फ़ मुख्य लेख PDF के रूप में सेव करें",
+    "description": "Keyboard shortcut description"
+  },
+  "popup_pageTitleLoading": {
+    "message": "पेज पढ़ा जा रहा है…",
+    "description": "Popup subtitle while the active tab is queried"
+  },
+  "popup_settings": {
+    "message": "सेटिंग",
+    "description": "Gear button that opens the options page"
+  },
+  "popup_blocked": {
+    "message": "इस पेज को बदला नहीं जा सकता। Chrome ब्राउज़र पेजों, वेब स्टोर और दूसरे एक्सटेंशन पर एक्सटेंशन को ब्लॉक करता है।",
+    "description": "Notice shown on pages the extension cannot access"
+  },
+  "popup_actions": {
+    "message": "एक्सपोर्ट",
+    "description": "Accessible label of the group of export action cards"
+  },
+  "theme_toggle": {
+    "message": "थीम: $1",
+    "description": "Theme toggle button label; $1 is theme_system, theme_light or theme_dark"
+  },
+  "theme_system": {
+    "message": "सिस्टम",
+    "description": "Theme follows the operating system"
+  },
+  "theme_light": {
+    "message": "लाइट",
+    "description": "Light theme"
+  },
+  "theme_dark": {
+    "message": "डार्क",
+    "description": "Dark theme"
+  },
+  "action_fullPage": {
+    "message": "पूरा पेज",
+    "description": "Action card title: save the whole page"
+  },
+  "action_fullPageDesc": {
+    "message": "पूरा पेज, ऊपर से नीचे तक",
+    "description": "Action card one-line description"
+  },
+  "action_article": {
+    "message": "सिर्फ़ लेख",
+    "description": "Action card title: save the detected main article"
+  },
+  "action_articleDesc": {
+    "message": "मुख्य कंटेंट, बिना मेन्यू या विज्ञापन",
+    "description": "Action card one-line description"
+  },
+  "action_select": {
+    "message": "हिस्सा चुनें",
+    "description": "Action card title: pick one element on the page"
+  },
+  "action_selectDesc": {
+    "message": "पेज का एक हिस्सा चुनकर सेव करें",
+    "description": "Action card one-line description"
+  },
+  "action_previewFullPage": {
+    "message": "डाउनलोड करने के बजाय पूरे पेज की झलक नए टैब में देखें",
+    "description": "Tooltip of the eye button on the Full page card"
+  },
+  "action_previewArticle": {
+    "message": "डाउनलोड करने के बजाय लेख की झलक नए टैब में देखें",
+    "description": "Tooltip of the eye button on the Article card"
+  },
+  "action_remove": {
+    "message": "हिस्से हटाएं",
+    "description": "Secondary button: click parts of the page to delete them before saving"
+  },
+  "action_removeTitle": {
+    "message": "सेव करने से पहले विज्ञापन, बैनर या कुछ भी हटाने के लिए उस पर क्लिक करें",
+    "description": "Tooltip of the Remove elements button"
+  },
+  "action_reset": {
+    "message": "पेज रीसेट करें ($1)",
+    "description": "Link that restores removed elements; $1 is the number removed"
+  },
+  "action_resetTitle": {
+    "message": "हटाए गए सभी हिस्से वापस लाएं",
+    "description": "Tooltip of the Reset page link"
+  },
+  "layout_label": {
+    "message": "लेआउट",
+    "description": "Caption of the paged / single page switch"
+  },
+  "layout_paged": {
+    "message": "पेज ब्रेक",
+    "description": "Layout option: split into pages"
+  },
+  "layout_single": {
+    "message": "एक पेज",
+    "description": "Layout option: one tall page"
+  },
+  "summary_label": {
+    "message": "मौजूदा एक्सपोर्ट सेटिंग",
+    "description": "Accessible label of the settings summary line"
+  },
+  "summary_portrait": {
+    "message": "पोर्ट्रेट",
+    "description": "Summary part"
+  },
+  "summary_landscape": {
+    "message": "लैंडस्केप",
+    "description": "Summary part"
+  },
+  "summary_margins": {
+    "message": "$1 mm मार्जिन",
+    "description": "Summary part; $1 is a number"
+  },
+  "summary_customMargins": {
+    "message": "$1 mm मार्जिन (ऊ/दा/नी/बा)",
+    "description": "Summary part for unequal custom margins; $1 is like 10/12/10/12"
+  },
+  "summary_noMargins": {
+    "message": "कोई मार्जिन नहीं",
+    "description": "Summary part"
+  },
+  "summary_width": {
+    "message": "$1 px लेआउट",
+    "description": "Summary part: page rendered at a fixed CSS width; $1 is a number"
+  },
+  "summary_scale": {
+    "message": "$1% स्केल",
+    "description": "Summary part; $1 is a percentage"
+  },
+  "summary_backgroundsOn": {
+    "message": "बैकग्राउंड चालू",
+    "description": "Summary part"
+  },
+  "summary_backgroundsOff": {
+    "message": "बैकग्राउंड बंद",
+    "description": "Summary part"
+  },
+  "summary_screenStyles": {
+    "message": "स्क्रीन स्टाइल",
+    "description": "Summary part: screen CSS instead of print CSS"
+  },
+  "summary_headerFooter": {
+    "message": "हेडर और फ़ुटर",
+    "description": "Summary part"
+  },
+  "summary_pages": {
+    "message": "पेज $1",
+    "description": "Summary part; $1 is a page range like 1-3, 5"
+  },
+  "settings_toggle": {
+    "message": "एक्सपोर्ट सेटिंग",
+    "description": "Disclosure button that shows all PDF options"
+  },
+  "group_paper": {
+    "message": "पेपर",
+    "description": "Settings group caption"
+  },
+  "field_paperSize": {
+    "message": "साइज़",
+    "description": "Paper size select label"
+  },
+  "field_orientation": {
+    "message": "ओरिएंटेशन",
+    "description": "Orientation switch label"
+  },
+  "orientation_portrait": {
+    "message": "पोर्ट्रेट",
+    "description": "Orientation option"
+  },
+  "orientation_landscape": {
+    "message": "लैंडस्केप",
+    "description": "Orientation option"
+  },
+  "group_margins": {
+    "message": "मार्जिन",
+    "description": "Settings group caption"
+  },
+  "margin_none": {
+    "message": "कोई नहीं",
+    "description": "Margin preset"
+  },
+  "margin_minimal": {
+    "message": "न्यूनतम (5 mm)",
+    "description": "Margin preset"
+  },
+  "margin_default": {
+    "message": "डिफ़ॉल्ट (10 mm)",
+    "description": "Margin preset"
+  },
+  "margin_wide": {
+    "message": "चौड़ा (20 mm)",
+    "description": "Margin preset"
+  },
+  "margin_custom": {
+    "message": "कस्टम…",
+    "description": "Margin preset: enter each side"
+  },
+  "margin_customLabel": {
+    "message": "मिलीमीटर में कस्टम मार्जिन",
+    "description": "Accessible label of the four margin inputs"
+  },
+  "margin_top": {
+    "message": "ऊपर",
+    "description": "Margin side"
+  },
+  "margin_right": {
+    "message": "दाएं",
+    "description": "Margin side"
+  },
+  "margin_bottom": {
+    "message": "नीचे",
+    "description": "Margin side"
+  },
+  "margin_left": {
+    "message": "बाएं",
+    "description": "Margin side"
+  },
+  "margin_unit": {
+    "message": "सभी मान मिलीमीटर में",
+    "description": "Hint under the custom margin inputs"
+  },
+  "group_fit": {
+    "message": "फ़िट",
+    "description": "Settings group caption: how the page is scaled onto paper"
+  },
+  "field_layoutWidth": {
+    "message": "लेआउट की चौड़ाई",
+    "description": "Select: CSS width the page is laid out at"
+  },
+  "field_scale": {
+    "message": "स्केल",
+    "description": "Scale slider label"
+  },
+  "group_content": {
+    "message": "कंटेंट",
+    "description": "Settings group caption"
+  },
+  "content_backgrounds": {
+    "message": "बैकग्राउंड के रंग और इमेज प्रिंट करें",
+    "description": "Checkbox"
+  },
+  "content_screenStyles": {
+    "message": "प्रिंट स्टाइल की जगह स्क्रीन स्टाइल इस्तेमाल करें",
+    "description": "Checkbox"
+  },
+  "content_hideFixed": {
+    "message": "स्टिकी और फ़िक्स्ड बार छिपाएं",
+    "description": "Checkbox"
+  },
+  "content_loadLazy": {
+    "message": "लेज़ी इमेज लोड करने के लिए पेज स्क्रॉल करें",
+    "description": "Checkbox"
+  },
+  "content_outline": {
+    "message": "हेडिंग से PDF बुकमार्क जोड़ें",
+    "description": "Checkbox"
+  },
+  "group_headerFooter": {
+    "message": "हेडर और फ़ुटर",
+    "description": "Settings group caption"
+  },
+  "hf_enable": {
+    "message": "हेडर और फ़ुटर जोड़ें",
+    "description": "Checkbox"
+  },
+  "hf_contents": {
+    "message": "हेडर और फ़ुटर का कंटेंट",
+    "description": "Accessible label of the chips group"
+  },
+  "hf_title": {
+    "message": "टाइटल",
+    "description": "Header/footer chip"
+  },
+  "hf_date": {
+    "message": "तारीख",
+    "description": "Header/footer chip"
+  },
+  "hf_url": {
+    "message": "URL",
+    "description": "Header/footer chip"
+  },
+  "hf_pageNumbers": {
+    "message": "पेज नंबर",
+    "description": "Header/footer chip"
+  },
+  "group_pages": {
+    "message": "शामिल किए जाने वाले पेज",
+    "description": "Settings group caption: page range input"
+  },
+  "pages_placeholder": {
+    "message": "सभी पेज (जैसे 1-3, 5)",
+    "description": "Placeholder of the page range input"
+  },
+  "footer_help": {
+    "message": "मदद",
+    "description": "Footer button that opens the help panel"
+  },
+  "footer_shortcuts": {
+    "message": "शॉर्टकट",
+    "description": "Footer link to chrome://extensions/shortcuts"
+  },
+  "footer_shortcutsTitle": {
+    "message": "कीबोर्ड शॉर्टकट बदलें",
+    "description": "Tooltip of the Shortcuts link"
+  },
+  "footer_language": {
+    "message": "भाषा",
+    "description": "Language select label"
+  },
+  "footer_version": {
+    "message": "v$1",
+    "description": "Version label; $1 is the version number"
+  },
+  "lang_auto": {
+    "message": "ऑटो (ब्राउज़र की भाषा)",
+    "description": "Language option: follow the browser"
+  },
+  "lang_autoShort": {
+    "message": "ऑटो",
+    "description": "Short form of lang_auto for the compact popup footer"
+  },
+  "help_title": {
+    "message": "यह कैसे काम करता है",
+    "description": "Help panel title"
+  },
+  "help_fullPage": {
+    "message": "“पूरा पेज” पेज की हर चीज़ को काम करने वाले लिंक के साथ PDF के रूप में सेव करता है।",
+    "description": "Help panel text"
+  },
+  "help_article": {
+    "message": "“सिर्फ़ लेख” मुख्य टेक्स्ट और इमेज रखता है और मेन्यू, साइडबार और विज्ञापन हटा देता है।",
+    "description": "Help panel text"
+  },
+  "help_select": {
+    "message": "“हिस्सा चुनें” से आप पेज के किसी एक हिस्से पर क्लिक करके सिर्फ़ उसे एक्सपोर्ट कर सकते हैं।",
+    "description": "Help panel text"
+  },
+  "help_remove": {
+    "message": "“हिस्से हटाएं” से आप सेव करने से पहले अनचाही चीज़ों पर क्लिक करके उन्हें हटा सकते हैं। “पेज रीसेट करें” उन्हें वापस ले आता है।",
+    "description": "Help panel text"
+  },
+  "help_preview": {
+    "message": "आंख वाला बटन डाउनलोड करने के बजाय झलक का टैब खोलता है।",
+    "description": "Help panel text"
+  },
+  "help_settings": {
+    "message": "पेपर, मार्जिन और दूसरे विकल्प “एक्सपोर्ट सेटिंग” में हैं। उसके ऊपर की लाइन हमेशा दिखाती है कि क्या इस्तेमाल होगा।",
+    "description": "Help panel text"
+  },
+  "help_privacy": {
+    "message": "सब कुछ आपके डिवाइस पर चलता है। कुछ भी अपलोड नहीं होता।",
+    "description": "Help panel text"
+  },
+  "help_close": {
+    "message": "बंद करें",
+    "description": "Closes the help panel"
+  },
+  "status_working": {
+    "message": "काम जारी है…",
+    "description": "Status line"
+  },
+  "status_preparing": {
+    "message": "पेज तैयार हो रहा है…",
+    "description": "Status line"
+  },
+  "status_generating": {
+    "message": "PDF बन रहा है…",
+    "description": "Status line"
+  },
+  "status_saved": {
+    "message": "$1 सेव हो गया",
+    "description": "Status line; $1 is the file name"
+  },
+  "status_previewOpened": {
+    "message": "झलक नए टैब में खुल गई।",
+    "description": "Status line"
+  },
+  "status_error": {
+    "message": "कुछ गड़बड़ हो गई।",
+    "description": "Status line fallback error"
+  },
+  "status_pickerError": {
+    "message": "पिकर शुरू नहीं हो सका।",
+    "description": "Status line error"
+  },
+  "paper_A0": {
+    "message": "A0 (841 × 1189 mm)",
+    "description": "Paper size"
+  },
+  "paper_A1": {
+    "message": "A1 (594 × 841 mm)",
+    "description": "Paper size"
+  },
+  "paper_A2": {
+    "message": "A2 (420 × 594 mm)",
+    "description": "Paper size"
+  },
+  "paper_A3": {
+    "message": "A3 (297 × 420 mm)",
+    "description": "Paper size"
+  },
+  "paper_A4": {
+    "message": "A4 (210 × 297 mm)",
+    "description": "Paper size"
+  },
+  "paper_A5": {
+    "message": "A5 (148 × 210 mm)",
+    "description": "Paper size"
+  },
+  "paper_A6": {
+    "message": "A6 (105 × 148 mm)",
+    "description": "Paper size"
+  },
+  "paper_A7": {
+    "message": "A7 (74 × 105 mm)",
+    "description": "Paper size"
+  },
+  "paper_A8": {
+    "message": "A8 (52 × 74 mm)",
+    "description": "Paper size"
+  },
+  "paper_A9": {
+    "message": "A9 (37 × 52 mm)",
+    "description": "Paper size"
+  },
+  "paper_B0": {
+    "message": "B0 (1000 × 1414 mm)",
+    "description": "Paper size"
+  },
+  "paper_B1": {
+    "message": "B1 (707 × 1000 mm)",
+    "description": "Paper size"
+  },
+  "paper_B2": {
+    "message": "B2 (500 × 707 mm)",
+    "description": "Paper size"
+  },
+  "paper_B3": {
+    "message": "B3 (353 × 500 mm)",
+    "description": "Paper size"
+  },
+  "paper_B4": {
+    "message": "B4 (250 × 353 mm)",
+    "description": "Paper size"
+  },
+  "paper_B5": {
+    "message": "B5 (176 × 250 mm)",
+    "description": "Paper size"
+  },
+  "paper_Letter": {
+    "message": "Letter (8.5 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Legal": {
+    "message": "Legal (8.5 × 14 in)",
+    "description": "Paper size"
+  },
+  "paper_Tabloid": {
+    "message": "Tabloid (11 × 17 in)",
+    "description": "Paper size"
+  },
+  "paper_Ledger": {
+    "message": "Ledger (17 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Folio": {
+    "message": "Folio (8.5 × 13 in)",
+    "description": "Paper size"
+  },
+  "paper_Executive": {
+    "message": "Executive (7.25 × 10.5 in)",
+    "description": "Paper size"
+  },
+  "layoutWidth_auto": {
+    "message": "पेपर की चौड़ाई में फ़िट करें",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1440": {
+    "message": "चौड़ा डेस्कटॉप (1440 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1280": {
+    "message": "डेस्कटॉप (1280 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1024": {
+    "message": "लैपटॉप (1024 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_768": {
+    "message": "टैबलेट (768 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_375": {
+    "message": "मोबाइल (375 px)",
+    "description": "Layout width option"
+  },
+  "options_pageTitle": {
+    "message": "PageSnap PDF सेटिंग",
+    "description": "Options page document title and heading"
+  },
+  "options_intro": {
+    "message": "पेपर, मार्जिन और लेआउट टूलबार पॉपअप में “एक्सपोर्ट सेटिंग” के अंदर हैं। नीचे दिए गए विकल्प हर जगह लागू होते हैं।",
+    "description": "Options page intro"
+  },
+  "options_appearance": {
+    "message": "दिखावट",
+    "description": "Options section heading"
+  },
+  "options_theme": {
+    "message": "थीम",
+    "description": "Theme select label"
+  },
+  "options_language": {
+    "message": "भाषा",
+    "description": "Language select label"
+  },
+  "options_saving": {
+    "message": "सेव करना",
+    "description": "Options section heading"
+  },
+  "options_filename": {
+    "message": "फ़ाइल नाम का पैटर्न",
+    "description": "Label"
+  },
+  "options_placeholders": {
+    "message": "प्लेसहोल्डर:",
+    "description": "Followed by {title} {domain} {date} {time}"
+  },
+  "options_filenamePreview": {
+    "message": "झलक:",
+    "description": "Followed by an example file name"
+  },
+  "options_saveAs": {
+    "message": "हर PDF के लिए पूछें कि कहां सेव करना है",
+    "description": "Checkbox"
+  },
+  "options_defaultAction": {
+    "message": "डिफ़ॉल्ट कार्रवाई",
+    "description": "Label"
+  },
+  "options_actionDownload": {
+    "message": "PDF डाउनलोड करें",
+    "description": "Default action option"
+  },
+  "options_actionOpen": {
+    "message": "झलक का टैब खोलें",
+    "description": "Default action option"
+  },
+  "options_defaultActionHint": {
+    "message": "कीबोर्ड शॉर्टकट, राइट-क्लिक मेन्यू और पेज के टूल इसका इस्तेमाल करते हैं।",
+    "description": "Hint"
+  },
+  "options_pageHandling": {
+    "message": "पेज हैंडलिंग",
+    "description": "Options section heading"
+  },
+  "options_expandScroll": {
+    "message": "अंदर के स्क्रॉल होने वाले हिस्सों को फैलाएं ताकि कुछ भी कटे नहीं (चैट ऐप, डॉक्यूमेंटेशन साइट)",
+    "description": "Checkbox"
+  },
+  "options_preferCssPageSize": {
+    "message": "पेज के अपने @page CSS साइज़ को चुने गए पेपर साइज़ से ऊपर रखें",
+    "description": "Checkbox"
+  },
+  "options_shortcuts": {
+    "message": "कीबोर्ड शॉर्टकट",
+    "description": "Options section heading"
+  },
+  "options_shortcutPage": {
+    "message": "पेज सेव करता है",
+    "description": "Follows the key combination Alt+Shift+P"
+  },
+  "options_shortcutArticle": {
+    "message": "सिर्फ़ लेख सेव करता है",
+    "description": "Follows the key combination Alt+Shift+A"
+  },
+  "options_changeShortcuts": {
+    "message": "शॉर्टकट बदलें",
+    "description": "Button"
+  },
+  "options_about": {
+    "message": "जानकारी",
+    "description": "Options section heading"
+  },
+  "options_aboutText": {
+    "message": "PageSnap PDF, Chrome के बिल्ट-इन प्रिंट इंजन से पेज बनाता है, पूरी तरह आपके डिवाइस पर। कुछ भी कहीं अपलोड नहीं होता।",
+    "description": "About text"
+  },
+  "options_debuggerNote": {
+    "message": "PDF बनते समय Chrome एक बार दिखाता है: “PageSnap PDF ने इस ब्राउज़र को डीबग करना शुरू किया”। Chrome इसी तरह एक्सटेंशन को अपना PDF इंजन देता है; PDF तैयार होते ही यह बार गायब हो जाता है।",
+    "description": "About text"
+  },
+  "options_reset": {
+    "message": "सभी सेटिंग रीसेट करें",
+    "description": "Button"
+  },
+  "options_saved": {
+    "message": "सेव हो गया",
+    "description": "Confirmation after a change"
+  },
+  "options_resetDone": {
+    "message": "सेटिंग डिफ़ॉल्ट पर रीसेट हो गईं",
+    "description": "Confirmation after reset"
+  },
+  "action_markdown": {
+    "message": "Markdown",
+    "description": "Label of the experimental Markdown export buttons in the popup"
+  },
+  "action_markdownLabel": {
+    "message": "Markdown के रूप में एक्सपोर्ट करें",
+    "description": "Accessible label of the Markdown export group"
+  },
+  "action_markdownPage": {
+    "message": "पूरा पेज",
+    "description": "Markdown export of the whole page"
+  },
+  "action_markdownArticle": {
+    "message": "लेख",
+    "description": "Markdown export of the main article"
+  },
+  "action_markdownPageTitle": {
+    "message": "पूरे पेज को Markdown के रूप में एक्सपोर्ट करें (प्रयोगात्मक)",
+    "description": "Tooltip"
+  },
+  "action_markdownArticleTitle": {
+    "message": "लेख को Markdown के रूप में एक्सपोर्ट करें (प्रयोगात्मक)",
+    "description": "Tooltip"
+  },
+  "status_exportingMarkdown": {
+    "message": "Markdown में बदला जा रहा है…",
+    "description": "Status line"
+  },
+  "error_markdownDisabled": {
+    "message": "Markdown एक्सपोर्ट एक प्रयोगात्मक सुविधा है। इसे एक्सटेंशन की सेटिंग में चालू करें।",
+    "description": "Error when Markdown export is requested while the feature is off"
+  },
+  "experimental_title": {
+    "message": "प्रयोगात्मक",
+    "description": "Options section heading"
+  },
+  "experimental_intro": {
+    "message": "ऐसी सुविधाएं जिनकी अभी जांच चल रही है। ये डिफ़ॉल्ट रूप से बंद रहती हैं।",
+    "description": "Options section intro"
+  },
+  "experimental_markdown": {
+    "message": "Markdown एक्सपोर्ट चालू करें (प्रयोगात्मक)",
+    "description": "Checkbox"
+  },
+  "experimental_markdownHint": {
+    "message": "पॉपअप और एलिमेंट की झलक में Markdown का विकल्प जोड़ता है।",
+    "description": "Hint under the checkbox"
+  },
+  "experimental_confirmTitle": {
+    "message": "Markdown एक्सपोर्ट चालू करें?",
+    "description": "Confirmation panel title"
+  },
+  "experimental_confirmText": {
+    "message": "Markdown कन्वर्टर पूरी तरह सटीक नहीं है। टेबल, एम्बेड किया गया मीडिया और जटिल लेआउट ठीक से नहीं बदल सकते, इसलिए भरोसा करने से पहले नतीजा जांच लें।",
+    "description": "Confirmation panel text"
+  },
+  "experimental_confirmEnable": {
+    "message": "चालू करें",
+    "description": "Confirmation button"
+  },
+  "experimental_confirmCancel": {
+    "message": "रद्द करें",
+    "description": "Cancel button"
+  },
+  "picker_titleSelect": {
+    "message": "कोई हिस्सा चुनें",
+    "description": "In-page picker toolbar title (select mode)"
+  },
+  "picker_hintSelect": {
+    "message": "हाइलाइट के लिए पॉइंटर ले जाएं, चुनने के लिए क्लिक करें। रद्द करने के लिए Esc।",
+    "description": "In-page picker hint (select mode)"
+  },
+  "picker_titleRemove": {
+    "message": "हिस्से हटाएं",
+    "description": "In-page picker toolbar title (remove mode)"
+  },
+  "picker_hintRemove": {
+    "message": "जिसे हटाना हो उस पर क्लिक करें। पूरा होने पर “हो गया” दबाएं।",
+    "description": "In-page picker hint (remove mode)"
+  },
+  "picker_removedCount": {
+    "message": "$1 हटाए गए",
+    "description": "In-page picker counter; $1 is a number"
+  },
+  "picker_undo": {
+    "message": "पहले जैसा करें",
+    "description": "In-page picker button"
+  },
+  "picker_savePdf": {
+    "message": "PDF सेव करें",
+    "description": "In-page picker button"
+  },
+  "picker_done": {
+    "message": "हो गया",
+    "description": "In-page picker button"
+  },
+  "picker_cancel": {
+    "message": "रद्द करें",
+    "description": "In-page picker button"
+  },
+  "picker_errorNoElement": {
+    "message": "कुछ नहीं चुना गया। पहले पेज के किसी हिस्से पर क्लिक करें।",
+    "description": "In-page picker error"
+  },
+  "picker_errorStart": {
+    "message": "इस पेज पर पिकर शुरू नहीं हो सका।",
+    "description": "In-page picker error"
+  },
+  "preview_title": {
+    "message": "यह हिस्सा एक्सपोर्ट करें",
+    "description": "In-page preview modal title"
+  },
+  "preview_format": {
+    "message": "फ़ॉर्मैट",
+    "description": "Format segmented control label"
+  },
+  "preview_formatPdf": {
+    "message": "PDF",
+    "description": "Format option"
+  },
+  "preview_formatPng": {
+    "message": "PNG",
+    "description": "Format option"
+  },
+  "preview_formatJpeg": {
+    "message": "JPEG",
+    "description": "Format option"
+  },
+  "preview_formatMarkdown": {
+    "message": "Markdown",
+    "description": "Format option (experimental, only when enabled)"
+  },
+  "preview_download": {
+    "message": "डाउनलोड करें",
+    "description": "Preview modal button"
+  },
+  "preview_copyImage": {
+    "message": "इमेज कॉपी करें",
+    "description": "Preview modal button (PNG only)"
+  },
+  "preview_copied": {
+    "message": "इमेज क्लिपबोर्ड पर कॉपी हो गई",
+    "description": "Preview modal confirmation"
+  },
+  "preview_reselect": {
+    "message": "फिर से चुनें",
+    "description": "Preview modal button: go back to the picker"
+  },
+  "preview_close": {
+    "message": "बंद करें",
+    "description": "Preview modal button"
+  },
+  "preview_loading": {
+    "message": "झलक बन रही है…",
+    "description": "Preview modal status"
+  },
+  "preview_saving": {
+    "message": "सेव हो रहा है…",
+    "description": "Preview modal status"
+  },
+  "preview_saved": {
+    "message": "$1 सेव हो गया",
+    "description": "Preview modal status; $1 is the file name"
+  },
+  "preview_imageAlt": {
+    "message": "चुने गए हिस्से की झलक",
+    "description": "Alt text of the preview image"
+  },
+  "preview_errorCapture": {
+    "message": "यह हिस्सा कैप्चर नहीं हो सका।",
+    "description": "Preview modal error"
+  },
+  "preview_errorTooLarge": {
+    "message": "यह हिस्सा इमेज के रूप में कैप्चर करने के लिए बहुत बड़ा है। इसके बजाय PDF आज़माएं।",
+    "description": "Preview modal error"
+  },
+  "preview_errorCopy": {
+    "message": "इमेज कॉपी नहीं हो सकी। इसके बजाय इसे डाउनलोड करें।",
+    "description": "Preview modal error"
+  },
+  "preview_errorDownload": {
+    "message": "डाउनलोड नहीं हो सका: $1",
+    "description": "Preview modal error; $1 is the reason"
+  },
+  "preview_errorGeneric": {
+    "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें या हिस्सा दोबारा चुनें।",
+    "description": "Preview modal fallback error"
+  },
+  "preview_caption": {
+    "message": "$1 · $2×$3 px",
+    "description": "Element preview: caption \"<element> · W×H px\""
+  },
+  "preview_warningScaled": {
+    "message": "यह हिस्सा बहुत बड़ा है, इसलिए Chrome की 16,384 px की सीमा में रहने के लिए इमेज को $1× तक छोटा किया गया है।",
+    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+  },
+  "options_imageScale": {
+    "message": "इमेज रिज़ॉल्यूशन (PNG / JPEG)",
+    "description": "Options: label of the image resolution select"
+  },
+  "options_imageScaleHint": {
+    "message": "चयनित एलिमेंट को इमेज के रूप में निर्यात करते समय प्रति CSS पिक्सेल पिक्सेल।",
+    "description": "Options: hint under the image resolution select"
+  }
+}

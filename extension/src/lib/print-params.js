@@ -26,9 +26,7 @@ function mm(v) {
 export function orientedPaper(settings) {
   const size = getPaperSize(settings.format);
   const landscape = settings.orientation === 'landscape';
-  return landscape
-    ? { width: size.height, height: size.width }
-    : { width: size.width, height: size.height };
+  return landscape ? { width: size.height, height: size.width } : { width: size.width, height: size.height };
 }
 
 export function effectiveScale(settings, paper, margins) {
@@ -105,7 +103,8 @@ export function buildPrintParams(settings) {
   return { params, paper, margins, scale };
 }
 
-export function buildFilename(template, meta) {
+// `ext` defaults to 'pdf' so existing callers are unchanged; image / Markdown exports pass their own.
+export function buildFilename(template, meta, ext = 'pdf') {
   const date = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const vars = {
@@ -117,14 +116,21 @@ export function buildFilename(template, meta) {
   let name = String(template || '{title}').replace(/\{(title|domain|date|time)\}/g, (_, k) => vars[k]);
   name = sanitizeFilename(name);
   if (!name) name = 'page';
-  return `${name}.pdf`;
+  const suffix =
+    String(ext || 'pdf')
+      .replace(/^\.+/, '')
+      .replace(/[^a-z0-9]/gi, '') || 'pdf';
+  return `${name}.${suffix}`;
 }
 
 export function sanitizeFilename(name) {
-  return String(name)
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[. ]+|[. ]+$/g, '')
-    .slice(0, 150)
-    .trim();
+  return (
+    String(name)
+      // eslint-disable-next-line no-control-regex -- strip C0 control characters from filenames
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[. ]+|[. ]+$/g, '')
+      .slice(0, 150)
+      .trim()
+  );
 }

@@ -5,6 +5,13 @@
 export const SUPPORTED_LANGUAGES = [
   { code: 'auto', label: 'Auto (browser language)' },
   { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },
+  { code: 'pt_BR', label: 'Português (Brasil)' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'ja', label: '日本語' },
+  { code: 'zh_CN', label: '简体中文' },
 ];
 
 const cache = new Map();
@@ -34,7 +41,9 @@ async function loadDictionary(code) {
     const res = await fetch(chrome.runtime.getURL(`_locales/${code}/messages.json`));
     if (!res.ok) return {};
     const raw = await res.json();
-    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v && v.message ? v.message : String(v)]));
+    return Object.fromEntries(
+      Object.entries(raw).map(([k, v]) => [k, v && v.message ? v.message : String(v)]),
+    );
   } catch {
     return {};
   }
@@ -44,7 +53,7 @@ async function loadDictionary(code) {
 export function t(messages, key, subs = []) {
   let s = (messages && messages[key]) || key;
   subs.forEach((v, i) => {
-    s = s.replace(new RegExp(`\\$${i + 1}`, 'g'), String(v));
+    s = s.replace(new RegExp(`\\$${i + 1}(?![0-9])`, 'g'), () => String(v)); // function: no $& patterns
   });
   return s;
 }
@@ -52,10 +61,19 @@ export function t(messages, key, subs = []) {
 /**
  * Apply translations to a DOM subtree. Elements carry data-i18n="key" (textContent),
  * data-i18n-title="key", data-i18n-placeholder="key" or data-i18n-aria-label="key".
+ * Keys missing from the dictionary leave the element untouched, so the English text in the
+ * HTML stays as the fallback if a dictionary cannot be loaded.
  */
 export function applyTranslations(root, messages) {
-  for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(messages, el.dataset.i18n);
-  for (const el of root.querySelectorAll('[data-i18n-title]')) el.title = t(messages, el.dataset.i18nTitle);
-  for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(messages, el.dataset.i18nPlaceholder);
-  for (const el of root.querySelectorAll('[data-i18n-aria-label]')) el.setAttribute('aria-label', t(messages, el.dataset.i18nAriaLabel));
+  const has = (key) => !!(messages && Object.prototype.hasOwnProperty.call(messages, key) && messages[key]);
+  const each = (attr, apply) => {
+    for (const el of root.querySelectorAll(`[${attr}]`)) {
+      const key = el.getAttribute(attr);
+      if (has(key)) apply(el, messages[key]);
+    }
+  };
+  each('data-i18n', (el, s) => (el.textContent = s));
+  each('data-i18n-title', (el, s) => (el.title = s));
+  each('data-i18n-placeholder', (el, s) => (el.placeholder = s));
+  each('data-i18n-aria-label', (el, s) => el.setAttribute('aria-label', s));
 }

@@ -1,0 +1,826 @@
+{
+  "extName": {
+    "message": "PageSnap PDF",
+    "description": "Extension name (manifest, popup header)"
+  },
+  "extDescription": {
+    "message": "Guarda cualquier web en PDF con un clic. Mantiene estilos y enlaces, en páginas o en una sola. 100 % local con el motor de Chrome.",
+    "description": "Extension description (manifest, Web Store)"
+  },
+  "actionTitle": {
+    "message": "PageSnap PDF - guardar esta página como PDF",
+    "description": "Toolbar button tooltip"
+  },
+  "cmdSavePdf": {
+    "message": "Guardar la página actual como PDF con tu configuración",
+    "description": "Keyboard shortcut description"
+  },
+  "cmdSaveArticle": {
+    "message": "Guardar solo el artículo principal de la página como PDF",
+    "description": "Keyboard shortcut description"
+  },
+  "popup_pageTitleLoading": {
+    "message": "Leyendo la página…",
+    "description": "Popup subtitle while the active tab is queried"
+  },
+  "popup_settings": {
+    "message": "Configuración",
+    "description": "Gear button that opens the options page"
+  },
+  "popup_blocked": {
+    "message": "No se puede convertir esta página. Chrome bloquea las extensiones en las páginas del navegador, la Web Store y otras extensiones.",
+    "description": "Notice shown on pages the extension cannot access"
+  },
+  "popup_actions": {
+    "message": "Exportar",
+    "description": "Accessible label of the group of export action cards"
+  },
+  "theme_toggle": {
+    "message": "Tema: $1",
+    "description": "Theme toggle button label; $1 is theme_system, theme_light or theme_dark"
+  },
+  "theme_system": {
+    "message": "Sistema",
+    "description": "Theme follows the operating system"
+  },
+  "theme_light": {
+    "message": "Claro",
+    "description": "Light theme"
+  },
+  "theme_dark": {
+    "message": "Oscuro",
+    "description": "Dark theme"
+  },
+  "action_fullPage": {
+    "message": "Página completa",
+    "description": "Action card title: save the whole page"
+  },
+  "action_fullPageDesc": {
+    "message": "Toda la página, de arriba abajo",
+    "description": "Action card one-line description"
+  },
+  "action_article": {
+    "message": "Solo artículo",
+    "description": "Action card title: save the detected main article"
+  },
+  "action_articleDesc": {
+    "message": "Contenido principal, sin menús ni anuncios",
+    "description": "Action card one-line description"
+  },
+  "action_select": {
+    "message": "Elegir elemento",
+    "description": "Action card title: pick one element on the page"
+  },
+  "action_selectDesc": {
+    "message": "Elige qué parte de la página guardar",
+    "description": "Action card one-line description"
+  },
+  "action_previewFullPage": {
+    "message": "Ver la página completa en una pestaña nueva en lugar de descargarla",
+    "description": "Tooltip of the eye button on the Full page card"
+  },
+  "action_previewArticle": {
+    "message": "Ver el artículo en una pestaña nueva en lugar de descargarlo",
+    "description": "Tooltip of the eye button on the Article card"
+  },
+  "action_remove": {
+    "message": "Quitar elementos",
+    "description": "Secondary button: click parts of the page to delete them before saving"
+  },
+  "action_removeTitle": {
+    "message": "Haz clic en anuncios, banners o lo que sea para quitarlo antes de guardar",
+    "description": "Tooltip of the Remove elements button"
+  },
+  "action_reset": {
+    "message": "Restaurar página ($1)",
+    "description": "Link that restores removed elements; $1 is the number removed"
+  },
+  "action_resetTitle": {
+    "message": "Recuperar todos los elementos quitados",
+    "description": "Tooltip of the Reset page link"
+  },
+  "layout_label": {
+    "message": "Diseño",
+    "description": "Caption of the paged / single page switch"
+  },
+  "layout_paged": {
+    "message": "Por páginas",
+    "description": "Layout option: split into pages"
+  },
+  "layout_single": {
+    "message": "Página única",
+    "description": "Layout option: one tall page"
+  },
+  "summary_label": {
+    "message": "Configuración de exportación actual",
+    "description": "Accessible label of the settings summary line"
+  },
+  "summary_portrait": {
+    "message": "Vertical",
+    "description": "Summary part"
+  },
+  "summary_landscape": {
+    "message": "Horizontal",
+    "description": "Summary part"
+  },
+  "summary_margins": {
+    "message": "Márgenes de $1 mm",
+    "description": "Summary part; $1 is a number"
+  },
+  "summary_customMargins": {
+    "message": "Márgenes de $1 mm (sup/der/inf/izq)",
+    "description": "Summary part for unequal custom margins; $1 is like 10/12/10/12"
+  },
+  "summary_noMargins": {
+    "message": "Sin márgenes",
+    "description": "Summary part"
+  },
+  "summary_width": {
+    "message": "Ancho de $1 px",
+    "description": "Summary part: page rendered at a fixed CSS width; $1 is a number"
+  },
+  "summary_scale": {
+    "message": "Escala $1%",
+    "description": "Summary part; $1 is a percentage"
+  },
+  "summary_backgroundsOn": {
+    "message": "Con fondos",
+    "description": "Summary part"
+  },
+  "summary_backgroundsOff": {
+    "message": "Sin fondos",
+    "description": "Summary part"
+  },
+  "summary_screenStyles": {
+    "message": "Estilos de pantalla",
+    "description": "Summary part: screen CSS instead of print CSS"
+  },
+  "summary_headerFooter": {
+    "message": "Encabezado y pie",
+    "description": "Summary part"
+  },
+  "summary_pages": {
+    "message": "Páginas $1",
+    "description": "Summary part; $1 is a page range like 1-3, 5"
+  },
+  "settings_toggle": {
+    "message": "Opciones de exportación",
+    "description": "Disclosure button that shows all PDF options"
+  },
+  "group_paper": {
+    "message": "Papel",
+    "description": "Settings group caption"
+  },
+  "field_paperSize": {
+    "message": "Tamaño",
+    "description": "Paper size select label"
+  },
+  "field_orientation": {
+    "message": "Orientación",
+    "description": "Orientation switch label"
+  },
+  "orientation_portrait": {
+    "message": "Vertical",
+    "description": "Orientation option"
+  },
+  "orientation_landscape": {
+    "message": "Horizontal",
+    "description": "Orientation option"
+  },
+  "group_margins": {
+    "message": "Márgenes",
+    "description": "Settings group caption"
+  },
+  "margin_none": {
+    "message": "Ninguno",
+    "description": "Margin preset"
+  },
+  "margin_minimal": {
+    "message": "Mínimo (5 mm)",
+    "description": "Margin preset"
+  },
+  "margin_default": {
+    "message": "Normal (10 mm)",
+    "description": "Margin preset"
+  },
+  "margin_wide": {
+    "message": "Amplio (20 mm)",
+    "description": "Margin preset"
+  },
+  "margin_custom": {
+    "message": "Personalizado…",
+    "description": "Margin preset: enter each side"
+  },
+  "margin_customLabel": {
+    "message": "Márgenes personalizados en milímetros",
+    "description": "Accessible label of the four margin inputs"
+  },
+  "margin_top": {
+    "message": "Superior",
+    "description": "Margin side"
+  },
+  "margin_right": {
+    "message": "Derecho",
+    "description": "Margin side"
+  },
+  "margin_bottom": {
+    "message": "Inferior",
+    "description": "Margin side"
+  },
+  "margin_left": {
+    "message": "Izquierdo",
+    "description": "Margin side"
+  },
+  "margin_unit": {
+    "message": "Todos los valores en milímetros",
+    "description": "Hint under the custom margin inputs"
+  },
+  "group_fit": {
+    "message": "Ajuste",
+    "description": "Settings group caption: how the page is scaled onto paper"
+  },
+  "field_layoutWidth": {
+    "message": "Ancho de diseño",
+    "description": "Select: CSS width the page is laid out at"
+  },
+  "field_scale": {
+    "message": "Escala",
+    "description": "Scale slider label"
+  },
+  "group_content": {
+    "message": "Contenido",
+    "description": "Settings group caption"
+  },
+  "content_backgrounds": {
+    "message": "Imprimir colores e imágenes de fondo",
+    "description": "Checkbox"
+  },
+  "content_screenStyles": {
+    "message": "Usar estilos de pantalla en vez de los de impresión",
+    "description": "Checkbox"
+  },
+  "content_hideFixed": {
+    "message": "Ocultar barras fijas y adhesivas",
+    "description": "Checkbox"
+  },
+  "content_loadLazy": {
+    "message": "Desplazar la página para cargar imágenes diferidas",
+    "description": "Checkbox"
+  },
+  "content_outline": {
+    "message": "Añadir marcadores PDF a partir de los títulos",
+    "description": "Checkbox"
+  },
+  "group_headerFooter": {
+    "message": "Encabezado y pie",
+    "description": "Settings group caption"
+  },
+  "hf_enable": {
+    "message": "Añadir encabezado y pie de página",
+    "description": "Checkbox"
+  },
+  "hf_contents": {
+    "message": "Contenido del encabezado y el pie de página",
+    "description": "Accessible label of the chips group"
+  },
+  "hf_title": {
+    "message": "Título",
+    "description": "Header/footer chip"
+  },
+  "hf_date": {
+    "message": "Fecha",
+    "description": "Header/footer chip"
+  },
+  "hf_url": {
+    "message": "URL",
+    "description": "Header/footer chip"
+  },
+  "hf_pageNumbers": {
+    "message": "N.º de página",
+    "description": "Header/footer chip"
+  },
+  "group_pages": {
+    "message": "Páginas que incluir",
+    "description": "Settings group caption: page range input"
+  },
+  "pages_placeholder": {
+    "message": "Todas (p. ej., 1-3, 5)",
+    "description": "Placeholder of the page range input"
+  },
+  "footer_help": {
+    "message": "Ayuda",
+    "description": "Footer button that opens the help panel"
+  },
+  "footer_shortcuts": {
+    "message": "Atajos",
+    "description": "Footer link to chrome://extensions/shortcuts"
+  },
+  "footer_shortcutsTitle": {
+    "message": "Cambiar atajos de teclado",
+    "description": "Tooltip of the Shortcuts link"
+  },
+  "footer_language": {
+    "message": "Idioma",
+    "description": "Language select label"
+  },
+  "footer_version": {
+    "message": "v$1",
+    "description": "Version label; $1 is the version number"
+  },
+  "lang_auto": {
+    "message": "Auto (idioma del navegador)",
+    "description": "Language option: follow the browser"
+  },
+  "lang_autoShort": {
+    "message": "Auto",
+    "description": "Short form of lang_auto for the compact popup footer"
+  },
+  "help_title": {
+    "message": "Cómo funciona",
+    "description": "Help panel title"
+  },
+  "help_fullPage": {
+    "message": "Página completa guarda todo el contenido de la página como PDF, con enlaces que funcionan.",
+    "description": "Help panel text"
+  },
+  "help_article": {
+    "message": "Solo artículo conserva el texto y las imágenes principales, sin menús, barras laterales ni anuncios.",
+    "description": "Help panel text"
+  },
+  "help_select": {
+    "message": "Elegir elemento te permite hacer clic en una parte de la página y exportar solo esa parte.",
+    "description": "Help panel text"
+  },
+  "help_remove": {
+    "message": "Quitar elementos te permite hacer clic en lo que no quieras antes de guardar. Restaurar página lo recupera.",
+    "description": "Help panel text"
+  },
+  "help_preview": {
+    "message": "El botón del ojo abre una vista previa en lugar de descargar.",
+    "description": "Help panel text"
+  },
+  "help_settings": {
+    "message": "El papel, los márgenes y otras opciones están en Opciones de exportación. La línea de encima muestra siempre qué se usará.",
+    "description": "Help panel text"
+  },
+  "help_privacy": {
+    "message": "Todo se ejecuta en tu dispositivo. No se sube nada.",
+    "description": "Help panel text"
+  },
+  "help_close": {
+    "message": "Cerrar",
+    "description": "Closes the help panel"
+  },
+  "status_working": {
+    "message": "Procesando…",
+    "description": "Status line"
+  },
+  "status_preparing": {
+    "message": "Preparando la página…",
+    "description": "Status line"
+  },
+  "status_generating": {
+    "message": "Generando PDF…",
+    "description": "Status line"
+  },
+  "status_saved": {
+    "message": "Guardado: $1",
+    "description": "Status line; $1 is the file name"
+  },
+  "status_previewOpened": {
+    "message": "Vista previa abierta en una pestaña nueva.",
+    "description": "Status line"
+  },
+  "status_error": {
+    "message": "Algo ha fallado.",
+    "description": "Status line fallback error"
+  },
+  "status_pickerError": {
+    "message": "No se pudo iniciar el selector.",
+    "description": "Status line error"
+  },
+  "paper_A0": {
+    "message": "A0 (841 × 1189 mm)",
+    "description": "Paper size"
+  },
+  "paper_A1": {
+    "message": "A1 (594 × 841 mm)",
+    "description": "Paper size"
+  },
+  "paper_A2": {
+    "message": "A2 (420 × 594 mm)",
+    "description": "Paper size"
+  },
+  "paper_A3": {
+    "message": "A3 (297 × 420 mm)",
+    "description": "Paper size"
+  },
+  "paper_A4": {
+    "message": "A4 (210 × 297 mm)",
+    "description": "Paper size"
+  },
+  "paper_A5": {
+    "message": "A5 (148 × 210 mm)",
+    "description": "Paper size"
+  },
+  "paper_A6": {
+    "message": "A6 (105 × 148 mm)",
+    "description": "Paper size"
+  },
+  "paper_A7": {
+    "message": "A7 (74 × 105 mm)",
+    "description": "Paper size"
+  },
+  "paper_A8": {
+    "message": "A8 (52 × 74 mm)",
+    "description": "Paper size"
+  },
+  "paper_A9": {
+    "message": "A9 (37 × 52 mm)",
+    "description": "Paper size"
+  },
+  "paper_B0": {
+    "message": "B0 (1000 × 1414 mm)",
+    "description": "Paper size"
+  },
+  "paper_B1": {
+    "message": "B1 (707 × 1000 mm)",
+    "description": "Paper size"
+  },
+  "paper_B2": {
+    "message": "B2 (500 × 707 mm)",
+    "description": "Paper size"
+  },
+  "paper_B3": {
+    "message": "B3 (353 × 500 mm)",
+    "description": "Paper size"
+  },
+  "paper_B4": {
+    "message": "B4 (250 × 353 mm)",
+    "description": "Paper size"
+  },
+  "paper_B5": {
+    "message": "B5 (176 × 250 mm)",
+    "description": "Paper size"
+  },
+  "paper_Letter": {
+    "message": "Letter (8.5 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Legal": {
+    "message": "Legal (8.5 × 14 in)",
+    "description": "Paper size"
+  },
+  "paper_Tabloid": {
+    "message": "Tabloid (11 × 17 in)",
+    "description": "Paper size"
+  },
+  "paper_Ledger": {
+    "message": "Ledger (17 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Folio": {
+    "message": "Folio (8.5 × 13 in)",
+    "description": "Paper size"
+  },
+  "paper_Executive": {
+    "message": "Executive (7.25 × 10.5 in)",
+    "description": "Paper size"
+  },
+  "layoutWidth_auto": {
+    "message": "Ajustar al ancho del papel",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1440": {
+    "message": "Escritorio ancho (1440 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1280": {
+    "message": "Escritorio (1280 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1024": {
+    "message": "Portátil (1024 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_768": {
+    "message": "Tableta (768 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_375": {
+    "message": "Móvil (375 px)",
+    "description": "Layout width option"
+  },
+  "options_pageTitle": {
+    "message": "Configuración de PageSnap PDF",
+    "description": "Options page document title and heading"
+  },
+  "options_intro": {
+    "message": "El papel, los márgenes y el diseño están en la ventana de la barra de herramientas, en Opciones de exportación. Estas opciones se aplican en todas partes.",
+    "description": "Options page intro"
+  },
+  "options_appearance": {
+    "message": "Apariencia",
+    "description": "Options section heading"
+  },
+  "options_theme": {
+    "message": "Tema",
+    "description": "Theme select label"
+  },
+  "options_language": {
+    "message": "Idioma",
+    "description": "Language select label"
+  },
+  "options_saving": {
+    "message": "Guardado",
+    "description": "Options section heading"
+  },
+  "options_filename": {
+    "message": "Patrón de nombre de archivo",
+    "description": "Label"
+  },
+  "options_placeholders": {
+    "message": "Variables:",
+    "description": "Followed by {title} {domain} {date} {time}"
+  },
+  "options_filenamePreview": {
+    "message": "Vista previa:",
+    "description": "Followed by an example file name"
+  },
+  "options_saveAs": {
+    "message": "Preguntar dónde guardar cada PDF",
+    "description": "Checkbox"
+  },
+  "options_defaultAction": {
+    "message": "Acción predeterminada",
+    "description": "Label"
+  },
+  "options_actionDownload": {
+    "message": "Descargar el PDF",
+    "description": "Default action option"
+  },
+  "options_actionOpen": {
+    "message": "Abrir una vista previa",
+    "description": "Default action option"
+  },
+  "options_defaultActionHint": {
+    "message": "La usan los atajos de teclado, el menú contextual y las herramientas de la página.",
+    "description": "Hint"
+  },
+  "options_pageHandling": {
+    "message": "Tratamiento de la página",
+    "description": "Options section heading"
+  },
+  "options_expandScroll": {
+    "message": "Expandir las zonas con desplazamiento propio para que no se corte nada (apps de chat, sitios de documentación)",
+    "description": "Checkbox"
+  },
+  "options_preferCssPageSize": {
+    "message": "Dar prioridad al tamaño @page del CSS de la página sobre el tamaño de papel elegido",
+    "description": "Checkbox"
+  },
+  "options_shortcuts": {
+    "message": "Atajos de teclado",
+    "description": "Options section heading"
+  },
+  "options_shortcutPage": {
+    "message": "guarda la página",
+    "description": "Follows the key combination Alt+Shift+P"
+  },
+  "options_shortcutArticle": {
+    "message": "guarda solo el artículo",
+    "description": "Follows the key combination Alt+Shift+A"
+  },
+  "options_changeShortcuts": {
+    "message": "Cambiar atajos",
+    "description": "Button"
+  },
+  "options_about": {
+    "message": "Acerca de",
+    "description": "Options section heading"
+  },
+  "options_aboutText": {
+    "message": "PageSnap PDF genera las páginas con el motor de impresión integrado de Chrome, todo en tu dispositivo. No se sube nada a ningún sitio.",
+    "description": "About text"
+  },
+  "options_debuggerNote": {
+    "message": "Mientras se genera un PDF, Chrome muestra la barra “PageSnap PDF ha empezado a depurar este navegador”. Es la forma en que Chrome ofrece su motor de PDF a las extensiones; desaparece en cuanto el PDF está listo.",
+    "description": "About text"
+  },
+  "options_reset": {
+    "message": "Restablecer toda la configuración",
+    "description": "Button"
+  },
+  "options_saved": {
+    "message": "Guardado",
+    "description": "Confirmation after a change"
+  },
+  "options_resetDone": {
+    "message": "Configuración restablecida",
+    "description": "Confirmation after reset"
+  },
+  "action_markdown": {
+    "message": "Markdown",
+    "description": "Label of the experimental Markdown export buttons in the popup"
+  },
+  "action_markdownLabel": {
+    "message": "Exportar como Markdown",
+    "description": "Accessible label of the Markdown export group"
+  },
+  "action_markdownPage": {
+    "message": "Página completa",
+    "description": "Markdown export of the whole page"
+  },
+  "action_markdownArticle": {
+    "message": "Artículo",
+    "description": "Markdown export of the main article"
+  },
+  "action_markdownPageTitle": {
+    "message": "Exportar la página completa como Markdown (experimental)",
+    "description": "Tooltip"
+  },
+  "action_markdownArticleTitle": {
+    "message": "Exportar el artículo como Markdown (experimental)",
+    "description": "Tooltip"
+  },
+  "status_exportingMarkdown": {
+    "message": "Convirtiendo a Markdown…",
+    "description": "Status line"
+  },
+  "error_markdownDisabled": {
+    "message": "La exportación a Markdown es experimental. Actívala en la configuración de la extensión.",
+    "description": "Error when Markdown export is requested while the feature is off"
+  },
+  "experimental_title": {
+    "message": "Experimental",
+    "description": "Options section heading"
+  },
+  "experimental_intro": {
+    "message": "Funciones que aún están en pruebas. Vienen desactivadas por defecto.",
+    "description": "Options section intro"
+  },
+  "experimental_markdown": {
+    "message": "Activar la exportación a Markdown (experimental)",
+    "description": "Checkbox"
+  },
+  "experimental_markdownHint": {
+    "message": "Añade la opción Markdown a la ventana emergente y a la vista previa del elemento.",
+    "description": "Hint under the checkbox"
+  },
+  "experimental_confirmTitle": {
+    "message": "¿Activar la exportación a Markdown?",
+    "description": "Confirmation panel title"
+  },
+  "experimental_confirmText": {
+    "message": "El conversor de Markdown no es perfecto. Las tablas, el contenido incrustado y los diseños complejos pueden no convertirse bien, así que revisa el resultado antes de fiarte de él.",
+    "description": "Confirmation panel text"
+  },
+  "experimental_confirmEnable": {
+    "message": "Activar",
+    "description": "Confirmation button"
+  },
+  "experimental_confirmCancel": {
+    "message": "Cancelar",
+    "description": "Cancel button"
+  },
+  "picker_titleSelect": {
+    "message": "Elige un elemento",
+    "description": "In-page picker toolbar title (select mode)"
+  },
+  "picker_hintSelect": {
+    "message": "Pasa el cursor para resaltar y haz clic para elegir. Esc para cancelar.",
+    "description": "In-page picker hint (select mode)"
+  },
+  "picker_titleRemove": {
+    "message": "Quitar elementos",
+    "description": "In-page picker toolbar title (remove mode)"
+  },
+  "picker_hintRemove": {
+    "message": "Haz clic en lo que quieras quitar. Pulsa Listo al terminar.",
+    "description": "In-page picker hint (remove mode)"
+  },
+  "picker_removedCount": {
+    "message": "$1 quitados",
+    "description": "In-page picker counter; $1 is a number"
+  },
+  "picker_undo": {
+    "message": "Deshacer",
+    "description": "In-page picker button"
+  },
+  "picker_savePdf": {
+    "message": "Guardar PDF",
+    "description": "In-page picker button"
+  },
+  "picker_done": {
+    "message": "Listo",
+    "description": "In-page picker button"
+  },
+  "picker_cancel": {
+    "message": "Cancelar",
+    "description": "In-page picker button"
+  },
+  "picker_errorNoElement": {
+    "message": "No hay nada seleccionado. Primero haz clic en un elemento de la página.",
+    "description": "In-page picker error"
+  },
+  "picker_errorStart": {
+    "message": "No se pudo iniciar el selector en esta página.",
+    "description": "In-page picker error"
+  },
+  "preview_title": {
+    "message": "Exportar este elemento",
+    "description": "In-page preview modal title"
+  },
+  "preview_format": {
+    "message": "Formato",
+    "description": "Format segmented control label"
+  },
+  "preview_formatPdf": {
+    "message": "PDF",
+    "description": "Format option"
+  },
+  "preview_formatPng": {
+    "message": "PNG",
+    "description": "Format option"
+  },
+  "preview_formatJpeg": {
+    "message": "JPEG",
+    "description": "Format option"
+  },
+  "preview_formatMarkdown": {
+    "message": "Markdown",
+    "description": "Format option (experimental, only when enabled)"
+  },
+  "preview_download": {
+    "message": "Descargar",
+    "description": "Preview modal button"
+  },
+  "preview_copyImage": {
+    "message": "Copiar imagen",
+    "description": "Preview modal button (PNG only)"
+  },
+  "preview_copied": {
+    "message": "Imagen copiada al portapapeles",
+    "description": "Preview modal confirmation"
+  },
+  "preview_reselect": {
+    "message": "Volver a elegir",
+    "description": "Preview modal button: go back to the picker"
+  },
+  "preview_close": {
+    "message": "Cerrar",
+    "description": "Preview modal button"
+  },
+  "preview_loading": {
+    "message": "Generando vista previa…",
+    "description": "Preview modal status"
+  },
+  "preview_saving": {
+    "message": "Guardando…",
+    "description": "Preview modal status"
+  },
+  "preview_saved": {
+    "message": "Guardado: $1",
+    "description": "Preview modal status; $1 is the file name"
+  },
+  "preview_imageAlt": {
+    "message": "Vista previa del elemento seleccionado",
+    "description": "Alt text of the preview image"
+  },
+  "preview_errorCapture": {
+    "message": "No se pudo capturar este elemento.",
+    "description": "Preview modal error"
+  },
+  "preview_errorTooLarge": {
+    "message": "Este elemento es demasiado grande para capturarlo como imagen. Prueba con PDF.",
+    "description": "Preview modal error"
+  },
+  "preview_errorCopy": {
+    "message": "No se pudo copiar la imagen. Descárgala en su lugar.",
+    "description": "Preview modal error"
+  },
+  "preview_errorDownload": {
+    "message": "Error en la descarga: $1",
+    "description": "Preview modal error; $1 is the reason"
+  },
+  "preview_errorGeneric": {
+    "message": "Algo ha fallado. Inténtalo de nuevo o vuelve a elegir el elemento.",
+    "description": "Preview modal fallback error"
+  },
+  "preview_caption": {
+    "message": "$1 · $2×$3 px",
+    "description": "Element preview: caption \"<element> · W×H px\""
+  },
+  "preview_warningScaled": {
+    "message": "Este elemento es muy grande, así que la imagen se reduce a $1× para no superar el límite de 16 384 px de Chrome.",
+    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+  },
+  "options_imageScale": {
+    "message": "Resolución de imagen (PNG / JPEG)",
+    "description": "Options: label of the image resolution select"
+  },
+  "options_imageScaleHint": {
+    "message": "Píxeles por píxel CSS al exportar un elemento seleccionado como imagen.",
+    "description": "Options: hint under the image resolution select"
+  }
+}

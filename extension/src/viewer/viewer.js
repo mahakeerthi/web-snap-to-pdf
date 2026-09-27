@@ -1,13 +1,18 @@
+import { initTheme, reveal } from '../lib/theme.js';
 import { loadSettings } from '../lib/settings.js';
 
 const $ = (id) => document.getElementById(id);
 const jobId = new URLSearchParams(location.search).get('job');
 
+initTheme().finally(reveal);
+
 $('btn-close').addEventListener('click', () => window.close());
 
 async function main() {
   if (!jobId) return fail('No preview job specified.');
-  const res = await chrome.runtime.sendMessage({ type: 'ps:get-job', id: jobId }).catch((e) => ({ ok: false, error: String(e) }));
+  const res = await chrome.runtime
+    .sendMessage({ type: 'ps:get-job', id: jobId })
+    .catch((e) => ({ ok: false, error: String(e) }));
   if (!res || !res.ok) return fail((res && res.error) || 'Preview unavailable.');
   const { base64, filename, autoDownload } = res.job;
   const settings = await loadSettings();

@@ -1,21 +1,89 @@
 // PageSnap PDF - background service worker.
-// Orchestrates: content-script preparation -> chrome.debugger Page.printToPDF -> download / preview.
+// Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
+// viewer and the content script (plus context menus and keyboard shortcuts):
+//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download / preview tab
+//   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot (preview, PNG, JPEG)
+//   exportMarkdown()  ps:to-markdown in the content script (no debugger)
+// Every page change made by ps:prepare is undone with ps:restore, whatever the outcome.
 import { loadSettings, normalizeSettings } from './lib/settings.js';
 import { buildPrintParams, layoutWidthPx, buildFilename } from './lib/print-params.js';
 import { MAX_PAGE_INCHES, CSS_PX_PER_INCH } from './lib/paper-sizes.js';
+import { getMessages, t } from './lib/i18n.js';
 
-const PROTOCOL_VERSION = '1.3';
+const CDP_VERSION = '1.3'; // chrome.debugger protocol version
 const CONTENT_SCRIPT = 'src/content.js';
 const VIEWER_PAGE = 'src/viewer/viewer.html';
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
+
+// Largest bitmap edge Page.captureScreenshot renders correctly: past 16384 device pixels (the GPU
+// texture limit) the output wraps around and repeats the top of the capture.
+const MAX_CAPTURE_PX = 16384;
+const JPEG_QUALITY = 92;
+// The preview is captured at screen resolution; keep its data URL (sent to the page) reasonably small.
+const PREVIEW_MAX_PIXELS = 32e6;
+const LAST_FORMAT_KEY = 'previewFormat'; // chrome.storage.local: last format chosen in the preview modal
+const PREVIEW_FORMATS = ['pdf', 'png', 'jpeg', 'markdown'];
 
 const activeJobs = new Set(); // tabIds currently generating
 const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt }
 
 class UserError extends Error {}
 
+// English fallbacks for the in-page UI (picker toolbar + element preview modal). Translations from
+// _locales/<lang>/messages.json override them key by key (see uiStrings()).
+export const PICKER_STRINGS_EN = {
+  picker_titleSelect: 'Select an element',
+  picker_hintSelect: 'Hover to highlight, click to select. ↑/↓ widen or narrow. Esc to cancel.',
+  picker_titleRemove: 'Remove elements',
+  picker_hintRemove: 'Click anything to remove it. ↑/↓ widen or narrow. Press Done when finished.',
+  picker_removedCount: '$1 removed',
+  picker_undo: 'Undo',
+  picker_savePdf: 'Save PDF',
+  picker_done: 'Done',
+  picker_cancel: 'Cancel',
+  picker_errorNoElement: 'Nothing selected. Click an element on the page first.',
+  preview_title: 'Export this element',
+  preview_caption: '$1 · $2×$3 px',
+  preview_format: 'Format',
+  preview_formatPdf: 'PDF',
+  preview_formatPng: 'PNG',
+  preview_formatJpeg: 'JPEG',
+  preview_formatMarkdown: 'Markdown',
+  preview_download: 'Download',
+  preview_copyImage: 'Copy image',
+  preview_copied: 'Image copied to the clipboard',
+  preview_reselect: 'Reselect',
+  preview_close: 'Close',
+  preview_loading: 'Rendering preview…',
+  preview_saving: 'Saving…',
+  preview_saved: 'Saved $1',
+  preview_imageAlt: 'Preview of the selected element',
+  preview_warningScaled:
+    'This element is very large, so the image is reduced to $1× to stay within Chrome’s 16,384 px limit.',
+  preview_errorCapture: 'Could not capture this element.',
+  preview_errorCopy: 'Could not copy the image. Download it instead.',
+  preview_errorGeneric: 'Something went wrong. Try again or reselect the element.',
+  error_markdownDisabled: 'Markdown export is an experimental feature. Enable it in the extension settings.',
+};
+const UI_STRING_PREFIX = /^(picker|preview)_/;
+
+/** English fallbacks merged with the user's language; only the in-page UI keys. */
+async function uiStrings(settings) {
+  let messages = {};
+  try {
+    messages = await getMessages(settings && settings.language);
+  } catch (err) {
+    console.warn('PageSnap: could not load translations', err);
+  }
+  const out = { ...PICKER_STRINGS_EN };
+  for (const [k, v] of Object.entries(messages || {})) {
+    if (v && (UI_STRING_PREFIX.test(k) || k in PICKER_STRINGS_EN)) out[k] = v;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
-// Public entry point
+// PDF generation
 // ---------------------------------------------------------------------------
 
 /**
@@ -29,107 +97,298 @@ class UserError extends Error {}
 export async function generate({ tabId, settings, prep = 'none', output }) {
   settings = normalizeSettings(settings || (await loadSettings()));
   output = output || settings.output || 'download';
-  if (activeJobs.has(tabId)) throw new UserError('A PDF is already being generated for this tab.');
-  activeJobs.add(tabId);
-
-  const target = { tabId };
-  let attached = false;
-  let prepared = false;
-  let mediaEmulated = false;
-  let metricsOverridden = false;
-  let warning = null;
-
+  claimTab(tabId, 'A PDF is already being generated for this tab.');
   try {
-    const tab = await chrome.tabs.get(tabId);
-    assertPrintable(tab);
-
     progress(tabId, 'prepare', 'Preparing page…');
-    await ensureContentScript(tabId);
-    const prepResult = await sendContent(tabId, {
-      type: 'ps:prepare',
-      prep,
-      hideFixed: settings.hideFixed,
-      loadLazy: settings.loadLazy,
-      expandScroll: settings.expandScroll !== false,
-    });
-    prepared = true;
-    if (!prepResult || !prepResult.ok) {
-      throw new UserError((prepResult && prepResult.error) || 'Could not prepare the page.');
+    const tab = await readyTab(tabId);
+    const prepMsg = { prep, loadLazy: settings.loadLazy, ...scanOptions(settings) };
+    const { data, title, warning } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
+      withDebugger(tabId, async (target) => ({
+        ...(await printPage(target, tabId, settings)),
+        title: pageTitle(prepResult, tab),
+      })),
+    );
+    const filename = buildFilename(settings.filenameTemplate, { title, domain: hostnameOf(tab.url) });
+    if (output === 'return') return { ok: true, base64: data, filename, warning };
+
+    progress(tabId, 'save', output === 'open' ? 'Opening preview…' : 'Saving…');
+    await savePdf(data, filename, tab.title, { preview: output === 'open', saveAs: settings.saveAs });
+    succeeded(tabId);
+    return { ok: true, filename, bytes: base64ByteLength(data), warning };
+  } catch (err) {
+    throw failed(tabId, err);
+  } finally {
+    activeJobs.delete(tabId);
+    progress(tabId, 'done', '');
+  }
+}
+
+/** Page.printToPDF with the settings' media and layout emulation; returns { data, warning }. */
+async function printPage(target, tabId, settings) {
+  const { params, paper, margins, scale } = buildPrintParams(settings);
+  const single = settings.layout === 'single';
+  const media = settings.mediaView === 'screen' ? 'screen' : single ? 'print' : null;
+  const cleanup = []; // emulation overrides to clear, in reverse order
+  let warning = null;
+  try {
+    if (media) {
+      await cdp(target, 'Emulation.setEmulatedMedia', { media });
+      cleanup.push(() => cdp(target, 'Emulation.setEmulatedMedia', { media: '' }));
     }
-
-    await attach(tabId);
-    attached = true;
-
-    const { params, paper, margins, scale } = buildPrintParams(settings);
-    const media = settings.mediaView === 'screen' ? 'screen' : 'print';
-
-    if (media === 'screen') {
-      await cdp(target, 'Emulation.setEmulatedMedia', { media: 'screen' });
-      mediaEmulated = true;
-    }
-
-    if (settings.layout === 'single') {
+    if (single) {
       progress(tabId, 'measure', 'Measuring page…');
-      if (!mediaEmulated) {
-        await cdp(target, 'Emulation.setEmulatedMedia', { media: 'print' });
-        mediaEmulated = true;
-      }
-      const widthPx = layoutWidthPx(paper, margins, scale);
       await cdp(target, 'Emulation.setDeviceMetricsOverride', {
-        width: widthPx,
+        width: layoutWidthPx(paper, margins, scale),
         height: 1000,
         deviceScaleFactor: 1,
         mobile: false,
       });
-      metricsOverridden = true;
+      cleanup.push(() => cdp(target, 'Emulation.clearDeviceMetricsOverride'));
       await sleep(200);
-      const contentHeightPx = await measureContentHeight(target, tabId);
-      const heightIn = (contentHeightPx * scale) / CSS_PX_PER_INCH + margins.top + margins.bottom + 0.1;
-      params.paperWidth = paper.width;
-      params.paperHeight = Math.min(MAX_PAGE_INCHES, Math.max(1, heightIn));
-      if (heightIn > MAX_PAGE_INCHES) {
-        warning = `The page is longer than PDF viewers allow for a single page (${MAX_PAGE_INCHES} in), so it was split into ${Math.ceil(heightIn / MAX_PAGE_INCHES)} tall pages.`;
-      }
-      delete params.pageRanges;
-      params.preferCSSPageSize = false;
+      warning = fitSinglePage(params, await measureContentHeight(target, tabId), { paper, margins, scale });
     }
-
     progress(tabId, 'render', 'Rendering PDF…');
     const { data } = await printToPdf(target, params);
-
-    const filename = buildFilename(settings.filenameTemplate, {
-      title: (prepResult.title || tab.title || '').trim(),
-      domain: hostnameOf(tab.url),
-    });
-
-    if (output === 'return') {
-      return { ok: true, base64: data, filename, warning };
-    }
-    progress(tabId, 'save', output === 'open' ? 'Opening preview…' : 'Saving…');
-    if (output === 'open') {
-      await openPreview({ base64: data, filename, title: tab.title, autoDownload: false });
-    } else {
-      try {
-        await download(data, filename, settings.saveAs);
-      } catch (err) {
-        // Fallback: let the viewer page create a Blob URL and download from there.
-        console.warn('Direct download failed, falling back to viewer', err);
-        await openPreview({ base64: data, filename, title: tab.title, autoDownload: true });
-      }
-    }
-    flashBadge(tabId, '✓', '#1b873f');
-    return { ok: true, filename, bytes: Math.floor((data.length * 3) / 4), warning };
-  } catch (err) {
-    flashBadge(tabId, '!', '#d0342c');
-    throw toUserFacing(err);
+    return { data, warning };
   } finally {
-    if (metricsOverridden) await cdp(target, 'Emulation.clearDeviceMetricsOverride').catch(() => {});
-    if (mediaEmulated) await cdp(target, 'Emulation.setEmulatedMedia', { media: '' }).catch(() => {});
-    if (attached) await chrome.debugger.detach(target).catch(() => {});
-    if (prepared) sendContent(tabId, { type: 'ps:restore' }).catch(() => {});
-    activeJobs.delete(tabId);
-    progress(tabId, 'done', '');
+    while (cleanup.length)
+      await cleanup
+        .pop()()
+        .catch(() => {});
   }
+}
+
+/** Sizes `params` to one page as tall as the content; returns a warning if it had to be split. */
+function fitSinglePage(params, contentHeightPx, { paper, margins, scale }) {
+  const heightIn = (contentHeightPx * scale) / CSS_PX_PER_INCH + margins.top + margins.bottom + 0.1;
+  params.paperWidth = paper.width;
+  params.paperHeight = Math.min(MAX_PAGE_INCHES, Math.max(1, heightIn));
+  delete params.pageRanges;
+  params.preferCSSPageSize = false;
+  if (heightIn <= MAX_PAGE_INCHES) return null;
+  return `The page is longer than PDF viewers allow for a single page (${MAX_PAGE_INCHES} in), so it was split into ${Math.ceil(heightIn / MAX_PAGE_INCHES)} tall pages.`;
+}
+
+/** Downloads the PDF, or opens it in the viewer tab (also the fallback when the download fails). */
+async function savePdf(base64, filename, title, { preview, saveAs }) {
+  if (preview) {
+    await openPreview({ base64, filename, title, autoDownload: false });
+    return;
+  }
+  try {
+    await download(base64, filename, saveAs);
+  } catch (err) {
+    // Fallback: let the viewer page create a Blob URL and download from there.
+    console.warn('Direct download failed, falling back to viewer', err);
+    await openPreview({ base64, filename, title, autoDownload: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Element preview & image / Markdown export
+// ---------------------------------------------------------------------------
+
+/**
+ * Capture the element picked in the page (content script `state.picked`) as an image.
+ * Uses the same isolation as the element PDF, so the preview matches the export.
+ * `scale` is output pixels per CSS pixel; `null` means "screen resolution" (device pixels).
+ * The debugger is attached only for the duration of the capture.
+ */
+async function captureElement(
+  tabId,
+  { settings, format = 'png', scale = null, quality, maxPixels = Infinity },
+) {
+  claimTab(tabId, 'An export is already running for this tab.');
+  try {
+    const tab = await readyTab(tabId);
+    // Unlike generate(), attach before preparing: attaching shows Chrome's "started debugging this
+    // browser" bar, which shrinks the viewport with a short animation. A captureBeyondViewport
+    // screenshot taken while the viewport is still changing size repeats the first viewport-height
+    // of the clip instead of rendering the rest.
+    return await withDebugger(tabId, async (target) => {
+      await waitForStableViewport(target);
+      const prepMsg = { prep: 'element', loadLazy: false, ...scanOptions(settings) };
+      return withPreparedPage(tabId, prepMsg, async (prepResult) => {
+        const rect = requireOk(
+          await sendContent(tabId, { type: 'ps:picked-rect' }),
+          'The selected element is gone. Select it again.',
+        );
+        if (rect.width < 1 || rect.height < 1)
+          throw new UserError('The selected element has no visible size.');
+        const shot = await screenshotRect(target, rect, { format, scale, quality, maxPixels });
+        return { ...shot, rect, title: pageTitle(prepResult, tab), tab };
+      });
+    });
+  } finally {
+    activeJobs.delete(tabId);
+  }
+}
+
+/** Page.captureScreenshot of a document-relative rect at `scale` (null = device pixels). */
+async function screenshotRect(target, rect, { format, scale, quality, maxPixels }) {
+  // Output pixels per clip.scale unit: devicePixelRatio (incl. page zoom) on real displays, but
+  // not under DevTools device emulation, so measure it instead of trusting window.devicePixelRatio.
+  const ratio = await captureRatio(target);
+  const wanted = Math.min(scale == null ? ratio : scale, Math.sqrt(maxPixels / (rect.width * rect.height)));
+  const outScale = capScale(rect, wanted);
+  const params = {
+    format,
+    clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: outScale / ratio },
+    // Clip coordinates are document-relative with captureBeyondViewport (verified by the tests).
+    captureBeyondViewport: true,
+  };
+  if (format === 'jpeg') params.quality = quality ?? JPEG_QUALITY;
+  const { data } = await cdp(target, 'Page.captureScreenshot', params);
+  return {
+    data,
+    scale: outScale,
+    scaledDown: outScale < wanted,
+    imageWidth: Math.round(rect.width * outScale),
+    imageHeight: Math.round(rect.height * outScale),
+  };
+}
+
+/** Largest output scale for an element that stays within the capture limit. */
+function capScale(rect, scale) {
+  const limit = MAX_CAPTURE_PX / Math.max(rect.width, rect.height);
+  return scale > limit ? Math.floor(limit * 1000) / 1000 : scale;
+}
+
+function clampImageScale(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(3, Math.max(1, n)) : 2;
+}
+
+function scaledWarning(strings, scale) {
+  return t(strings, 'preview_warningScaled', [String(Math.floor(scale * 100) / 100)]);
+}
+
+/**
+ * Show the in-page preview modal for the element picked with the "select element" picker.
+ * Returns { ok, width, height, warning } (CSS pixels of the element).
+ */
+export async function previewElement(tabId) {
+  const settings = await loadSettings();
+  const strings = await uiStrings(settings);
+  let cap;
+  try {
+    cap = await captureElement(tabId, {
+      settings,
+      format: 'png',
+      scale: null,
+      maxPixels: PREVIEW_MAX_PIXELS,
+    });
+  } catch (err) {
+    throw failed(tabId, err);
+  }
+  // What an image export at the configured scale would be reduced to (shown in the caption).
+  const imageScale = clampImageScale(settings.imageScale);
+  const exportScale = capScale(cap.rect, imageScale);
+  const imageWarning = exportScale < imageScale ? scaledWarning(strings, exportScale) : null;
+  const markdownEnabled = !!settings.markdownEnabled;
+  let format = await lastPreviewFormat();
+  if (format === 'markdown' && !markdownEnabled) format = 'pdf';
+  const res = await sendContent(tabId, {
+    type: 'ps:show-preview',
+    dataUrl: 'data:image/png;base64,' + cap.data,
+    width: cap.rect.width,
+    height: cap.rect.height,
+    description: cap.rect.description || '',
+    format,
+    imageWarning,
+    markdownEnabled,
+    strings,
+    theme: settings.theme || 'system',
+  });
+  requireOk(res, 'Could not show the preview.');
+  return { ok: true, width: cap.rect.width, height: cap.rect.height, warning: imageWarning };
+}
+
+/**
+ * Export the picked element as PNG or JPEG at settings.imageScale and download it (filename
+ * template + .png / .jpg). `output: 'return'` returns the base64 data instead (tests).
+ */
+export async function exportElementImage(tabId, format = 'png', { output } = {}) {
+  format = format === 'jpeg' || format === 'jpg' ? 'jpeg' : 'png';
+  const settings = await loadSettings();
+  const strings = await uiStrings(settings);
+  const scale = clampImageScale(settings.imageScale);
+  try {
+    const cap = await captureElement(tabId, { settings, format, scale, quality: JPEG_QUALITY });
+    const filename = buildFilename(
+      settings.filenameTemplate,
+      { title: cap.title, domain: hostnameOf(cap.tab.url) },
+      format === 'jpeg' ? 'jpg' : 'png',
+    );
+    const result = {
+      ok: true,
+      filename,
+      width: cap.imageWidth,
+      height: cap.imageHeight,
+      scale: cap.scale,
+      warning: cap.scaledDown ? scaledWarning(strings, cap.scale) : null,
+    };
+    if (output === 'return') return { ...result, base64: cap.data, mime: 'image/' + format };
+    await download(cap.data, filename, settings.saveAs, 'image/' + format);
+    succeeded(tabId);
+    return { ...result, bytes: base64ByteLength(cap.data) };
+  } catch (err) {
+    throw failed(tabId, err);
+  }
+}
+
+/**
+ * Experimental: convert the page, its article or the picked element to Markdown and download it
+ * as <filename>.md. Gated by settings.markdownEnabled here, so no caller can bypass the opt-in.
+ */
+export async function exportMarkdown(tabId, prep = 'none', { output } = {}) {
+  const settings = await loadSettings();
+  if (!settings.markdownEnabled) {
+    const strings = await uiStrings(settings);
+    throw new UserError(t(strings, 'error_markdownDisabled'));
+  }
+  prep = prep === 'article' || prep === 'element' ? prep : 'none';
+  try {
+    const tab = await readyTab(tabId);
+    const res = requireOk(
+      await sendContent(tabId, { type: 'ps:to-markdown', prep }),
+      'Could not convert the page to Markdown.',
+    );
+    const filename = buildFilename(
+      settings.filenameTemplate,
+      { title: pageTitle(res, tab), domain: hostnameOf(tab.url) },
+      'md',
+    );
+    if (output === 'return') return { ok: true, filename, markdown: res.markdown };
+    const base64 = utf8ToBase64(res.markdown);
+    await download(base64, filename, settings.saveAs, 'text/markdown;charset=utf-8');
+    succeeded(tabId);
+    return { ok: true, filename, bytes: new TextEncoder().encode(res.markdown).length };
+  } catch (err) {
+    throw failed(tabId, err);
+  }
+}
+
+function utf8ToBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+async function lastPreviewFormat() {
+  try {
+    const stored = await chrome.storage.local.get(LAST_FORMAT_KEY);
+    const f = stored[LAST_FORMAT_KEY];
+    return PREVIEW_FORMATS.includes(f) ? f : 'pdf';
+  } catch {
+    return 'pdf';
+  }
+}
+
+function rememberPreviewFormat(format) {
+  if (!PREVIEW_FORMATS.includes(format)) return;
+  chrome.storage.local.set({ [LAST_FORMAT_KEY]: format }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -142,9 +401,9 @@ function cdp(target, method, params) {
 
 async function attach(tabId) {
   try {
-    await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
+    await chrome.debugger.attach({ tabId }, CDP_VERSION);
   } catch (err) {
-    const msg = String((err && err.message) || err);
+    const msg = errorMessage(err);
     if (/already attached/i.test(msg)) {
       throw new UserError('Another tool (usually DevTools) is attached to this tab. Close it and try again.');
     }
@@ -155,11 +414,68 @@ async function attach(tabId) {
   }
 }
 
+/** Runs `fn(target)` with the debugger attached to the tab, detaching afterwards. */
+async function withDebugger(tabId, fn) {
+  await attach(tabId);
+  const target = { tabId };
+  try {
+    return await fn(target);
+  } finally {
+    await chrome.debugger.detach(target).catch(() => {});
+  }
+}
+
+// Poll the viewport height until it has stopped changing (the debugger info bar has finished
+// sliding in). Returns quickly when nothing moves; gives up after `maxMs`.
+async function waitForStableViewport(target, { stableMs = 250, maxMs = 2500 } = {}) {
+  const start = Date.now();
+  let last = null;
+  let since = start;
+  while (Date.now() - start < maxMs) {
+    let h = null;
+    try {
+      const r = await cdp(target, 'Runtime.evaluate', { expression: 'innerHeight', returnByValue: true });
+      h = r && r.result ? r.result.value : null;
+    } catch {
+      return;
+    }
+    const now = Date.now();
+    if (h !== last) {
+      last = h;
+      since = now;
+    } else if (now - since >= stableMs) {
+      return;
+    }
+    await sleep(40);
+  }
+}
+
+// Output pixels per CSS pixel of a clip.scale = 1 screenshot, read from a tiny capture's PNG header.
+async function captureRatio(target) {
+  try {
+    const { data } = await cdp(target, 'Page.captureScreenshot', {
+      format: 'png',
+      clip: { x: 0, y: 0, width: 100, height: 100, scale: 1 },
+    });
+    const bin = atob(data.slice(0, 32)); // signature (8) + IHDR length/type (8) + width (4)
+    const w =
+      ((bin.charCodeAt(16) << 24) |
+        (bin.charCodeAt(17) << 16) |
+        (bin.charCodeAt(18) << 8) |
+        bin.charCodeAt(19)) >>>
+      0;
+    return w > 0 ? w / 100 : 1;
+  } catch (err) {
+    console.warn('PageSnap: could not measure the capture scale', err);
+    return 1;
+  }
+}
+
 async function printToPdf(target, params) {
   try {
     return await cdp(target, 'Page.printToPDF', params);
   } catch (err) {
-    const msg = String((err && err.message) || err);
+    const msg = errorMessage(err);
     if (params.generateDocumentOutline && /generateDocumentOutline|Invalid parameters/i.test(msg)) {
       const { generateDocumentOutline, ...rest } = params;
       return cdp(target, 'Page.printToPDF', rest);
@@ -201,7 +517,7 @@ async function ensureContentScript(tabId) {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT] });
   } catch (err) {
-    const msg = String((err && err.message) || err);
+    const msg = errorMessage(err);
     if (/cannot access|cannot be scripted|extensions gallery|chrome:\/\//i.test(msg)) {
       throw new UserError('Chrome does not allow extensions to access this page.');
     }
@@ -216,12 +532,51 @@ function sendContent(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
 }
 
+/** Checks that Chrome lets extensions script the tab and injects the content script if needed. */
+async function readyTab(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  assertPrintable(tab);
+  await ensureContentScript(tabId);
+  return tab;
+}
+
+/** Page-wide preparation switches shared by every pipeline. */
+function scanOptions(settings) {
+  return { hideFixed: settings.hideFixed, expandScroll: settings.expandScroll !== false };
+}
+
+/**
+ * Prepares the page (ps:prepare: lazy content, isolation, fixed bars, scroll panes), runs
+ * `fn(prepResult)` and always restores the page afterwards (ps:restore).
+ */
+async function withPreparedPage(tabId, prepMsg, fn) {
+  try {
+    const prepResult = requireOk(
+      await sendContent(tabId, { type: 'ps:prepare', ...prepMsg }),
+      'Could not prepare the page.',
+    );
+    return await fn(prepResult);
+  } finally {
+    await sendContent(tabId, { type: 'ps:restore' }).catch(() => {});
+  }
+}
+
+/** Returns a content-script response, or throws its error (or `fallback`) as a UserError. */
+function requireOk(res, fallback) {
+  if (!res || !res.ok) throw new UserError((res && res.error) || fallback);
+  return res;
+}
+
+function pageTitle(result, tab) {
+  return (result.title || tab.title || '').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Output helpers
 // ---------------------------------------------------------------------------
 
-async function download(base64, filename, saveAs) {
-  const url = 'data:application/pdf;base64,' + base64;
+async function download(base64, filename, saveAs, mime = 'application/pdf') {
+  const url = `data:${mime};base64,` + base64;
   const id = await chrome.downloads.download({
     url,
     filename,
@@ -278,12 +633,15 @@ function assertPrintable(tab) {
   }
 }
 
+// Browser pages, other extensions and the Web Store, where Chrome blocks extension scripts.
+const RESTRICTED_URLS = [
+  /^(chrome|chrome-extension|chrome-untrusted|devtools|edge|about|view-source|chrome-search|chrome-devtools):/i,
+  /^https?:\/\/chromewebstore\.google\.com/i,
+  /^https?:\/\/chrome\.google\.com\/webstore/i,
+];
+
 export function isPrintableUrl(url) {
-  if (!url) return false;
-  if (/^(chrome|chrome-extension|chrome-untrusted|devtools|edge|about|view-source|chrome-search|chrome-devtools):/i.test(url)) return false;
-  if (/^https?:\/\/chromewebstore\.google\.com/i.test(url)) return false;
-  if (/^https?:\/\/chrome\.google\.com\/webstore/i.test(url)) return false;
-  return true;
+  return !!url && !RESTRICTED_URLS.some((re) => re.test(url));
 }
 
 function hostnameOf(url) {
@@ -294,12 +652,35 @@ function hostnameOf(url) {
   }
 }
 
+function errorMessage(err) {
+  return String((err && err.message) || err);
+}
+
 function toUserFacing(err) {
   if (err instanceof UserError) return err;
-  const msg = String((err && err.message) || err);
-  const e = new UserError(msg);
+  const e = new UserError(errorMessage(err));
   e.internal = true;
   return e;
+}
+
+/** One export per tab at a time; release with activeJobs.delete(tabId). */
+function claimTab(tabId, busyMessage) {
+  if (activeJobs.has(tabId)) throw new UserError(busyMessage);
+  activeJobs.add(tabId);
+}
+
+function succeeded(tabId) {
+  flashBadge(tabId, '✓', '#1b873f');
+}
+
+/** Flags the failure on the toolbar badge and returns the error to throw. */
+function failed(tabId, err) {
+  flashBadge(tabId, '!', '#d0342c');
+  return toUserFacing(err);
+}
+
+function base64ByteLength(base64) {
+  return Math.floor((base64.length * 3) / 4);
 }
 
 function progress(tabId, stage, message) {
@@ -321,17 +702,25 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function activeTabId() {
+/** The tab a popup / test message names, else the active tab. */
+async function targetTabId(msg) {
+  if (msg.tabId != null) return msg.tabId;
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) throw new UserError('No active tab.');
   return tab.id;
 }
 
 async function startPicker(tabId, mode) {
-  const tab = await chrome.tabs.get(tabId);
-  assertPrintable(tab);
-  await ensureContentScript(tabId);
-  return sendContent(tabId, { type: 'ps:start-picker', mode });
+  await readyTab(tabId);
+  const settings = await loadSettings();
+  const strings = await uiStrings(settings);
+  return sendContent(tabId, { type: 'ps:start-picker', mode, strings, theme: settings.theme || 'system' });
+}
+
+function senderTabId(sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId == null) throw new UserError('No tab for this request.');
+  return tabId;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,28 +731,47 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg.type !== 'string' || !msg.type.startsWith('ps:')) return false;
   handleMessage(msg, sender)
     .then((result) => sendResponse(result ?? { ok: true }))
-    .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+    .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
   return true; // keep the channel open for the async response
 });
 
 async function handleMessage(msg, sender) {
   switch (msg.type) {
     case 'ps:generate': {
-      const tabId = msg.tabId ?? (await activeTabId());
+      const tabId = await targetTabId(msg);
       return generate({ tabId, settings: msg.settings, prep: msg.prep || 'none', output: msg.output });
     }
     case 'ps:generate-from-content': {
-      // Sent by the in-page picker / toolbar; uses saved settings.
-      const tabId = sender.tab && sender.tab.id;
-      if (tabId == null) throw new UserError('No tab for this request.');
+      // Sent by the in-page picker toolbar / preview modal; uses saved settings.
+      const tabId = senderTabId(sender);
+      if (msg.format) rememberPreviewFormat(msg.format);
       return generate({ tabId, prep: msg.prep || 'none', output: msg.output });
     }
+    case 'ps:preview-element':
+      // Sent by the picker after a click in "select element" mode.
+      return previewElement(msg.tabId ?? senderTabId(sender));
+    case 'ps:export-element': {
+      // Sent by the preview modal: PNG / JPEG download of the picked element.
+      const tabId = msg.tabId ?? senderTabId(sender);
+      const format = msg.format === 'jpeg' ? 'jpeg' : 'png';
+      rememberPreviewFormat(format);
+      return exportElementImage(tabId, format);
+    }
+    case 'ps:export-markdown': {
+      const tabId = await targetTabId(msg);
+      return exportMarkdown(tabId, msg.prep || 'none');
+    }
+    case 'ps:export-markdown-from-content': {
+      const tabId = senderTabId(sender);
+      rememberPreviewFormat('markdown');
+      return exportMarkdown(tabId, msg.prep || 'element');
+    }
     case 'ps:start-picker': {
-      const tabId = msg.tabId ?? (await activeTabId());
+      const tabId = await targetTabId(msg);
       return startPicker(tabId, msg.mode);
     }
     case 'ps:page-state': {
-      const tabId = msg.tabId ?? (await activeTabId());
+      const tabId = await targetTabId(msg);
       const tab = await chrome.tabs.get(tabId);
       const printable = isPrintableUrl(tab.url || tab.pendingUrl || '');
       let state = { removed: 0, hasPicked: false };
@@ -373,8 +781,9 @@ async function handleMessage(msg, sender) {
       return { ok: true, printable, busy: activeJobs.has(tabId), title: tab.title, url: tab.url, ...state };
     }
     case 'ps:reset-page': {
-      const tabId = msg.tabId ?? (await activeTabId());
-      if (activeJobs.has(tabId)) throw new UserError('Wait for the current PDF to finish before resetting the page.');
+      const tabId = await targetTabId(msg);
+      if (activeJobs.has(tabId))
+        throw new UserError('Wait for the current PDF to finish before resetting the page.');
       if (await ping(tabId)) await sendContent(tabId, { type: 'ps:reset-page' });
       return { ok: true };
     }
@@ -395,20 +804,26 @@ async function handleMessage(msg, sender) {
 // Context menus & keyboard commands
 // ---------------------------------------------------------------------------
 
+const MENU_CONTEXTS = ['page', 'frame', 'action'];
 const MENU = {
-  page: { title: 'Save page as PDF', contexts: ['page', 'frame', 'action'] },
-  article: { title: 'Save article only as PDF', contexts: ['page', 'frame', 'action'] },
-  selectElement: { title: 'Select an element to save as PDF', contexts: ['page', 'frame', 'action'] },
-  removeElements: { title: 'Remove elements before saving', contexts: ['page', 'frame', 'action'] },
-  reset: { title: 'Restore all removed elements', contexts: ['page', 'frame', 'action'] },
+  page: 'Save page as PDF',
+  article: 'Save article only as PDF',
+  selectElement: 'Select an element to preview and save',
+  removeElements: 'Remove elements before saving',
+  reset: 'Restore all removed elements',
 };
 
 function installMenus() {
   chrome.contextMenus.removeAll(() => {
-    for (const [id, def] of Object.entries(MENU)) {
-      chrome.contextMenus.create({ id, title: def.title, contexts: def.contexts });
+    for (const [id, title] of Object.entries(MENU)) {
+      chrome.contextMenus.create({ id, title, contexts: MENU_CONTEXTS });
     }
   });
+}
+
+/** Menu and shortcut actions have no caller to report to: log failures instead. */
+function runLogged(promise) {
+  return promise.catch((err) => console.warn('PageSnap:', err.message));
 }
 
 chrome.runtime.onInstalled.addListener(installMenus);
@@ -416,18 +831,17 @@ chrome.runtime.onStartup.addListener(installMenus);
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || tab.id == null) return;
-  const run = (p) => p.catch((err) => console.warn('PageSnap:', err.message));
   switch (info.menuItemId) {
     case 'page':
-      return run(generate({ tabId: tab.id }));
+      return runLogged(generate({ tabId: tab.id }));
     case 'article':
-      return run(generate({ tabId: tab.id, prep: 'article' }));
+      return runLogged(generate({ tabId: tab.id, prep: 'article' }));
     case 'selectElement':
-      return run(startPicker(tab.id, 'print'));
+      return runLogged(startPicker(tab.id, 'print'));
     case 'removeElements':
-      return run(startPicker(tab.id, 'remove'));
+      return runLogged(startPicker(tab.id, 'remove'));
     case 'reset':
-      return run(handleMessage({ type: 'ps:reset-page', tabId: tab.id }, {}));
+      return runLogged(handleMessage({ type: 'ps:reset-page', tabId: tab.id }, {}));
     default:
       return undefined;
   }
@@ -436,9 +850,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.commands.onCommand.addListener((command, tab) => {
   const tabId = tab && tab.id;
   if (tabId == null) return;
-  const run = (p) => p.catch((err) => console.warn('PageSnap:', err.message));
-  if (command === 'save-pdf') run(generate({ tabId }));
-  if (command === 'save-article') run(generate({ tabId, prep: 'article' }));
+  if (command === 'save-pdf') runLogged(generate({ tabId }));
+  if (command === 'save-article') runLogged(generate({ tabId, prep: 'article' }));
 });
 
 chrome.debugger.onDetach.addListener((source, reason) => {
@@ -448,6 +861,10 @@ chrome.debugger.onDetach.addListener((source, reason) => {
 // Test hook (used by test/e2e.mjs). Harmless in production.
 globalThis.__pagesnap = {
   generate,
+  previewElement,
+  exportElementImage,
+  exportMarkdown,
+  PICKER_STRINGS_EN,
   previewJobs,
   isPrintableUrl,
   // Same code paths as the runtime messages the popup / context menu use (a worker can't message itself).

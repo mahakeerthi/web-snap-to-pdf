@@ -1,54 +1,75 @@
+import { applyTheme, nextTheme, normalizeTheme, reveal } from '../lib/theme.js';
 import { PAPER_SIZES } from '../lib/paper-sizes.js';
 import { loadSettings, saveSettings, LAYOUT_WIDTHS, clamp } from '../lib/settings.js';
+import { buildPrintParams } from '../lib/print-params.js';
+import { SUPPORTED_LANGUAGES, resolveLanguage, getMessages, t, applyTranslations } from '../lib/i18n.js';
 
 const $ = (id) => document.getElementById(id);
+const ADVANCED_OPEN_KEY = 'popupExportSettingsOpen'; // chrome.storage.local
+const MM_PER_INCH = 25.4;
 
 let settings = null;
+let messages = {};
 let tab = null;
-let contentMode = 'page'; // page | article
 let busy = false;
+let removedCount = 0;
 let saveTimer = null;
 
-init().catch((err) => setStatus(String(err.message || err), 'error'));
+init().catch((err) => {
+  reveal();
+  setStatus(String((err && err.message) || err), 'error');
+});
 
 async function init() {
-  populateSelects();
-  settings = await loadSettings();
-  bindInputs();
-  render();
+  const [loaded, local] = await Promise.all([
+    loadSettings(),
+    chrome.storage.local.get(ADVANCED_OPEN_KEY).catch(() => ({})),
+  ]);
+  settings = loaded;
+  applyTheme(settings.theme);
+  messages = await getMessages(settings.language);
 
-  // Settings must stay reachable even on pages that cannot be converted.
-  $('open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  populateSelects();
+  localize();
+  setAdvancedOpen(!!local[ADVANCED_OPEN_KEY], false);
+  bindInputs();
+  bindChrome();
+  render();
+  reveal();
 
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
-  $('page-title').textContent = tab.title || tab.url || '';
-  $('page-title').title = tab.url || '';
+  const pageTitle = $('page-title');
+  pageTitle.removeAttribute('data-i18n'); // the tab title must not be re-translated
+  pageTitle.textContent = tab.title || tab.url || '';
+  pageTitle.title = tab.url || '';
 
   const state = await send({ type: 'ps:page-state', tabId: tab.id });
   if (!state || !state.ok || !state.printable) {
     $('blocked').classList.remove('hidden');
-    $('main').classList.add('disabled');
-    $('main').inert = true; // also keep keyboard focus out of the unusable form
-    $('btn-download').disabled = true;
-    $('btn-open').disabled = true;
+    $('actions').classList.add('disabled');
+    $('actions').inert = true; // keep keyboard focus out of actions that cannot work here
+    document.body.dataset.state = 'blocked';
     return;
   }
+  document.body.dataset.state = 'ready';
   updateRemoved(state.removed || 0);
-  if (state.busy) setBusy(true, 'Generating PDF…');
+  if (state.busy) setBusy(true, tr('status_generating'));
 
-  $('btn-download').addEventListener('click', () => run('download'));
-  $('btn-open').addEventListener('click', () => run('open'));
-  $('tool-select').addEventListener('click', () => startPicker('print'));
-  $('tool-remove').addEventListener('click', () => startPicker('remove'));
-  $('tool-reset').addEventListener('click', async () => {
-    await send({ type: 'ps:reset-page', tabId: tab.id });
-    updateRemoved(0);
+  $('act-page').addEventListener('click', () => run('none', 'download'));
+  $('act-page-preview').addEventListener('click', () => run('none', 'open'));
+  $('act-article').addEventListener('click', () => run('article', 'download'));
+  $('act-article-preview').addEventListener('click', () => run('article', 'open'));
+  $('act-select').addEventListener('click', () => startPicker('print'));
+  $('act-remove').addEventListener('click', () => startPicker('remove'));
+  $('act-reset').addEventListener('click', async () => {
+    const res = await send({ type: 'ps:reset-page', tabId: tab.id });
+    if (res && res.ok === false) setStatus(res.error || tr('status_error'), 'error');
+    else updateRemoved(0);
   });
-  document.addEventListener('keydown', (ev) => {
-    // Enter on a focused control activates that control; only a bare Enter means "download".
-    if (ev.key === 'Enter' && !busy && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(document.activeElement.tagName)) run('download');
-  });
+  $('md-page').addEventListener('click', () => exportMarkdown('none'));
+  $('md-article').addEventListener('click', () => exportMarkdown('article'));
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === 'ps:progress' && msg.tabId === tab.id) {
       if (msg.stage === 'done') return;
@@ -57,36 +78,82 @@ async function init() {
   });
 }
 
-function populateSelects() {
-  const format = $('format');
-  for (const p of PAPER_SIZES) {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = p.label;
-    format.appendChild(o);
-  }
-  const lw = $('layoutWidth');
-  for (const w of LAYOUT_WIDTHS) {
-    const o = document.createElement('option');
-    o.value = w.id;
-    o.textContent = w.label;
-    lw.appendChild(o);
-  }
+// --- i18n ------------------------------------------------------------------------------------
+
+/** Translate with an explicit English fallback (for keys built from ids). */
+function tr(key, subs, fallback) {
+  if (fallback !== undefined && !(key in messages)) return fallback;
+  return t(messages, key, subs);
 }
 
-// --- settings <-> UI --------------------------------------------------------------------
+function localize() {
+  document.documentElement.lang = resolveLanguage(settings.language).replace('_', '-');
+  applyTranslations(document, messages);
+  for (const o of $('format').options) {
+    const p = PAPER_SIZES.find((x) => x.id === o.value);
+    o.textContent = tr(`paper_${o.value}`, [], p ? p.label : o.value);
+  }
+  for (const o of $('layoutWidth').options) {
+    const w = LAYOUT_WIDTHS.find((x) => x.id === o.value);
+    o.textContent = tr(`layoutWidth_${o.value}`, [], w ? w.label : o.value);
+  }
+  for (const o of $('language').options) {
+    const l = SUPPORTED_LANGUAGES.find((x) => x.code === o.value);
+    o.textContent = o.value === 'auto' ? tr('lang_autoShort', [], 'Auto') : l.label; // compact footer
+  }
+  $('version').textContent = tr('footer_version', [chrome.runtime.getManifest().version]);
+}
 
-const CHECKBOXES = ['printBackground', 'hideFixed', 'loadLazy', 'outline', 'headerFooter', 'hfTitle', 'hfDate', 'hfUrl', 'hfPageNumbers'];
+async function setLanguage(language) {
+  update({ language });
+  messages = await getMessages(language);
+  localize();
+  render();
+}
+
+// --- settings <-> UI -------------------------------------------------------------------------
+
+function populateSelects() {
+  const fill = (select, items) => {
+    for (const [value, label] of items) {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = label;
+      select.appendChild(o);
+    }
+  };
+  fill(
+    $('format'),
+    PAPER_SIZES.map((p) => [p.id, p.label]),
+  );
+  fill(
+    $('layoutWidth'),
+    LAYOUT_WIDTHS.map((w) => [w.id, w.label]),
+  );
+  fill(
+    $('language'),
+    SUPPORTED_LANGUAGES.map((l) => [l.code, l.label]),
+  );
+}
+
+const CHECKBOXES = [
+  'printBackground',
+  'hideFixed',
+  'loadLazy',
+  'outline',
+  'headerFooter',
+  'hfTitle',
+  'hfDate',
+  'hfUrl',
+  'hfPageNumbers',
+];
 
 function bindInputs() {
   for (const seg of document.querySelectorAll('.seg')) {
     const key = seg.dataset.key;
     seg.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-value]');
-      if (!btn) return;
-      if (key === 'contentMode') contentMode = btn.dataset.value;
-      else update({ [key]: btn.dataset.value });
-      render();
+      if (btn) update({ [key]: btn.dataset.value });
     });
   }
   $('format').addEventListener('change', (e) => update({ format: e.target.value }));
@@ -97,28 +164,63 @@ function bindInputs() {
       update({ margins: { ...settings.margins, [side]: clamp(Number(e.target.value) || 0, 0, 100) } }, false);
     });
   }
-  $('scale').addEventListener('input', (e) => {
-    update({ scale: Number(e.target.value) / 100 }, false);
-    $('scale-value').textContent = `${e.target.value}%`;
-  });
-  $('mediaScreen').addEventListener('change', (e) => update({ mediaView: e.target.checked ? 'screen' : 'print' }));
+  $('scale').addEventListener('input', (e) => update({ scale: Number(e.target.value) / 100 }, false));
+  $('mediaScreen').addEventListener('change', (e) =>
+    update({ mediaView: e.target.checked ? 'screen' : 'print' }),
+  );
   $('pageRanges').addEventListener('input', (e) => update({ pageRanges: e.target.value }, false));
-  for (const id of CHECKBOXES) {
-    $(id).addEventListener('change', (e) => update({ [id]: e.target.checked }));
-  }
+  for (const id of CHECKBOXES) $(id).addEventListener('change', (e) => update({ [id]: e.target.checked }));
+}
+
+/** Header, disclosure and footer controls: usable even on pages that cannot be converted. */
+function bindChrome() {
+  $('open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('theme-toggle').addEventListener('click', () => {
+    const theme = nextTheme(settings.theme);
+    applyTheme(theme);
+    update({ theme });
+  });
+  $('toggle-advanced').addEventListener('click', () => {
+    setAdvancedOpen($('toggle-advanced').getAttribute('aria-expanded') !== 'true', true);
+  });
+  $('language').addEventListener('change', (e) => setLanguage(e.target.value).catch(console.warn));
+  const openShortcuts = () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+  $('btn-shortcuts').addEventListener('click', openShortcuts);
+  $('help-shortcuts').addEventListener('click', openShortcuts);
+  $('btn-help').addEventListener('click', () => $('help').showModal());
+  $('help-close').addEventListener('click', () => $('help').close());
+  // Settings changed elsewhere (options page) while the popup is open.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'sync' || !changes.settings || !changes.settings.newValue || saveTimer) return;
+    const next = changes.settings.newValue;
+    if (next.markdownEnabled !== settings.markdownEnabled || next.theme !== settings.theme) {
+      settings.markdownEnabled = !!next.markdownEnabled;
+      settings.theme = next.theme;
+      render();
+    }
+  });
+}
+
+function setAdvancedOpen(open, persist) {
+  $('toggle-advanced').setAttribute('aria-expanded', String(open));
+  $('advanced').hidden = !open;
+  if (persist) chrome.storage.local.set({ [ADVANCED_OPEN_KEY]: open }).catch(() => {});
 }
 
 function update(patch, rerender = true) {
   Object.assign(settings, patch);
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveSettings(settings).catch(console.error), 150);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveSettings(settings).catch(console.warn);
+  }, 150);
   if (rerender) render();
+  else renderSummary(); // the summary line must always reflect the current values
 }
 
 function render() {
   for (const seg of document.querySelectorAll('.seg')) {
-    const key = seg.dataset.key;
-    const value = key === 'contentMode' ? contentMode : settings[key];
+    const value = settings[seg.dataset.key];
     for (const b of seg.querySelectorAll('button')) {
       const on = b.dataset.value === value;
       b.classList.toggle('active', on);
@@ -132,54 +234,117 @@ function render() {
   for (const side of ['top', 'right', 'bottom', 'left']) $('m-' + side).value = settings.margins[side];
   const pct = Math.round(settings.scale * 100);
   $('scale').value = pct;
-  $('scale-value').textContent = settings.layoutWidth === 'auto' ? `${pct}%` : 'auto (fit width)';
-  $('scale').disabled = settings.layoutWidth !== 'auto';
-  $('scale-row').classList.toggle('disabled', settings.layoutWidth !== 'auto');
+  $('scale-value').textContent = `${pct}%`;
+  $('scale-row').classList.toggle('hidden', settings.layoutWidth !== 'auto');
   $('mediaScreen').checked = settings.mediaView === 'screen';
   $('pageRanges').value = settings.pageRanges || '';
   for (const id of CHECKBOXES) $(id).checked = !!settings[id];
   $('hf-options').classList.toggle('hidden', !settings.headerFooter);
   $('ranges-row').classList.toggle('hidden', settings.layout === 'single');
-  $('btn-download').textContent = contentMode === 'article' ? 'Download article PDF' : 'Download PDF';
+  $('md-row').classList.toggle('hidden', !settings.markdownEnabled);
+  $('language').value = SUPPORTED_LANGUAGES.some((l) => l.code === settings.language)
+    ? settings.language
+    : 'auto';
+
+  const theme = normalizeTheme(settings.theme);
+  const toggle = $('theme-toggle');
+  toggle.dataset.mode = theme;
+  const themeLabel = tr('theme_toggle', [tr(`theme_${theme}`)]);
+  toggle.setAttribute('aria-label', themeLabel);
+  toggle.title = themeLabel;
+
+  $('reset-label').textContent = tr('action_reset', [removedCount]);
+  renderSummary();
+}
+
+/** "A4 · Portrait · 10 mm margins · Backgrounds on" — the effective values, incl. derived ones. */
+function summaryText(s) {
+  const parts = [s.format, tr(s.orientation === 'landscape' ? 'summary_landscape' : 'summary_portrait')];
+  const { margins } = buildPrintParams(s); // includes the header/footer minimum margin
+  const mm = ['top', 'right', 'bottom', 'left'].map((k) => Math.round(margins[k] * MM_PER_INCH));
+  if (mm.every((v) => v === 0)) parts.push(tr('summary_noMargins'));
+  else if (mm.every((v) => v === mm[0])) parts.push(tr('summary_margins', [mm[0]]));
+  else parts.push(tr('summary_customMargins', [mm.join('/')]));
+  if (s.layoutWidth && s.layoutWidth !== 'auto') parts.push(tr('summary_width', [s.layoutWidth]));
+  else if (Math.round(s.scale * 100) !== 100) parts.push(tr('summary_scale', [Math.round(s.scale * 100)]));
+  parts.push(tr(s.printBackground ? 'summary_backgroundsOn' : 'summary_backgroundsOff'));
+  if (s.mediaView === 'screen') parts.push(tr('summary_screenStyles'));
+  if (s.headerFooter) parts.push(tr('summary_headerFooter'));
+  const ranges = String(s.pageRanges || '').trim();
+  if (ranges && s.layout !== 'single') parts.push(tr('summary_pages', [ranges]));
+  return parts.join(' · ');
+}
+
+function renderSummary() {
+  $('summary').textContent = summaryText(settings);
+  $('scale-value').textContent = `${Math.round(settings.scale * 100)}%`;
 }
 
 function updateRemoved(n) {
-  $('removed-count').textContent = String(n);
-  $('tool-reset').classList.toggle('hidden', !n);
+  removedCount = n;
+  $('reset-label').textContent = tr('action_reset', [n]);
+  $('act-reset').classList.toggle('hidden', !n);
 }
 
-// --- actions ----------------------------------------------------------------------------
+// --- actions -----------------------------------------------------------------------------------
 
-async function run(output) {
-  if (busy) return;
+async function flushSettings() {
   clearTimeout(saveTimer);
+  saveTimer = null;
   await saveSettings(settings);
-  setBusy(true, 'Preparing page…');
-  const res = await send({
-    type: 'ps:generate',
-    tabId: tab.id,
-    prep: contentMode === 'article' ? 'article' : 'none',
-    output,
-    settings,
-  });
+}
+
+async function run(prep, output) {
+  if (busy || !tab) return;
+  setBusy(true, tr('status_preparing')); // synchronously, so a second click/Enter is ignored
+  try {
+    await flushSettings();
+    const res = await send({ type: 'ps:generate', tabId: tab.id, prep, output, settings });
+    showResult(res, output === 'open' ? tr('status_previewOpened') : null);
+  } catch (err) {
+    setStatus(String((err && err.message) || err), 'error');
+  } finally {
+    if (busy) setBusy(false);
+  }
+}
+
+/** Status line for a ps:generate / ps:export-markdown response ({ok, filename, warning} | {ok:false, error}). */
+function showResult(res, doneText) {
   setBusy(false);
   if (!res || !res.ok) {
-    setStatus((res && res.error) || 'Something went wrong.', 'error');
+    setStatus((res && res.error) || tr('status_error'), 'error');
     return;
   }
-  const done = output === 'open' ? 'Preview opened in a new tab.' : `Saved ${res.filename}`;
+  const done = doneText || tr('status_saved', [res.filename]);
   setStatus(res.warning ? `${done} ${res.warning}` : done, 'ok');
 }
 
-async function startPicker(mode) {
-  clearTimeout(saveTimer);
-  await saveSettings(settings);
-  const res = await send({ type: 'ps:start-picker', tabId: tab.id, mode });
-  if (!res || !res.ok) {
-    setStatus((res && res.error) || 'Could not start the picker.', 'error');
-    return;
+async function exportMarkdown(prep) {
+  if (busy || !tab || !settings.markdownEnabled) return;
+  setBusy(true, tr('status_exportingMarkdown'));
+  try {
+    await flushSettings();
+    showResult(await send({ type: 'ps:export-markdown', tabId: tab.id, prep }), null);
+  } catch (err) {
+    setStatus(String((err && err.message) || err), 'error');
+  } finally {
+    if (busy) setBusy(false);
   }
-  window.close();
+}
+
+async function startPicker(mode) {
+  if (busy || !tab) return;
+  try {
+    await flushSettings();
+    const res = await send({ type: 'ps:start-picker', tabId: tab.id, mode });
+    if (res && res.ok) {
+      window.close();
+      return;
+    }
+    setStatus((res && res.error) || tr('status_pickerError'), 'error');
+  } catch (err) {
+    setStatus(String((err && err.message) || err), 'error');
+  }
 }
 
 function send(msg) {
@@ -188,11 +353,20 @@ function send(msg) {
 
 function setBusy(on, message) {
   busy = on;
-  $('btn-download').disabled = on;
-  $('btn-open').disabled = on;
-  $('tool-select').disabled = on;
-  $('tool-remove').disabled = on;
-  if (on) setStatus(message || 'Working…', 'busy');
+  for (const id of [
+    'act-page',
+    'act-page-preview',
+    'act-article',
+    'act-article-preview',
+    'act-select',
+    'act-remove',
+    'act-reset',
+    'md-page',
+    'md-article',
+  ]) {
+    $(id).disabled = on;
+  }
+  if (on) setStatus(message || tr('status_working'), 'busy');
 }
 
 function setStatus(text, kind = '') {
@@ -202,7 +376,10 @@ function setStatus(text, kind = '') {
   if (kind === 'busy') {
     const s = document.createElement('span');
     s.className = 'spinner';
+    s.setAttribute('aria-hidden', 'true');
     el.appendChild(s);
   }
-  el.appendChild(document.createTextNode(text || ''));
+  const span = document.createElement('span');
+  span.textContent = text || '';
+  el.appendChild(span);
 }

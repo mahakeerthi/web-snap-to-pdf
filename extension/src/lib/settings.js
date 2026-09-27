@@ -51,8 +51,10 @@ export const DEFAULT_SETTINGS = {
   saveAs: false,
 
   // Image export (used by the element picker preview)
-  imageFormat: 'png', // png | jpeg
   imageScale: 2, // device pixel ratio for captured images: 1 | 2 | 3
+
+  // Experimental features (hidden until the user explicitly opts in on the options page)
+  markdownEnabled: false, // Markdown export of the page, article or a selected element
 
   // Appearance
   theme: 'system', // system | light | dark

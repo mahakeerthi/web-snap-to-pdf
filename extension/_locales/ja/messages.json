@@ -1,0 +1,826 @@
+{
+  "extName": {
+    "message": "PageSnap PDF",
+    "description": "Extension name (manifest, popup header)"
+  },
+  "extDescription": {
+    "message": "ウェブページをワンクリックで PDF に保存。スタイルとリンクを保持し、ページ分割または 1 ページで出力。Chrome の PDF エンジンで完全にローカル処理します。",
+    "description": "Extension description (manifest, Web Store)"
+  },
+  "actionTitle": {
+    "message": "PageSnap PDF - このページを PDF で保存",
+    "description": "Toolbar button tooltip"
+  },
+  "cmdSavePdf": {
+    "message": "現在のページを保存済みの設定で PDF にする",
+    "description": "Keyboard shortcut description"
+  },
+  "cmdSaveArticle": {
+    "message": "現在のページのメイン記事だけを PDF にする",
+    "description": "Keyboard shortcut description"
+  },
+  "popup_pageTitleLoading": {
+    "message": "ページを読み込み中…",
+    "description": "Popup subtitle while the active tab is queried"
+  },
+  "popup_settings": {
+    "message": "設定",
+    "description": "Gear button that opens the options page"
+  },
+  "popup_blocked": {
+    "message": "このページは変換できません。Chrome はブラウザの内部ページ、ウェブストア、他の拡張機能のページでは拡張機能の動作をブロックします。",
+    "description": "Notice shown on pages the extension cannot access"
+  },
+  "popup_actions": {
+    "message": "エクスポート",
+    "description": "Accessible label of the group of export action cards"
+  },
+  "theme_toggle": {
+    "message": "テーマ: $1",
+    "description": "Theme toggle button label; $1 is theme_system, theme_light or theme_dark"
+  },
+  "theme_system": {
+    "message": "システム",
+    "description": "Theme follows the operating system"
+  },
+  "theme_light": {
+    "message": "ライト",
+    "description": "Light theme"
+  },
+  "theme_dark": {
+    "message": "ダーク",
+    "description": "Dark theme"
+  },
+  "action_fullPage": {
+    "message": "ページ全体",
+    "description": "Action card title: save the whole page"
+  },
+  "action_fullPageDesc": {
+    "message": "ページの上から下まですべて",
+    "description": "Action card one-line description"
+  },
+  "action_article": {
+    "message": "記事のみ",
+    "description": "Action card title: save the detected main article"
+  },
+  "action_articleDesc": {
+    "message": "メニューや広告を除いた本文",
+    "description": "Action card one-line description"
+  },
+  "action_select": {
+    "message": "要素を選択",
+    "description": "Action card title: pick one element on the page"
+  },
+  "action_selectDesc": {
+    "message": "ページの一部を選んで保存",
+    "description": "Action card one-line description"
+  },
+  "action_previewFullPage": {
+    "message": "ダウンロードせずにページ全体を新しいタブでプレビュー",
+    "description": "Tooltip of the eye button on the Full page card"
+  },
+  "action_previewArticle": {
+    "message": "ダウンロードせずに記事を新しいタブでプレビュー",
+    "description": "Tooltip of the eye button on the Article card"
+  },
+  "action_remove": {
+    "message": "要素を削除",
+    "description": "Secondary button: click parts of the page to delete them before saving"
+  },
+  "action_removeTitle": {
+    "message": "保存前に広告やバナーなどをクリックして削除",
+    "description": "Tooltip of the Remove elements button"
+  },
+  "action_reset": {
+    "message": "ページを復元 ($1)",
+    "description": "Link that restores removed elements; $1 is the number removed"
+  },
+  "action_resetTitle": {
+    "message": "削除した要素をすべて元に戻す",
+    "description": "Tooltip of the Reset page link"
+  },
+  "layout_label": {
+    "message": "レイアウト",
+    "description": "Caption of the paged / single page switch"
+  },
+  "layout_paged": {
+    "message": "ページ分割",
+    "description": "Layout option: split into pages"
+  },
+  "layout_single": {
+    "message": "1 ページ",
+    "description": "Layout option: one tall page"
+  },
+  "summary_label": {
+    "message": "現在のエクスポート設定",
+    "description": "Accessible label of the settings summary line"
+  },
+  "summary_portrait": {
+    "message": "縦",
+    "description": "Summary part"
+  },
+  "summary_landscape": {
+    "message": "横",
+    "description": "Summary part"
+  },
+  "summary_margins": {
+    "message": "余白 $1 mm",
+    "description": "Summary part; $1 is a number"
+  },
+  "summary_customMargins": {
+    "message": "余白 $1 mm (上/右/下/左)",
+    "description": "Summary part for unequal custom margins; $1 is like 10/12/10/12"
+  },
+  "summary_noMargins": {
+    "message": "余白なし",
+    "description": "Summary part"
+  },
+  "summary_width": {
+    "message": "幅 $1 px",
+    "description": "Summary part: page rendered at a fixed CSS width; $1 is a number"
+  },
+  "summary_scale": {
+    "message": "倍率 $1%",
+    "description": "Summary part; $1 is a percentage"
+  },
+  "summary_backgroundsOn": {
+    "message": "背景あり",
+    "description": "Summary part"
+  },
+  "summary_backgroundsOff": {
+    "message": "背景なし",
+    "description": "Summary part"
+  },
+  "summary_screenStyles": {
+    "message": "画面用スタイル",
+    "description": "Summary part: screen CSS instead of print CSS"
+  },
+  "summary_headerFooter": {
+    "message": "ヘッダー/フッター",
+    "description": "Summary part"
+  },
+  "summary_pages": {
+    "message": "ページ $1",
+    "description": "Summary part; $1 is a page range like 1-3, 5"
+  },
+  "settings_toggle": {
+    "message": "エクスポート設定",
+    "description": "Disclosure button that shows all PDF options"
+  },
+  "group_paper": {
+    "message": "用紙",
+    "description": "Settings group caption"
+  },
+  "field_paperSize": {
+    "message": "サイズ",
+    "description": "Paper size select label"
+  },
+  "field_orientation": {
+    "message": "向き",
+    "description": "Orientation switch label"
+  },
+  "orientation_portrait": {
+    "message": "縦",
+    "description": "Orientation option"
+  },
+  "orientation_landscape": {
+    "message": "横",
+    "description": "Orientation option"
+  },
+  "group_margins": {
+    "message": "余白",
+    "description": "Settings group caption"
+  },
+  "margin_none": {
+    "message": "なし",
+    "description": "Margin preset"
+  },
+  "margin_minimal": {
+    "message": "最小 (5 mm)",
+    "description": "Margin preset"
+  },
+  "margin_default": {
+    "message": "標準 (10 mm)",
+    "description": "Margin preset"
+  },
+  "margin_wide": {
+    "message": "広い (20 mm)",
+    "description": "Margin preset"
+  },
+  "margin_custom": {
+    "message": "カスタム…",
+    "description": "Margin preset: enter each side"
+  },
+  "margin_customLabel": {
+    "message": "カスタム余白 (ミリメートル)",
+    "description": "Accessible label of the four margin inputs"
+  },
+  "margin_top": {
+    "message": "上",
+    "description": "Margin side"
+  },
+  "margin_right": {
+    "message": "右",
+    "description": "Margin side"
+  },
+  "margin_bottom": {
+    "message": "下",
+    "description": "Margin side"
+  },
+  "margin_left": {
+    "message": "左",
+    "description": "Margin side"
+  },
+  "margin_unit": {
+    "message": "単位はすべてミリメートル",
+    "description": "Hint under the custom margin inputs"
+  },
+  "group_fit": {
+    "message": "サイズ調整",
+    "description": "Settings group caption: how the page is scaled onto paper"
+  },
+  "field_layoutWidth": {
+    "message": "レイアウト幅",
+    "description": "Select: CSS width the page is laid out at"
+  },
+  "field_scale": {
+    "message": "倍率",
+    "description": "Scale slider label"
+  },
+  "group_content": {
+    "message": "コンテンツ",
+    "description": "Settings group caption"
+  },
+  "content_backgrounds": {
+    "message": "背景の色と画像を印刷する",
+    "description": "Checkbox"
+  },
+  "content_screenStyles": {
+    "message": "印刷用ではなく画面用のスタイルを使う",
+    "description": "Checkbox"
+  },
+  "content_hideFixed": {
+    "message": "固定表示のバーを隠す",
+    "description": "Checkbox"
+  },
+  "content_loadLazy": {
+    "message": "ページをスクロールして遅延読み込みの画像を読み込む",
+    "description": "Checkbox"
+  },
+  "content_outline": {
+    "message": "見出しから PDF のしおりを作成する",
+    "description": "Checkbox"
+  },
+  "group_headerFooter": {
+    "message": "ヘッダーとフッター",
+    "description": "Settings group caption"
+  },
+  "hf_enable": {
+    "message": "ヘッダーとフッターを追加する",
+    "description": "Checkbox"
+  },
+  "hf_contents": {
+    "message": "ヘッダーとフッターの内容",
+    "description": "Accessible label of the chips group"
+  },
+  "hf_title": {
+    "message": "タイトル",
+    "description": "Header/footer chip"
+  },
+  "hf_date": {
+    "message": "日付",
+    "description": "Header/footer chip"
+  },
+  "hf_url": {
+    "message": "URL",
+    "description": "Header/footer chip"
+  },
+  "hf_pageNumbers": {
+    "message": "ページ番号",
+    "description": "Header/footer chip"
+  },
+  "group_pages": {
+    "message": "対象ページ",
+    "description": "Settings group caption: page range input"
+  },
+  "pages_placeholder": {
+    "message": "すべてのページ (例: 1-3, 5)",
+    "description": "Placeholder of the page range input"
+  },
+  "footer_help": {
+    "message": "ヘルプ",
+    "description": "Footer button that opens the help panel"
+  },
+  "footer_shortcuts": {
+    "message": "ショートカット",
+    "description": "Footer link to chrome://extensions/shortcuts"
+  },
+  "footer_shortcutsTitle": {
+    "message": "キーボード ショートカットを変更",
+    "description": "Tooltip of the Shortcuts link"
+  },
+  "footer_language": {
+    "message": "言語",
+    "description": "Language select label"
+  },
+  "footer_version": {
+    "message": "v$1",
+    "description": "Version label; $1 is the version number"
+  },
+  "lang_auto": {
+    "message": "自動 (ブラウザの言語)",
+    "description": "Language option: follow the browser"
+  },
+  "lang_autoShort": {
+    "message": "自動",
+    "description": "Short form of lang_auto for the compact popup footer"
+  },
+  "help_title": {
+    "message": "使い方",
+    "description": "Help panel title"
+  },
+  "help_fullPage": {
+    "message": "「ページ全体」はページ内のすべてを、リンクが機能する PDF として保存します。",
+    "description": "Help panel text"
+  },
+  "help_article": {
+    "message": "「記事のみ」は本文と画像だけを残し、メニュー、サイドバー、広告を取り除きます。",
+    "description": "Help panel text"
+  },
+  "help_select": {
+    "message": "「要素を選択」ではページの一部をクリックして、その部分だけをエクスポートできます。",
+    "description": "Help panel text"
+  },
+  "help_remove": {
+    "message": "「要素を削除」では保存前に不要な部分をクリックして削除できます。「ページを復元」で元に戻せます。",
+    "description": "Help panel text"
+  },
+  "help_preview": {
+    "message": "目のボタンを押すと、ダウンロードせずにプレビュー タブが開きます。",
+    "description": "Help panel text"
+  },
+  "help_settings": {
+    "message": "用紙や余白などのオプションは「エクスポート設定」にあります。その上の行には、実際に使われる設定が常に表示されます。",
+    "description": "Help panel text"
+  },
+  "help_privacy": {
+    "message": "処理はすべてお使いのデバイス上で行われ、何もアップロードされません。",
+    "description": "Help panel text"
+  },
+  "help_close": {
+    "message": "閉じる",
+    "description": "Closes the help panel"
+  },
+  "status_working": {
+    "message": "処理中…",
+    "description": "Status line"
+  },
+  "status_preparing": {
+    "message": "ページを準備中…",
+    "description": "Status line"
+  },
+  "status_generating": {
+    "message": "PDF を生成中…",
+    "description": "Status line"
+  },
+  "status_saved": {
+    "message": "$1 を保存しました",
+    "description": "Status line; $1 is the file name"
+  },
+  "status_previewOpened": {
+    "message": "プレビューを新しいタブで開きました。",
+    "description": "Status line"
+  },
+  "status_error": {
+    "message": "エラーが発生しました。",
+    "description": "Status line fallback error"
+  },
+  "status_pickerError": {
+    "message": "選択ツールを起動できませんでした。",
+    "description": "Status line error"
+  },
+  "paper_A0": {
+    "message": "A0 (841 × 1189 mm)",
+    "description": "Paper size"
+  },
+  "paper_A1": {
+    "message": "A1 (594 × 841 mm)",
+    "description": "Paper size"
+  },
+  "paper_A2": {
+    "message": "A2 (420 × 594 mm)",
+    "description": "Paper size"
+  },
+  "paper_A3": {
+    "message": "A3 (297 × 420 mm)",
+    "description": "Paper size"
+  },
+  "paper_A4": {
+    "message": "A4 (210 × 297 mm)",
+    "description": "Paper size"
+  },
+  "paper_A5": {
+    "message": "A5 (148 × 210 mm)",
+    "description": "Paper size"
+  },
+  "paper_A6": {
+    "message": "A6 (105 × 148 mm)",
+    "description": "Paper size"
+  },
+  "paper_A7": {
+    "message": "A7 (74 × 105 mm)",
+    "description": "Paper size"
+  },
+  "paper_A8": {
+    "message": "A8 (52 × 74 mm)",
+    "description": "Paper size"
+  },
+  "paper_A9": {
+    "message": "A9 (37 × 52 mm)",
+    "description": "Paper size"
+  },
+  "paper_B0": {
+    "message": "B0 (1000 × 1414 mm)",
+    "description": "Paper size"
+  },
+  "paper_B1": {
+    "message": "B1 (707 × 1000 mm)",
+    "description": "Paper size"
+  },
+  "paper_B2": {
+    "message": "B2 (500 × 707 mm)",
+    "description": "Paper size"
+  },
+  "paper_B3": {
+    "message": "B3 (353 × 500 mm)",
+    "description": "Paper size"
+  },
+  "paper_B4": {
+    "message": "B4 (250 × 353 mm)",
+    "description": "Paper size"
+  },
+  "paper_B5": {
+    "message": "B5 (176 × 250 mm)",
+    "description": "Paper size"
+  },
+  "paper_Letter": {
+    "message": "Letter (8.5 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Legal": {
+    "message": "Legal (8.5 × 14 in)",
+    "description": "Paper size"
+  },
+  "paper_Tabloid": {
+    "message": "Tabloid (11 × 17 in)",
+    "description": "Paper size"
+  },
+  "paper_Ledger": {
+    "message": "Ledger (17 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Folio": {
+    "message": "Folio (8.5 × 13 in)",
+    "description": "Paper size"
+  },
+  "paper_Executive": {
+    "message": "Executive (7.25 × 10.5 in)",
+    "description": "Paper size"
+  },
+  "layoutWidth_auto": {
+    "message": "用紙の幅に合わせる",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1440": {
+    "message": "ワイド デスクトップ (1440 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1280": {
+    "message": "デスクトップ (1280 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1024": {
+    "message": "ノート PC (1024 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_768": {
+    "message": "タブレット (768 px)",
+    "description": "Layout width option"
+  },
+  "layoutWidth_375": {
+    "message": "モバイル (375 px)",
+    "description": "Layout width option"
+  },
+  "options_pageTitle": {
+    "message": "PageSnap PDF の設定",
+    "description": "Options page document title and heading"
+  },
+  "options_intro": {
+    "message": "用紙、余白、レイアウトはツールバーのポップアップの「エクスポート設定」で変更します。以下のオプションはすべての場面に適用されます。",
+    "description": "Options page intro"
+  },
+  "options_appearance": {
+    "message": "外観",
+    "description": "Options section heading"
+  },
+  "options_theme": {
+    "message": "テーマ",
+    "description": "Theme select label"
+  },
+  "options_language": {
+    "message": "言語",
+    "description": "Language select label"
+  },
+  "options_saving": {
+    "message": "保存",
+    "description": "Options section heading"
+  },
+  "options_filename": {
+    "message": "ファイル名のパターン",
+    "description": "Label"
+  },
+  "options_placeholders": {
+    "message": "プレースホルダー:",
+    "description": "Followed by {title} {domain} {date} {time}"
+  },
+  "options_filenamePreview": {
+    "message": "プレビュー:",
+    "description": "Followed by an example file name"
+  },
+  "options_saveAs": {
+    "message": "PDF ごとに保存先を確認する",
+    "description": "Checkbox"
+  },
+  "options_defaultAction": {
+    "message": "既定の動作",
+    "description": "Label"
+  },
+  "options_actionDownload": {
+    "message": "PDF をダウンロード",
+    "description": "Default action option"
+  },
+  "options_actionOpen": {
+    "message": "プレビュー タブを開く",
+    "description": "Default action option"
+  },
+  "options_defaultActionHint": {
+    "message": "キーボード ショートカット、右クリック メニュー、ページ上のツールで使用されます。",
+    "description": "Hint"
+  },
+  "options_pageHandling": {
+    "message": "ページの処理",
+    "description": "Options section heading"
+  },
+  "options_expandScroll": {
+    "message": "内部のスクロール領域を展開して、途中で切れないようにする (チャット アプリ、ドキュメント サイトなど)",
+    "description": "Checkbox"
+  },
+  "options_preferCssPageSize": {
+    "message": "ページの CSS で指定された @page サイズを、選択した用紙サイズより優先する",
+    "description": "Checkbox"
+  },
+  "options_shortcuts": {
+    "message": "キーボード ショートカット",
+    "description": "Options section heading"
+  },
+  "options_shortcutPage": {
+    "message": "ページを保存",
+    "description": "Follows the key combination Alt+Shift+P"
+  },
+  "options_shortcutArticle": {
+    "message": "記事のみを保存",
+    "description": "Follows the key combination Alt+Shift+A"
+  },
+  "options_changeShortcuts": {
+    "message": "ショートカットを変更",
+    "description": "Button"
+  },
+  "options_about": {
+    "message": "このアプリについて",
+    "description": "Options section heading"
+  },
+  "options_aboutText": {
+    "message": "PageSnap PDF は Chrome 内蔵の印刷エンジンでページを出力し、処理はすべてお使いのデバイス上で行います。どこにも何もアップロードされません。",
+    "description": "About text"
+  },
+  "options_debuggerNote": {
+    "message": "PDF の生成中、Chrome には「PageSnap PDF がこのブラウザのデバッグを開始しました」というバーが表示されます。これは Chrome が拡張機能に PDF エンジンを提供する仕組みによるもので、PDF が完成するとすぐに消えます。",
+    "description": "About text"
+  },
+  "options_reset": {
+    "message": "すべての設定をリセット",
+    "description": "Button"
+  },
+  "options_saved": {
+    "message": "保存しました",
+    "description": "Confirmation after a change"
+  },
+  "options_resetDone": {
+    "message": "設定を初期状態に戻しました",
+    "description": "Confirmation after reset"
+  },
+  "action_markdown": {
+    "message": "Markdown",
+    "description": "Label of the experimental Markdown export buttons in the popup"
+  },
+  "action_markdownLabel": {
+    "message": "Markdown でエクスポート",
+    "description": "Accessible label of the Markdown export group"
+  },
+  "action_markdownPage": {
+    "message": "ページ全体",
+    "description": "Markdown export of the whole page"
+  },
+  "action_markdownArticle": {
+    "message": "記事",
+    "description": "Markdown export of the main article"
+  },
+  "action_markdownPageTitle": {
+    "message": "ページ全体を Markdown でエクスポート (試験運用)",
+    "description": "Tooltip"
+  },
+  "action_markdownArticleTitle": {
+    "message": "記事を Markdown でエクスポート (試験運用)",
+    "description": "Tooltip"
+  },
+  "status_exportingMarkdown": {
+    "message": "Markdown に変換中…",
+    "description": "Status line"
+  },
+  "error_markdownDisabled": {
+    "message": "Markdown エクスポートは試験運用中の機能です。拡張機能の設定で有効にしてください。",
+    "description": "Error when Markdown export is requested while the feature is off"
+  },
+  "experimental_title": {
+    "message": "試験運用",
+    "description": "Options section heading"
+  },
+  "experimental_intro": {
+    "message": "テスト中の機能です。既定ではオフになっています。",
+    "description": "Options section intro"
+  },
+  "experimental_markdown": {
+    "message": "Markdown エクスポートを有効にする (試験運用)",
+    "description": "Checkbox"
+  },
+  "experimental_markdownHint": {
+    "message": "ポップアップと要素のプレビューに Markdown のオプションを追加します。",
+    "description": "Hint under the checkbox"
+  },
+  "experimental_confirmTitle": {
+    "message": "Markdown エクスポートを有効にしますか？",
+    "description": "Confirmation panel title"
+  },
+  "experimental_confirmText": {
+    "message": "Markdown への変換は完全ではありません。表、埋め込みメディア、複雑なレイアウトはうまく変換されない場合があるため、結果を確認してからご利用ください。",
+    "description": "Confirmation panel text"
+  },
+  "experimental_confirmEnable": {
+    "message": "有効にする",
+    "description": "Confirmation button"
+  },
+  "experimental_confirmCancel": {
+    "message": "キャンセル",
+    "description": "Cancel button"
+  },
+  "picker_titleSelect": {
+    "message": "要素を選択",
+    "description": "In-page picker toolbar title (select mode)"
+  },
+  "picker_hintSelect": {
+    "message": "ポインタを合わせて強調表示、クリックで選択。Esc でキャンセル。",
+    "description": "In-page picker hint (select mode)"
+  },
+  "picker_titleRemove": {
+    "message": "要素を削除",
+    "description": "In-page picker toolbar title (remove mode)"
+  },
+  "picker_hintRemove": {
+    "message": "クリックした要素を削除します。終わったら「完了」を押します。",
+    "description": "In-page picker hint (remove mode)"
+  },
+  "picker_removedCount": {
+    "message": "$1 件削除",
+    "description": "In-page picker counter; $1 is a number"
+  },
+  "picker_undo": {
+    "message": "元に戻す",
+    "description": "In-page picker button"
+  },
+  "picker_savePdf": {
+    "message": "PDF を保存",
+    "description": "In-page picker button"
+  },
+  "picker_done": {
+    "message": "完了",
+    "description": "In-page picker button"
+  },
+  "picker_cancel": {
+    "message": "キャンセル",
+    "description": "In-page picker button"
+  },
+  "picker_errorNoElement": {
+    "message": "何も選択されていません。先にページ上の要素をクリックしてください。",
+    "description": "In-page picker error"
+  },
+  "picker_errorStart": {
+    "message": "このページでは選択ツールを起動できませんでした。",
+    "description": "In-page picker error"
+  },
+  "preview_title": {
+    "message": "この要素をエクスポート",
+    "description": "In-page preview modal title"
+  },
+  "preview_format": {
+    "message": "形式",
+    "description": "Format segmented control label"
+  },
+  "preview_formatPdf": {
+    "message": "PDF",
+    "description": "Format option"
+  },
+  "preview_formatPng": {
+    "message": "PNG",
+    "description": "Format option"
+  },
+  "preview_formatJpeg": {
+    "message": "JPEG",
+    "description": "Format option"
+  },
+  "preview_formatMarkdown": {
+    "message": "Markdown",
+    "description": "Format option (experimental, only when enabled)"
+  },
+  "preview_download": {
+    "message": "ダウンロード",
+    "description": "Preview modal button"
+  },
+  "preview_copyImage": {
+    "message": "画像をコピー",
+    "description": "Preview modal button (PNG only)"
+  },
+  "preview_copied": {
+    "message": "画像をクリップボードにコピーしました",
+    "description": "Preview modal confirmation"
+  },
+  "preview_reselect": {
+    "message": "選び直す",
+    "description": "Preview modal button: go back to the picker"
+  },
+  "preview_close": {
+    "message": "閉じる",
+    "description": "Preview modal button"
+  },
+  "preview_loading": {
+    "message": "プレビューを作成中…",
+    "description": "Preview modal status"
+  },
+  "preview_saving": {
+    "message": "保存中…",
+    "description": "Preview modal status"
+  },
+  "preview_saved": {
+    "message": "$1 を保存しました",
+    "description": "Preview modal status; $1 is the file name"
+  },
+  "preview_imageAlt": {
+    "message": "選択した要素のプレビュー",
+    "description": "Alt text of the preview image"
+  },
+  "preview_errorCapture": {
+    "message": "この要素をキャプチャできませんでした。",
+    "description": "Preview modal error"
+  },
+  "preview_errorTooLarge": {
+    "message": "この要素は大きすぎて画像にできません。PDF をお試しください。",
+    "description": "Preview modal error"
+  },
+  "preview_errorCopy": {
+    "message": "画像をコピーできませんでした。代わりにダウンロードしてください。",
+    "description": "Preview modal error"
+  },
+  "preview_errorDownload": {
+    "message": "ダウンロードに失敗しました: $1",
+    "description": "Preview modal error; $1 is the reason"
+  },
+  "preview_errorGeneric": {
+    "message": "エラーが発生しました。もう一度試すか、要素を選び直してください。",
+    "description": "Preview modal fallback error"
+  },
+  "preview_caption": {
+    "message": "$1 · $2×$3 px",
+    "description": "Element preview: caption \"<element> · W×H px\""
+  },
+  "preview_warningScaled": {
+    "message": "この要素は非常に大きいため、Chrome の上限 16,384 px に収まるよう画像を $1× に縮小しています。",
+    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+  },
+  "options_imageScale": {
+    "message": "画像の解像度（PNG / JPEG）",
+    "description": "Options: label of the image resolution select"
+  },
+  "options_imageScaleHint": {
+    "message": "選択した要素を画像として書き出すときの CSS ピクセルあたりのピクセル数。",
+    "description": "Options: hint under the image resolution select"
+  }
+}

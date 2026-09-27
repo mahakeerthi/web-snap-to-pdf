@@ -1,0 +1,826 @@
+{
+  "extName": {
+    "message": "PageSnap PDF",
+    "description": "Extension name (manifest, popup header)"
+  },
+  "extDescription": {
+    "message": "一键将任意网页保存为 PDF。保留样式和可点击链接，支持分页或单页布局，使用 Chrome 自带的 PDF 引擎完全在本地运行。",
+    "description": "Extension description (manifest, Web Store)"
+  },
+  "actionTitle": {
+    "message": "PageSnap PDF - 将此页面保存为 PDF",
+    "description": "Toolbar button tooltip"
+  },
+  "cmdSavePdf": {
+    "message": "按已保存的设置将当前页面保存为 PDF",
+    "description": "Keyboard shortcut description"
+  },
+  "cmdSaveArticle": {
+    "message": "仅将当前页面的正文保存为 PDF",
+    "description": "Keyboard shortcut description"
+  },
+  "popup_pageTitleLoading": {
+    "message": "正在读取页面…",
+    "description": "Popup subtitle while the active tab is queried"
+  },
+  "popup_settings": {
+    "message": "设置",
+    "description": "Gear button that opens the options page"
+  },
+  "popup_blocked": {
+    "message": "无法转换此页面。Chrome 禁止扩展程序在浏览器内部页面、应用商店和其他扩展程序中运行。",
+    "description": "Notice shown on pages the extension cannot access"
+  },
+  "popup_actions": {
+    "message": "导出",
+    "description": "Accessible label of the group of export action cards"
+  },
+  "theme_toggle": {
+    "message": "主题：$1",
+    "description": "Theme toggle button label; $1 is theme_system, theme_light or theme_dark"
+  },
+  "theme_system": {
+    "message": "跟随系统",
+    "description": "Theme follows the operating system"
+  },
+  "theme_light": {
+    "message": "浅色",
+    "description": "Light theme"
+  },
+  "theme_dark": {
+    "message": "深色",
+    "description": "Dark theme"
+  },
+  "action_fullPage": {
+    "message": "整个页面",
+    "description": "Action card title: save the whole page"
+  },
+  "action_fullPageDesc": {
+    "message": "从上到下的完整页面",
+    "description": "Action card one-line description"
+  },
+  "action_article": {
+    "message": "仅正文",
+    "description": "Action card title: save the detected main article"
+  },
+  "action_articleDesc": {
+    "message": "只保留正文，去掉菜单和广告",
+    "description": "Action card one-line description"
+  },
+  "action_select": {
+    "message": "选择元素",
+    "description": "Action card title: pick one element on the page"
+  },
+  "action_selectDesc": {
+    "message": "选取页面的一部分进行保存",
+    "description": "Action card one-line description"
+  },
+  "action_previewFullPage": {
+    "message": "在新标签页中预览整个页面，而不下载",
+    "description": "Tooltip of the eye button on the Full page card"
+  },
+  "action_previewArticle": {
+    "message": "在新标签页中预览正文，而不下载",
+    "description": "Tooltip of the eye button on the Article card"
+  },
+  "action_remove": {
+    "message": "移除元素",
+    "description": "Secondary button: click parts of the page to delete them before saving"
+  },
+  "action_removeTitle": {
+    "message": "点击广告、横幅或其他内容，在保存前将其移除",
+    "description": "Tooltip of the Remove elements button"
+  },
+  "action_reset": {
+    "message": "还原页面（$1）",
+    "description": "Link that restores removed elements; $1 is the number removed"
+  },
+  "action_resetTitle": {
+    "message": "恢复所有已移除的元素",
+    "description": "Tooltip of the Reset page link"
+  },
+  "layout_label": {
+    "message": "布局",
+    "description": "Caption of the paged / single page switch"
+  },
+  "layout_paged": {
+    "message": "分页",
+    "description": "Layout option: split into pages"
+  },
+  "layout_single": {
+    "message": "单页",
+    "description": "Layout option: one tall page"
+  },
+  "summary_label": {
+    "message": "当前导出设置",
+    "description": "Accessible label of the settings summary line"
+  },
+  "summary_portrait": {
+    "message": "纵向",
+    "description": "Summary part"
+  },
+  "summary_landscape": {
+    "message": "横向",
+    "description": "Summary part"
+  },
+  "summary_margins": {
+    "message": "边距 $1 mm",
+    "description": "Summary part; $1 is a number"
+  },
+  "summary_customMargins": {
+    "message": "边距 $1 mm（上/右/下/左）",
+    "description": "Summary part for unequal custom margins; $1 is like 10/12/10/12"
+  },
+  "summary_noMargins": {
+    "message": "无边距",
+    "description": "Summary part"
+  },
+  "summary_width": {
+    "message": "布局宽度 $1 px",
+    "description": "Summary part: page rendered at a fixed CSS width; $1 is a number"
+  },
+  "summary_scale": {
+    "message": "缩放 $1%",
+    "description": "Summary part; $1 is a percentage"
+  },
+  "summary_backgroundsOn": {
+    "message": "打印背景",
+    "description": "Summary part"
+  },
+  "summary_backgroundsOff": {
+    "message": "不打印背景",
+    "description": "Summary part"
+  },
+  "summary_screenStyles": {
+    "message": "屏幕样式",
+    "description": "Summary part: screen CSS instead of print CSS"
+  },
+  "summary_headerFooter": {
+    "message": "页眉和页脚",
+    "description": "Summary part"
+  },
+  "summary_pages": {
+    "message": "页码 $1",
+    "description": "Summary part; $1 is a page range like 1-3, 5"
+  },
+  "settings_toggle": {
+    "message": "导出设置",
+    "description": "Disclosure button that shows all PDF options"
+  },
+  "group_paper": {
+    "message": "纸张",
+    "description": "Settings group caption"
+  },
+  "field_paperSize": {
+    "message": "尺寸",
+    "description": "Paper size select label"
+  },
+  "field_orientation": {
+    "message": "方向",
+    "description": "Orientation switch label"
+  },
+  "orientation_portrait": {
+    "message": "纵向",
+    "description": "Orientation option"
+  },
+  "orientation_landscape": {
+    "message": "横向",
+    "description": "Orientation option"
+  },
+  "group_margins": {
+    "message": "边距",
+    "description": "Settings group caption"
+  },
+  "margin_none": {
+    "message": "无",
+    "description": "Margin preset"
+  },
+  "margin_minimal": {
+    "message": "最小（5 mm）",
+    "description": "Margin preset"
+  },
+  "margin_default": {
+    "message": "默认（10 mm）",
+    "description": "Margin preset"
+  },
+  "margin_wide": {
+    "message": "宽（20 mm）",
+    "description": "Margin preset"
+  },
+  "margin_custom": {
+    "message": "自定义…",
+    "description": "Margin preset: enter each side"
+  },
+  "margin_customLabel": {
+    "message": "自定义边距（毫米）",
+    "description": "Accessible label of the four margin inputs"
+  },
+  "margin_top": {
+    "message": "上",
+    "description": "Margin side"
+  },
+  "margin_right": {
+    "message": "右",
+    "description": "Margin side"
+  },
+  "margin_bottom": {
+    "message": "下",
+    "description": "Margin side"
+  },
+  "margin_left": {
+    "message": "左",
+    "description": "Margin side"
+  },
+  "margin_unit": {
+    "message": "所有数值均以毫米为单位",
+    "description": "Hint under the custom margin inputs"
+  },
+  "group_fit": {
+    "message": "适配",
+    "description": "Settings group caption: how the page is scaled onto paper"
+  },
+  "field_layoutWidth": {
+    "message": "布局宽度",
+    "description": "Select: CSS width the page is laid out at"
+  },
+  "field_scale": {
+    "message": "缩放",
+    "description": "Scale slider label"
+  },
+  "group_content": {
+    "message": "内容",
+    "description": "Settings group caption"
+  },
+  "content_backgrounds": {
+    "message": "打印背景颜色和图片",
+    "description": "Checkbox"
+  },
+  "content_screenStyles": {
+    "message": "使用屏幕样式而非打印样式",
+    "description": "Checkbox"
+  },
+  "content_hideFixed": {
+    "message": "隐藏吸顶栏和固定栏",
+    "description": "Checkbox"
+  },
+  "content_loadLazy": {
+    "message": "滚动页面以加载延迟加载的图片",
+    "description": "Checkbox"
+  },
+  "content_outline": {
+    "message": "根据标题添加 PDF 书签",
+    "description": "Checkbox"
+  },
+  "group_headerFooter": {
+    "message": "页眉和页脚",
+    "description": "Settings group caption"
+  },
+  "hf_enable": {
+    "message": "添加页眉和页脚",
+    "description": "Checkbox"
+  },
+  "hf_contents": {
+    "message": "页眉和页脚内容",
+    "description": "Accessible label of the chips group"
+  },
+  "hf_title": {
+    "message": "标题",
+    "description": "Header/footer chip"
+  },
+  "hf_date": {
+    "message": "日期",
+    "description": "Header/footer chip"
+  },
+  "hf_url": {
+    "message": "URL",
+    "description": "Header/footer chip"
+  },
+  "hf_pageNumbers": {
+    "message": "页码",
+    "description": "Header/footer chip"
+  },
+  "group_pages": {
+    "message": "包含的页面",
+    "description": "Settings group caption: page range input"
+  },
+  "pages_placeholder": {
+    "message": "全部页面（例如 1-3, 5）",
+    "description": "Placeholder of the page range input"
+  },
+  "footer_help": {
+    "message": "帮助",
+    "description": "Footer button that opens the help panel"
+  },
+  "footer_shortcuts": {
+    "message": "快捷键",
+    "description": "Footer link to chrome://extensions/shortcuts"
+  },
+  "footer_shortcutsTitle": {
+    "message": "更改键盘快捷键",
+    "description": "Tooltip of the Shortcuts link"
+  },
+  "footer_language": {
+    "message": "语言",
+    "description": "Language select label"
+  },
+  "footer_version": {
+    "message": "v$1",
+    "description": "Version label; $1 is the version number"
+  },
+  "lang_auto": {
+    "message": "自动（浏览器语言）",
+    "description": "Language option: follow the browser"
+  },
+  "lang_autoShort": {
+    "message": "自动",
+    "description": "Short form of lang_auto for the compact popup footer"
+  },
+  "help_title": {
+    "message": "使用说明",
+    "description": "Help panel title"
+  },
+  "help_fullPage": {
+    "message": "“整个页面”会将页面上的全部内容保存为 PDF，链接可正常点击。",
+    "description": "Help panel text"
+  },
+  "help_article": {
+    "message": "“仅正文”只保留主要文字和图片，去掉菜单、侧边栏和广告。",
+    "description": "Help panel text"
+  },
+  "help_select": {
+    "message": "“选择元素”可让你点击页面的某一部分，仅导出该部分。",
+    "description": "Help panel text"
+  },
+  "help_remove": {
+    "message": "“移除元素”可让你在保存前点击移除不需要的内容。“还原页面”可将其恢复。",
+    "description": "Help panel text"
+  },
+  "help_preview": {
+    "message": "眼睛按钮会打开预览标签页，而不是直接下载。",
+    "description": "Help panel text"
+  },
+  "help_settings": {
+    "message": "纸张、边距等选项位于“导出设置”中。其上方的一行始终显示将要使用的设置。",
+    "description": "Help panel text"
+  },
+  "help_privacy": {
+    "message": "所有处理都在你的设备上完成，不会上传任何内容。",
+    "description": "Help panel text"
+  },
+  "help_close": {
+    "message": "关闭",
+    "description": "Closes the help panel"
+  },
+  "status_working": {
+    "message": "正在处理…",
+    "description": "Status line"
+  },
+  "status_preparing": {
+    "message": "正在准备页面…",
+    "description": "Status line"
+  },
+  "status_generating": {
+    "message": "正在生成 PDF…",
+    "description": "Status line"
+  },
+  "status_saved": {
+    "message": "已保存 $1",
+    "description": "Status line; $1 is the file name"
+  },
+  "status_previewOpened": {
+    "message": "已在新标签页中打开预览。",
+    "description": "Status line"
+  },
+  "status_error": {
+    "message": "出了点问题。",
+    "description": "Status line fallback error"
+  },
+  "status_pickerError": {
+    "message": "无法启动元素选择器。",
+    "description": "Status line error"
+  },
+  "paper_A0": {
+    "message": "A0 (841 × 1189 mm)",
+    "description": "Paper size"
+  },
+  "paper_A1": {
+    "message": "A1 (594 × 841 mm)",
+    "description": "Paper size"
+  },
+  "paper_A2": {
+    "message": "A2 (420 × 594 mm)",
+    "description": "Paper size"
+  },
+  "paper_A3": {
+    "message": "A3 (297 × 420 mm)",
+    "description": "Paper size"
+  },
+  "paper_A4": {
+    "message": "A4 (210 × 297 mm)",
+    "description": "Paper size"
+  },
+  "paper_A5": {
+    "message": "A5 (148 × 210 mm)",
+    "description": "Paper size"
+  },
+  "paper_A6": {
+    "message": "A6 (105 × 148 mm)",
+    "description": "Paper size"
+  },
+  "paper_A7": {
+    "message": "A7 (74 × 105 mm)",
+    "description": "Paper size"
+  },
+  "paper_A8": {
+    "message": "A8 (52 × 74 mm)",
+    "description": "Paper size"
+  },
+  "paper_A9": {
+    "message": "A9 (37 × 52 mm)",
+    "description": "Paper size"
+  },
+  "paper_B0": {
+    "message": "B0 (1000 × 1414 mm)",
+    "description": "Paper size"
+  },
+  "paper_B1": {
+    "message": "B1 (707 × 1000 mm)",
+    "description": "Paper size"
+  },
+  "paper_B2": {
+    "message": "B2 (500 × 707 mm)",
+    "description": "Paper size"
+  },
+  "paper_B3": {
+    "message": "B3 (353 × 500 mm)",
+    "description": "Paper size"
+  },
+  "paper_B4": {
+    "message": "B4 (250 × 353 mm)",
+    "description": "Paper size"
+  },
+  "paper_B5": {
+    "message": "B5 (176 × 250 mm)",
+    "description": "Paper size"
+  },
+  "paper_Letter": {
+    "message": "Letter (8.5 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Legal": {
+    "message": "Legal (8.5 × 14 in)",
+    "description": "Paper size"
+  },
+  "paper_Tabloid": {
+    "message": "Tabloid (11 × 17 in)",
+    "description": "Paper size"
+  },
+  "paper_Ledger": {
+    "message": "Ledger (17 × 11 in)",
+    "description": "Paper size"
+  },
+  "paper_Folio": {
+    "message": "Folio (8.5 × 13 in)",
+    "description": "Paper size"
+  },
+  "paper_Executive": {
+    "message": "Executive (7.25 × 10.5 in)",
+    "description": "Paper size"
+  },
+  "layoutWidth_auto": {
+    "message": "适应纸张宽度",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1440": {
+    "message": "宽屏桌面（1440 px）",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1280": {
+    "message": "桌面（1280 px）",
+    "description": "Layout width option"
+  },
+  "layoutWidth_1024": {
+    "message": "笔记本（1024 px）",
+    "description": "Layout width option"
+  },
+  "layoutWidth_768": {
+    "message": "平板（768 px）",
+    "description": "Layout width option"
+  },
+  "layoutWidth_375": {
+    "message": "手机（375 px）",
+    "description": "Layout width option"
+  },
+  "options_pageTitle": {
+    "message": "PageSnap PDF 设置",
+    "description": "Options page document title and heading"
+  },
+  "options_intro": {
+    "message": "纸张、边距和布局可在工具栏弹出窗口的“导出设置”中调整。以下选项全局生效。",
+    "description": "Options page intro"
+  },
+  "options_appearance": {
+    "message": "外观",
+    "description": "Options section heading"
+  },
+  "options_theme": {
+    "message": "主题",
+    "description": "Theme select label"
+  },
+  "options_language": {
+    "message": "语言",
+    "description": "Language select label"
+  },
+  "options_saving": {
+    "message": "保存",
+    "description": "Options section heading"
+  },
+  "options_filename": {
+    "message": "文件名格式",
+    "description": "Label"
+  },
+  "options_placeholders": {
+    "message": "占位符：",
+    "description": "Followed by {title} {domain} {date} {time}"
+  },
+  "options_filenamePreview": {
+    "message": "预览：",
+    "description": "Followed by an example file name"
+  },
+  "options_saveAs": {
+    "message": "每次保存 PDF 前询问保存位置",
+    "description": "Checkbox"
+  },
+  "options_defaultAction": {
+    "message": "默认操作",
+    "description": "Label"
+  },
+  "options_actionDownload": {
+    "message": "下载 PDF",
+    "description": "Default action option"
+  },
+  "options_actionOpen": {
+    "message": "打开预览标签页",
+    "description": "Default action option"
+  },
+  "options_defaultActionHint": {
+    "message": "用于键盘快捷键、右键菜单和页面内工具。",
+    "description": "Hint"
+  },
+  "options_pageHandling": {
+    "message": "页面处理",
+    "description": "Options section heading"
+  },
+  "options_expandScroll": {
+    "message": "展开页面内部的滚动区域，避免内容被截断（聊天应用、文档网站）",
+    "description": "Checkbox"
+  },
+  "options_preferCssPageSize": {
+    "message": "允许页面自身的 @page CSS 尺寸覆盖所选纸张尺寸",
+    "description": "Checkbox"
+  },
+  "options_shortcuts": {
+    "message": "键盘快捷键",
+    "description": "Options section heading"
+  },
+  "options_shortcutPage": {
+    "message": "保存页面",
+    "description": "Follows the key combination Alt+Shift+P"
+  },
+  "options_shortcutArticle": {
+    "message": "仅保存正文",
+    "description": "Follows the key combination Alt+Shift+A"
+  },
+  "options_changeShortcuts": {
+    "message": "更改快捷键",
+    "description": "Button"
+  },
+  "options_about": {
+    "message": "关于",
+    "description": "Options section heading"
+  },
+  "options_aboutText": {
+    "message": "PageSnap PDF 使用 Chrome 内置的打印引擎渲染页面，全程在你的设备上完成，不会上传任何内容。",
+    "description": "About text"
+  },
+  "options_debuggerNote": {
+    "message": "生成 PDF 期间，Chrome 会显示“PageSnap PDF 已开始调试此浏览器”提示栏。这是 Chrome 向扩展程序开放其 PDF 引擎的方式；PDF 生成完毕后提示栏会立即消失。",
+    "description": "About text"
+  },
+  "options_reset": {
+    "message": "重置所有设置",
+    "description": "Button"
+  },
+  "options_saved": {
+    "message": "已保存",
+    "description": "Confirmation after a change"
+  },
+  "options_resetDone": {
+    "message": "设置已恢复默认",
+    "description": "Confirmation after reset"
+  },
+  "action_markdown": {
+    "message": "Markdown",
+    "description": "Label of the experimental Markdown export buttons in the popup"
+  },
+  "action_markdownLabel": {
+    "message": "导出为 Markdown",
+    "description": "Accessible label of the Markdown export group"
+  },
+  "action_markdownPage": {
+    "message": "整个页面",
+    "description": "Markdown export of the whole page"
+  },
+  "action_markdownArticle": {
+    "message": "正文",
+    "description": "Markdown export of the main article"
+  },
+  "action_markdownPageTitle": {
+    "message": "将整个页面导出为 Markdown（实验性）",
+    "description": "Tooltip"
+  },
+  "action_markdownArticleTitle": {
+    "message": "将正文导出为 Markdown（实验性）",
+    "description": "Tooltip"
+  },
+  "status_exportingMarkdown": {
+    "message": "正在转换为 Markdown…",
+    "description": "Status line"
+  },
+  "error_markdownDisabled": {
+    "message": "Markdown 导出是实验性功能，请在扩展程序设置中启用。",
+    "description": "Error when Markdown export is requested while the feature is off"
+  },
+  "experimental_title": {
+    "message": "实验性功能",
+    "description": "Options section heading"
+  },
+  "experimental_intro": {
+    "message": "仍在测试中的功能，默认处于关闭状态。",
+    "description": "Options section intro"
+  },
+  "experimental_markdown": {
+    "message": "启用 Markdown 导出（实验性）",
+    "description": "Checkbox"
+  },
+  "experimental_markdownHint": {
+    "message": "在弹出窗口和元素预览中添加 Markdown 选项。",
+    "description": "Hint under the checkbox"
+  },
+  "experimental_confirmTitle": {
+    "message": "要启用 Markdown 导出吗？",
+    "description": "Confirmation panel title"
+  },
+  "experimental_confirmText": {
+    "message": "Markdown 转换仅尽力而为。表格、嵌入的媒体和复杂布局可能无法正确转换，使用前请检查结果。",
+    "description": "Confirmation panel text"
+  },
+  "experimental_confirmEnable": {
+    "message": "启用",
+    "description": "Confirmation button"
+  },
+  "experimental_confirmCancel": {
+    "message": "取消",
+    "description": "Cancel button"
+  },
+  "picker_titleSelect": {
+    "message": "选择一个元素",
+    "description": "In-page picker toolbar title (select mode)"
+  },
+  "picker_hintSelect": {
+    "message": "悬停以高亮，点击以选择。按 Esc 取消。",
+    "description": "In-page picker hint (select mode)"
+  },
+  "picker_titleRemove": {
+    "message": "移除元素",
+    "description": "In-page picker toolbar title (remove mode)"
+  },
+  "picker_hintRemove": {
+    "message": "点击任意内容即可移除。完成后点击“完成”。",
+    "description": "In-page picker hint (remove mode)"
+  },
+  "picker_removedCount": {
+    "message": "已移除 $1 个",
+    "description": "In-page picker counter; $1 is a number"
+  },
+  "picker_undo": {
+    "message": "撤消",
+    "description": "In-page picker button"
+  },
+  "picker_savePdf": {
+    "message": "保存 PDF",
+    "description": "In-page picker button"
+  },
+  "picker_done": {
+    "message": "完成",
+    "description": "In-page picker button"
+  },
+  "picker_cancel": {
+    "message": "取消",
+    "description": "In-page picker button"
+  },
+  "picker_errorNoElement": {
+    "message": "未选择任何内容。请先点击页面上的元素。",
+    "description": "In-page picker error"
+  },
+  "picker_errorStart": {
+    "message": "无法在此页面上启动元素选择器。",
+    "description": "In-page picker error"
+  },
+  "preview_title": {
+    "message": "导出此元素",
+    "description": "In-page preview modal title"
+  },
+  "preview_format": {
+    "message": "格式",
+    "description": "Format segmented control label"
+  },
+  "preview_formatPdf": {
+    "message": "PDF",
+    "description": "Format option"
+  },
+  "preview_formatPng": {
+    "message": "PNG",
+    "description": "Format option"
+  },
+  "preview_formatJpeg": {
+    "message": "JPEG",
+    "description": "Format option"
+  },
+  "preview_formatMarkdown": {
+    "message": "Markdown",
+    "description": "Format option (experimental, only when enabled)"
+  },
+  "preview_download": {
+    "message": "下载",
+    "description": "Preview modal button"
+  },
+  "preview_copyImage": {
+    "message": "复制图片",
+    "description": "Preview modal button (PNG only)"
+  },
+  "preview_copied": {
+    "message": "图片已复制到剪贴板",
+    "description": "Preview modal confirmation"
+  },
+  "preview_reselect": {
+    "message": "重新选择",
+    "description": "Preview modal button: go back to the picker"
+  },
+  "preview_close": {
+    "message": "关闭",
+    "description": "Preview modal button"
+  },
+  "preview_loading": {
+    "message": "正在渲染预览…",
+    "description": "Preview modal status"
+  },
+  "preview_saving": {
+    "message": "正在保存…",
+    "description": "Preview modal status"
+  },
+  "preview_saved": {
+    "message": "已保存 $1",
+    "description": "Preview modal status; $1 is the file name"
+  },
+  "preview_imageAlt": {
+    "message": "所选元素的预览",
+    "description": "Alt text of the preview image"
+  },
+  "preview_errorCapture": {
+    "message": "无法截取此元素。",
+    "description": "Preview modal error"
+  },
+  "preview_errorTooLarge": {
+    "message": "此元素太大，无法截取为图片。请改用 PDF。",
+    "description": "Preview modal error"
+  },
+  "preview_errorCopy": {
+    "message": "无法复制图片，请改为下载。",
+    "description": "Preview modal error"
+  },
+  "preview_errorDownload": {
+    "message": "下载失败：$1",
+    "description": "Preview modal error; $1 is the reason"
+  },
+  "preview_errorGeneric": {
+    "message": "出了点问题。请重试或重新选择元素。",
+    "description": "Preview modal fallback error"
+  },
+  "preview_caption": {
+    "message": "$1 · $2×$3 px",
+    "description": "Element preview: caption \"<element> · W×H px\""
+  },
+  "preview_warningScaled": {
+    "message": "此元素过大，图片已缩小至 $1×，以符合 Chrome 16,384 px 的上限。",
+    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+  },
+  "options_imageScale": {
+    "message": "图片分辨率（PNG / JPEG）",
+    "description": "Options: label of the image resolution select"
+  },
+  "options_imageScaleHint": {
+    "message": "将所选元素导出为图片时每个 CSS 像素对应的像素数。",
+    "description": "Options: hint under the image resolution select"
+  }
+}

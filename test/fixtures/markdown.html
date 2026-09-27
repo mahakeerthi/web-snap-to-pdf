@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Markdown Fixture</title>
+<style>
+  .hidden { display: none; }
+  body { font-family: sans-serif; }
+</style>
+</head>
+<body>
+<nav id="site-nav"><a href="/">NAV-MARK home</a></nav>
+<main>
+<article id="post">
+  <h1>MD-TITLE-MARK Markdown fixture</h1>
+  <p>Intro with <strong>bold</strong>, <em>italic</em>, <del>gone</del>, <code>inline()</code> and a
+     <a href="/docs/page.html?x=1">relative link</a>.<br>Second line after a break.</p>
+  <h2>Section</h2>
+  <ul>
+    <li>item one</li>
+    <li>item two
+      <ul>
+        <li>nested</li>
+        <li>nested <b>two</b></li>
+      </ul>
+    </li>
+  </ul>
+  <ol>
+    <li>first</li>
+    <li>second</li>
+  </ol>
+  <p><img src="/img/pic.png" alt="A picture"></p>
+  <pre><code class="language-js">function hello() {
+  return 'world';
+}
+
+
+console.log(hello());</code></pre>
+  <table>
+    <thead><tr><th>a</th><th>b</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>x | y</td></tr>
+      <tr><td>2</td><td><a href="https://example.com/cell">cell link</a></td></tr>
+    </tbody>
+  </table>
+  <blockquote><p>Quoted text</p></blockquote>
+  <dl><dt>Term</dt><dd>Definition text</dd></dl>
+  <hr>
+  <p class="hidden">HIDDEN-MARK must not appear</p>
+  <script>window.__scriptMark = 'SCRIPT-MARK';</script>
+  <p>Special * chars _ here [ok]</p>
+  <p>Outro paragraph.</p>
+</article>
+</main>
+<footer>MD-FOOTER-MARK</footer>
+</body>
+</html>

@@ -1,32 +1,55 @@
 # Chrome Web Store release checklist
 
-Run every command from the project root.
+Run every command from the project root. The exact text to paste into the dashboard is in
+[store/listing.md](store/listing.md); this file is the checklist and the reasoning behind it.
 
 ## 1. Version
 
 - [ ] Bump `version` in `extension/manifest.json` (Chrome requires it to be higher than the
-      published version; 1-4 dot-separated integers, e.g. `1.0.1`).
+      published version; 1-4 dot-separated integers, e.g. `1.1.1`). Current: `1.1.0`.
 - [ ] Bump `version` in `package.json` to the same value.
-- [ ] Note user-visible changes for the listing's "What's new" / release notes.
+- [ ] Note user-visible changes for the release notes. 1.1.0: redesigned popup (three action cards,
+      Layout + summary line, collapsible Export settings, Help), on-page element preview with PDF /
+      PNG / JPEG export and Copy image, light/dark theme, 8 interface languages, experimental
+      Markdown export (opt-in).
 
 ## 2. Verify
 
 - [ ] `npm install && npx playwright install chromium` (first time only) and poppler installed.
+- [ ] `npm run check` (ESLint, Prettier check, locale check) passes.
 - [ ] `npm run test:all` passes with 0 failures (pipeline, content script, UI screenshots).
+- [ ] `npm run check:locales` reports all 8 locales in sync and every `extDescription` ≤ 132 chars.
 - [ ] Manual smoke test with the unpacked `extension/` folder in a normal Chrome profile
       (the tests use a copy with extra `host_permissions`; this checks real `activeTab` behaviour):
-  - [ ] Popup: Download PDF and Preview on an ordinary article page.
+  - [ ] Popup: Full page and Article only download; both eye buttons open the preview tab.
+  - [ ] Layout toggle and Export settings: the summary line follows every change; the panel's
+        open/closed state survives reopening the popup.
+  - [ ] Select element → preview modal: PDF, PNG and JPEG download; Copy image pastes into another
+        app; Reselect; Esc and click-outside close; a very tall element shows the 16 384 px warning.
+  - [ ] Remove elements (Undo, Save PDF, Done) and Reset page in the popup.
   - [ ] Context menu: all five entries, including from the toolbar icon's menu.
   - [ ] `Alt+Shift+P` and `Alt+Shift+A`.
-  - [ ] Select element and Remove elements (Undo, Save PDF, Done, Reset page).
+  - [ ] Theme button cycles System → Light → Dark; options page and preview modal follow.
+  - [ ] Language selector: switch to at least one non-Latin language (ja or hi) and back; picker
+        bar and preview modal are translated.
+  - [ ] Markdown: hidden by default; options → Experimental asks for confirmation; after enabling,
+        the popup row and the modal's Markdown format appear and produce `.md` files; disabling
+        hides them again.
   - [ ] Popup shows the "can't be converted" notice on `chrome://extensions` and the Web Store.
-  - [ ] Options page: filename preview updates, Save As toggle, Reset all settings.
+  - [ ] Options page: filename preview updates, Save As toggle (also for images and Markdown),
+        Reset all settings.
   - [ ] Service worker console (`chrome://extensions` → Inspect views) has no errors.
 - [ ] If the icon changed: `npm run build:icons`.
 
 ## 3. Package
 
-The zip must contain the **contents** of `extension/`, with `manifest.json` at the zip root.
+```sh
+npm run package
+```
+
+builds `dist/pagesnap-pdf-<version>.zip` (git-ignored; fails if `package.json` and the manifest
+disagree on the version). The zip must contain the **contents** of `extension/`,
+with `manifest.json` at the zip root. Manual equivalent, and the check to run either way:
 
 ```sh
 VERSION=$(node -p "require('./extension/manifest.json').version")
@@ -35,75 +58,73 @@ mkdir -p dist
 unzip -l "dist/pagesnap-pdf-$VERSION.zip" | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
 ```
 
-- [ ] Nothing outside `extension/` is in the zip (no `node_modules/`, `test/`, `scripts/`).
-- [ ] `dist/` is not in `.gitignore`; do not commit the zip (add `dist/` to `.gitignore` or delete it after upload).
+- [ ] Nothing outside `extension/` is in the zip (no `node_modules/`, `test/`, `scripts/`, `docs/`).
+- [ ] `_locales/` is included (the manifest uses `__MSG_*__` strings and `default_locale`).
 
-## 4. Listing text (suggestions)
+## 4. Listing
 
-**Name:** PageSnap PDF
+Paste from [store/listing.md](store/listing.md):
 
-**Summary (≤ 132 chars):**
-Save any web page as a PDF in one click. Keeps styles and clickable links. Runs 100% locally with Chrome's own PDF engine.
+- **Name:** PageSnap PDF.
+- **Summary:** comes from the manifest description (`extDescription` in
+  `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
+  the summary for other store languages automatically.
+- **Description:** leads with the three ways to save, then the feature bullets, privacy, and the
+  debugging-bar note. It mentions Markdown only as **experimental and off by default** — do not
+  advertise it as a headline feature while it is opt-in, and keep the screenshots on the default
+  UI (the popup without the Markdown row), except where noted below.
+- **Category:** Tools.
 
-**Description:**
+### Screenshots
 
-> PageSnap PDF turns the page you are reading into a clean PDF using Chrome's built-in print
-> engine. Text stays selectable and links stay clickable.
->
-> • Paged or single long page
-> • 22 paper sizes, portrait or landscape, margin presets or custom margins
-> • Fit to a desktop, tablet or mobile layout width, or set the scale yourself
-> • Header and footer with title, date, URL and page numbers
-> • Print or screen styles, page ranges, PDF bookmarks from headings
-> • Loads lazy images, hides sticky bars, expands scrollable chat and docs panes
-> • Article only, save a single element, or remove ads and banners before saving
-> • Preview before downloading, custom file names, right-click menu and keyboard shortcuts
->
-> Private by design: no account, no uploads, no tracking. Everything happens on your device.
-> Free, with no paid tier.
->
-> Note: while a PDF is being generated Chrome shows "PageSnap PDF started debugging this
-> browser". This is how Chrome lets extensions use its PDF engine; the bar disappears when the
-> PDF is ready.
+Requirements: 1280 × 800 (preferred) or 640 × 400, PNG or JPEG without transparency, 1-5 images.
+Our raw captures are narrower (popup 360 px, options 720 px), so the popup shots need composing onto
+a 1280 × 800 canvas; the preview-modal shots are already 1280 × 800.
 
-**Category:** Productivity (or Tools).
+Use a neutral demo page with our own content (no third-party sites, logos or trademarks) and the
+light theme unless stated. Plan:
 
-- [ ] Screenshots, 1280×800 or 640×400: popup, picker bar on a page, preview tab, options page.
-- [ ] Small promo tile 440×280.
-- [ ] Store icon 128×128: `extension/icons/icon128.png`.
+| #   | Shot                                                                    | How to produce                                                                                                                                                                                                                         |
+| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Popup over an article page: "Full page / Article only / Select element" | Open a demo article at 1280 × 800, render `popup.html` (as `scripts/screenshot-ui.mjs` does, 360 px wide, device scale 2 for sharpness) and composite it at the top right under a mock toolbar.                                        |
+| 2   | Element preview modal with PDF / PNG / JPEG                             | `node scripts/screenshot-preview.mjs` → `docs/images/preview-modal-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
+| 3   | Export settings expanded                                                | Composite `popup-expanded-light.png` (crop to the Paper → Content groups) next to a sample PDF page rendered from the demo article.                                                                                                    |
+| 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-modal-dark.png` side by side on a dark background.                                                                                                                                |
+| 5   | Remove elements / options                                               | The remove-mode bar on the demo page with a removed banner, or `options-light.png` framed on the canvas with the language menu open.                                                                                                   |
+
+The source images live in `docs/images/` (copied from `test/out/ui/` after `npm run test:ui`).
+Add a caption strip to each (e.g. "Save the whole page, the article, or just one part") only if it
+stays legible at 640 × 400.
+
+- [ ] Small promo tile 440 × 280 (icon + name + one short line).
+- [ ] Store icon 128 × 128: `extension/icons/icon128.png`.
 
 ## 5. Privacy practices tab
 
-**Single purpose:**
-Convert the web page in the current tab to a PDF file on the user's device.
+**Single purpose:** see [store/listing.md](store/listing.md#privacy-practices-tab). In short: save
+the page in the current tab, or a selected part of it, as a file on the user's device (PDF, element
+image, or opt-in Markdown), converted locally.
 
-**Permission justifications:**
+**Permission justifications** (full paste text in the listing file):
 
-| Permission | Justification to paste |
-|---|---|
-| `debugger` | Chrome exposes its native PDF renderer to extensions only through the DevTools Protocol command `Page.printToPDF`. The extension attaches to the single tab the user asked to convert, calls `Page.printToPDF` (plus `Emulation.setEmulatedMedia`, `Emulation.setDeviceMetricsOverride` and `Page.getLayoutMetrics` for screen-style and single-page output), and detaches as soon as the PDF is produced, including on errors. It does not read network traffic, cookies or any other tab. Chrome shows its standard debugging bar during the conversion. |
-| `activeTab` | Grants temporary access to the tab the user clicked the toolbar button, context menu item or keyboard shortcut on, so no host permissions are needed. |
-| `scripting` | Injects the extension's own content script into the active tab to prepare the page for printing (load lazy images, hide sticky bars, isolate the article or a chosen element) and restore it afterwards. |
-| `downloads` | Saves the generated PDF to the user's Downloads folder or the location the user picks. |
-| `storage` | Stores the user's PDF settings and passes a generated PDF to the extension's own preview page. |
-| `contextMenus` | Adds "Save page as PDF" and related entries to the right-click menu. |
+| Permission     | Why                                                                                                                                                                                                                                                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `debugger`     | Only route to Chrome's `Page.printToPDF` and full-element `Page.captureScreenshot`. Attached to the one tab the user acted on, per export, detached in `finally`. Also uses `Emulation.setEmulatedMedia`, `Emulation.setDeviceMetricsOverride`, `Page.getLayoutMetrics` and `Runtime.evaluate` (viewport height only). Never reads network, cookies or other tabs. |
+| `activeTab`    | Temporary access to the tab where the user clicked the button, menu item or shortcut; replaces host permissions.                                                                                                                                                                                                                                                   |
+| `scripting`    | Injects the packaged content script: page preparation and restore, pickers, on-page preview, opt-in Markdown conversion.                                                                                                                                                                                                                                           |
+| `downloads`    | Saves the PDF / PNG / JPEG / Markdown file, optionally with Save As.                                                                                                                                                                                                                                                                                               |
+| `storage`      | Settings (`sync`), small UI preferences (`local`), preview PDF hand-off to the viewer (`session`).                                                                                                                                                                                                                                                                 |
+| `contextMenus` | Five right-click entries.                                                                                                                                                                                                                                                                                                                                          |
 
-**Host permissions:** none requested.
-
-**Remote code:** No, I am not using remote code. All JavaScript is packaged in the extension.
-
-**Data usage:** tick nothing. The extension does not collect or transmit any user data; the page
-content is processed locally and the PDF is written only to the user's disk.
-
-- [ ] Certify the three data-use statements (not sold, not used for unrelated purposes, not used
-      for creditworthiness).
-- [ ] Privacy policy URL: not strictly required when no data is collected, but a one-paragraph
-      hosted page ("PageSnap PDF collects no data; conversions happen locally; settings are stored
-      with Chrome storage") usually avoids review back-and-forth.
+**Host permissions:** none. **Remote code:** none. **Data usage:** nothing collected; certify the
+three statements. **Privacy policy:** optional; the one-paragraph text in the listing file avoids
+review back-and-forth.
 
 Reviewers look closely at `debugger`. Keep the justification specific (name the protocol
-commands, the per-conversion attach/detach, and that nothing else is inspected), and make sure the
-description mentions the debugging bar so users are not surprised by it.
+commands, the per-export attach/detach, and that nothing else is inspected), and make sure the
+description mentions the debugging bar so users are not surprised by it. The experimental
+Markdown export needs no extra permission (it reads the DOM through the same content script and
+downloads through `downloads`).
 
 ## 6. Branding
 

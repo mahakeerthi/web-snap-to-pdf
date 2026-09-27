@@ -1,17 +1,28 @@
 {
   "name": "pagesnap-pdf",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Chrome extension that converts the current web page to a PDF locally using Chrome's own print engine.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "test": "node test/e2e.mjs",
     "test:content": "node test/content.e2e.mjs",
     "test:ui": "node scripts/screenshot-ui.mjs",
     "test:all": "npm test && npm run test:content && npm run test:ui",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:locales": "node scripts/check-locales.mjs",
+    "check": "npm run lint && npm run format:check && npm run check:locales",
+    "package": "node scripts/package.mjs",
     "build:icons": "node scripts/build-icons.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.50.0"
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.12.0",
+    "playwright": "^1.50.0",
+    "prettier": "^3.9.9"
   }
 }

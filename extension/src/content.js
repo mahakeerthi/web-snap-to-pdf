@@ -1,6 +1,7 @@
 // PageSnap PDF - content script.
 // Injected on demand. Provides page preparation (lazy-load, hide fixed/sticky, isolate an
 // element or the article), an element picker for "select element" / "remove elements",
+// the element preview modal (PDF / PNG / JPEG / Markdown export), an HTML -> Markdown converter,
 // and full restoration of every temporary change.
 //
 // Scope notes:
@@ -24,12 +25,17 @@
   // appended at the end of <body>, on long pages.)
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
+  const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
     removed: [], // { el, prev, prio } user removals (persist until reset / reload)
     picked: null, // element chosen with the "print element" picker
     picker: null, // active picker instance
+    preview: null, // open element preview modal
+    ignoreNextPreview: false, // the modal was closed while its preview was still being captured
+    strings: {}, // UI strings from the background (English fallbacks merged with translations)
+    theme: 'system', // light | dark | system
   };
 
   // ---------------------------------------------------------------------------
@@ -41,11 +47,11 @@
     Promise.resolve()
       .then(() => handle(msg))
       .then((r) => sendResponse(r ?? { ok: true }))
-      .catch((err) => sendResponse({ ok: false, error: String((err && err.message) || err) }));
+      .catch((err) => sendResponse({ ok: false, error: errorText(err) }));
     return true;
   });
 
-  async function handle(msg) {
+  function handle(msg) {
     switch (msg.type) {
       case 'ps:ping':
         return { ok: true };
@@ -55,6 +61,7 @@
           removed: state.removed.filter((r) => r.el.isConnected).length,
           hasPicked: !!(state.picked && state.picked.isConnected),
           pickerActive: !!state.picker,
+          previewOpen: !!state.preview,
         };
       case 'ps:prepare':
         return prepare(msg);
@@ -64,13 +71,25 @@
       case 'ps:measure':
         return { ok: true, height: measureHeight(), width: measureWidth() };
       case 'ps:start-picker':
+        setUi(msg);
+        closePreview();
+        state.ignoreNextPreview = false;
         startPicker(msg.mode === 'remove' ? 'remove' : 'print');
         return { ok: true };
-      case 'ps:stop-picker':
-        stopPicker();
+      case 'ps:picked-rect':
+        return pickedRect();
+      case 'ps:show-preview':
+        setUi(msg);
+        showPreview(msg);
         return { ok: true };
+      case 'ps:cancel-preview':
+        closePreview();
+        return { ok: true };
+      case 'ps:to-markdown':
+        return toMarkdown(msg.prep);
       case 'ps:reset-page':
         stopPicker();
+        closePreview();
         restore();
         resetRemovals();
         state.picked = null;
@@ -88,20 +107,15 @@
     stopPicker();
     restore();
 
-    let root = null;
-    if (prep === 'article') {
-      root = findArticle();
-      if (!root) return { ok: false, error: 'Could not detect an article on this page. Try "Select element" instead.' };
-    } else if (prep === 'element') {
-      root = state.picked;
-      if (!root || !root.isConnected) {
-        return { ok: false, error: 'No element is selected. Use "Select element" first.' };
-      }
-    }
+    const { root, error } = prepRoot(prep);
+    if (error) return { ok: false, error };
 
     // First undo entry => runs last: the scroll position is put back only after every style
     // change has been reverted and the page has its original height again.
     rememberScroll();
+    // The preview modal is a full-viewport fixed overlay outside <body>: it must not end up in
+    // the PDF or in a screenshot. Shown again by restore().
+    if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
     if (loadLazy) await loadLazyContent();
     if (root) isolate(root);
@@ -112,6 +126,24 @@
     await nextFrame();
     await nextFrame();
     return { ok: true, title: document.title };
+  }
+
+  // The element a prep mode works on: the detected article, the picked element, or null for the
+  // whole page. Returns { error } when there is none.
+  function prepRoot(prep) {
+    if (prep === 'article') {
+      const root = findArticle();
+      return root
+        ? { root }
+        : { error: 'Could not detect an article on this page. Try "Select element" instead.' };
+    }
+    if (prep === 'element') {
+      const root = state.picked;
+      return root && root.isConnected
+        ? { root }
+        : { error: 'No element is selected. Use "Select element" first.' };
+    }
+    return { root: null };
   }
 
   function restore() {
@@ -202,7 +234,7 @@
   // Walks the flat tree, so a root inside an open shadow root or a slotted root works too.
   function isolate(root) {
     const keep = flatAncestors(root);
-    for (let node = root; node && node !== document.body && node !== document.documentElement; ) {
+    for (let node = root; node && node !== document.body && node !== document.documentElement;) {
       const parent = flatParent(node);
       if (!parent) break;
       for (const sib of flatSiblings(node)) {
@@ -222,18 +254,21 @@
     if (el === document.body || el === document.documentElement) return; // see unlockDocument()
     const cs = getComputedStyle(el);
     if (cs.display === 'contents') return; // e.g. <slot>: no box of its own
-    releaseOverflow(el, cs.overflowX, cs.overflowY, el.scrollWidth > el.clientWidth + 1);
+    releaseOverflow(el, cs.overflowX, cs.overflowY, isWide(el));
     if (cs.maxHeight !== 'none') setStyle(el, 'max-height', 'none');
     if (isAncestor) {
       setStyle(el, 'height', 'auto');
       setStyle(el, 'min-height', '0');
-      if (cs.position === 'fixed' || cs.position === 'sticky' || cs.position === 'absolute') {
-        setStyle(el, 'position', 'static');
-      }
+      if (OUT_OF_FLOW.test(cs.position)) setStyle(el, 'position', 'static');
       if (cs.transform !== 'none') setStyle(el, 'transform', 'none');
     } else if (cs.position === 'fixed' || cs.position === 'sticky') {
       setStyle(el, 'position', 'static');
     }
+  }
+
+  // Content wider than the box (a code block or table that scrolls sideways).
+  function isWide(el) {
+    return el.scrollWidth > el.clientWidth + 1;
   }
 
   // Let a box grow vertically without letting wide content spill sideways.
@@ -289,19 +324,10 @@
         // ones are treated as script-driven scroll panes.
         if (ch < vh * 0.4 || cs.webkitLineClamp !== 'none') return;
       }
-      found.push({
-        el,
-        ox: cs.overflowX,
-        oy,
-        maxHeight: cs.maxHeight,
-        wide: el.scrollWidth > el.clientWidth + 1,
-        top: el.scrollTop,
-        left: el.scrollLeft,
-      });
+      found.push({ el, box: boxOf(el, cs), top: el.scrollTop, left: el.scrollLeft });
     });
     // Write phase.
-    for (const f of found) {
-      const { el, top, left } = f;
+    for (const { el, box, top, left } of found) {
       // Pushed before the style changes so it runs after they have been undone.
       if (top || left) {
         state.undo.push(() => {
@@ -309,9 +335,7 @@
           el.scrollLeft = left;
         });
       }
-      releaseOverflow(el, f.ox, f.oy, f.wide);
-      setStyle(el, 'height', 'auto');
-      if (f.maxHeight !== 'none') setStyle(el, 'max-height', 'none');
+      growBox(el, box);
     }
     // The panes' ancestors (e.g. an app shell with height:100vh; overflow:hidden) still clip the
     // now taller panes. Walk up from each expanded pane, nearest ancestor first, and release
@@ -320,17 +344,31 @@
     relaxed.delete(root);
     const visited = new Set();
     for (const { el } of found) {
-      for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      for (
+        let a = el.parentElement;
+        a && a !== document.body && a !== document.documentElement;
+        a = a.parentElement
+      ) {
         if (visited.has(a) || relaxed.has(a)) break;
         visited.add(a);
         if (a.scrollHeight <= a.clientHeight + 4) continue;
         const cs = getComputedStyle(a);
         if (cs.display === 'contents') continue;
-        releaseOverflow(a, cs.overflowX, cs.overflowY, a.scrollWidth > a.clientWidth + 1);
-        setStyle(a, 'height', 'auto');
-        if (cs.maxHeight !== 'none') setStyle(a, 'max-height', 'none');
+        growBox(a, boxOf(a, cs));
       }
     }
+  }
+
+  // Computed overflow / max-height of a box, read before any write.
+  function boxOf(el, cs) {
+    return { ox: cs.overflowX, oy: cs.overflowY, maxHeight: cs.maxHeight, wide: isWide(el) };
+  }
+
+  // Let a box take the full height of its content.
+  function growBox(el, { ox, oy, maxHeight, wide }) {
+    releaseOverflow(el, ox, oy, wide);
+    setStyle(el, 'height', 'auto');
+    if (maxHeight !== 'none') setStyle(el, 'max-height', 'none');
   }
 
   function forEachScanned(root, fn) {
@@ -346,11 +384,9 @@
       if (!el) continue;
       const cs = getComputedStyle(el);
       if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
-        releaseOverflow(el, cs.overflowX, cs.overflowY, el.scrollWidth > el.clientWidth + 1);
+        releaseOverflow(el, cs.overflowX, cs.overflowY, isWide(el));
       }
-      if (cs.position === 'fixed' || cs.position === 'sticky' || cs.position === 'absolute') {
-        setStyle(el, 'position', 'static');
-      }
+      if (OUT_OF_FLOW.test(cs.position)) setStyle(el, 'position', 'static');
       if (cs.transform !== 'none') setStyle(el, 'transform', 'none');
       setStyle(el, 'height', 'auto');
       setStyle(el, 'max-height', 'none');
@@ -473,20 +509,20 @@
     const bestScore = score.get(best) || 0;
     const bestBlocks = blocks.get(best) || 0;
     const title = Array.from(best.querySelectorAll('h1')).find((h) => isVisible(h)) || null;
-    let pick = best;
-    let pickLen = (best.textContent || '').length;
+    let tightest = best;
+    let tightestLen = (best.textContent || '').length;
     for (const c of list) {
       if (c === best || !best.contains(c)) continue;
       if ((score.get(c) || 0) < bestScore * 0.9) continue;
       if ((blocks.get(c) || 0) < bestBlocks * 0.5) continue;
       if (title && !c.contains(title)) continue;
       const len = (c.textContent || '').length;
-      if (len < pickLen) {
-        pick = c;
-        pickLen = len;
+      if (len < tightestLen) {
+        tightest = c;
+        tightestLen = len;
       }
     }
-    return pick;
+    return tightest;
   }
 
   // One pass over the document's text instead of a subtree query per candidate (which was
@@ -502,7 +538,12 @@
       let v = noiseCache.get(el);
       if (v === undefined) {
         v = el.matches(NOISE_SEL) || (!!el.id && NOISE_TOKEN.test(el.id));
-        if (!v) for (const c of el.classList) if (NOISE_TOKEN.test(c)) { v = true; break; }
+        if (!v)
+          for (const c of el.classList)
+            if (NOISE_TOKEN.test(c)) {
+              v = true;
+              break;
+            }
         noiseCache.set(el, v);
       }
       return v;
@@ -581,6 +622,20 @@
     .count { background: #dc2626; color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
   `;
 
+  // Shadow-DOM container for our in-page UI (picker, preview modal), marked with UI_ATTR so the
+  // page scans, isolation and the Markdown converter skip it. Not attached to the document yet.
+  function createUiHost(uiAttrValue, css) {
+    const host = document.createElement('div');
+    host.setAttribute(UI_ATTR, uiAttrValue);
+    host.style.cssText =
+      'all: initial; position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647;';
+    const shadow = host.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = css;
+    shadow.appendChild(style);
+    return { host, shadow };
+  }
+
   // Pointer/mouse events that could trigger page behaviour (navigation on mousedown/pointerdown,
   // middle-click "open in new tab" via auxclick, dblclick handlers). `click` has its own handler.
   // `contextmenu` is left alone so the browser (and this extension's) context menu still works.
@@ -588,13 +643,7 @@
 
   function startPicker(mode) {
     stopPicker();
-    const host = document.createElement('div');
-    host.setAttribute(UI_ATTR, '');
-    host.style.cssText = 'all: initial; position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647;';
-    const shadow = host.attachShadow({ mode: 'open' });
-    const style = document.createElement('style');
-    style.textContent = PICKER_CSS;
-    shadow.appendChild(style);
+    const { host, shadow } = createUiHost('', PICKER_CSS);
 
     const hl = document.createElement('div');
     hl.className = 'hl' + (mode === 'remove' ? ' remove' : '');
@@ -654,30 +703,34 @@
 
     // Window capture listeners run before any listener the page registered on document or on
     // elements, so page handlers (client-side routers, shortcut managers) never see the events.
-    window.addEventListener('mousemove', p.onMove, true);
-    window.addEventListener('click', p.onClick, true);
-    for (const type of SWALLOWED_EVENTS) window.addEventListener(type, p.swallow, true);
-    window.addEventListener('keydown', p.onKey, true);
-    window.addEventListener('scroll', p.onScroll, true);
-    window.addEventListener('resize', p.onScroll);
+    for (const [type, fn, capture] of pickerListeners(p)) window.addEventListener(type, fn, capture);
     document.documentElement.appendChild(host);
   }
 
   function stopPicker() {
     const p = state.picker;
     if (!p) return;
-    window.removeEventListener('mousemove', p.onMove, true);
-    window.removeEventListener('click', p.onClick, true);
-    for (const type of SWALLOWED_EVENTS) window.removeEventListener(type, p.swallow, true);
-    window.removeEventListener('keydown', p.onKey, true);
-    window.removeEventListener('scroll', p.onScroll, true);
-    window.removeEventListener('resize', p.onScroll);
+    for (const [type, fn, capture] of pickerListeners(p)) window.removeEventListener(type, fn, capture);
     p.host.remove();
     state.picker = null;
   }
 
+  // [type, handler, capture] for every window listener of an active picker.
+  function pickerListeners(p) {
+    return [
+      ['mousemove', p.onMove, true],
+      ['click', p.onClick, true],
+      ...SWALLOWED_EVENTS.map((type) => [type, p.swallow, true]),
+      ['keydown', p.onKey, true],
+      ['scroll', p.onScroll, true],
+      ['resize', p.onScroll, false],
+    ];
+  }
+
   function pickable(el) {
-    return !!el && el.nodeType === 1 && el !== document.documentElement && el !== document.body && !isOurUi(el);
+    return (
+      !!el && el.nodeType === 1 && el !== document.documentElement && el !== document.body && !isOurUi(el)
+    );
   }
 
   // Hit-test that looks inside open shadow roots (document.elementFromPoint stops at the host).
@@ -714,13 +767,21 @@
     p.tag.style.top = r.top < 24 ? '0' : '-22px';
   }
 
-  function describe(el) {
+  function describeTag(el) {
     let s = el.tagName.toLowerCase();
     if (el.id) s += '#' + el.id;
-    const cls = (typeof el.className === 'string' ? el.className : '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    const cls = (typeof el.className === 'string' ? el.className : '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2);
     if (cls.length) s += '.' + cls.join('.');
+    return s;
+  }
+
+  function describe(el) {
     const r = el.getBoundingClientRect();
-    return `${s}  ${Math.round(r.width)}×${Math.round(r.height)}`;
+    return `${describeTag(el)}  ${Math.round(r.width)}×${Math.round(r.height)}`;
   }
 
   function renderBar(p) {
@@ -736,31 +797,37 @@
       });
       return b;
     };
+    // Built with DOM nodes (no innerHTML): pages that enforce Trusted Types reject HTML strings.
     const text = document.createElement('span');
+    const title = document.createElement('b');
+    const hint = document.createElement('span');
+    hint.className = 'hint';
+    text.append(title, ' ', hint);
     if (p.mode === 'remove') {
       const n = state.removed.filter((r) => r.el.isConnected).length;
-      text.innerHTML =
-        '<b>Remove elements</b> <span class="hint">· click anything to remove it · ↑/↓ widen or narrow · Esc when done</span>';
+      title.textContent = str('picker_titleRemove');
+      hint.textContent = '· ' + str('picker_hintRemove');
       bar.appendChild(text);
       if (n) {
         const c = document.createElement('span');
         c.className = 'count';
         c.textContent = String(n);
+        c.title = str('picker_removedCount', [n]);
         bar.appendChild(c);
       }
-      bar.appendChild(btn('Undo', '', () => undoRemoval(p)));
+      bar.appendChild(btn(str('picker_undo'), '', () => undoRemoval(p)));
       bar.appendChild(
-        btn('Save PDF', 'primary', () => {
+        btn(str('picker_savePdf'), 'primary', () => {
           stopPicker();
           chrome.runtime.sendMessage({ type: 'ps:generate-from-content', prep: 'none' }).catch(() => {});
         }),
       );
-      bar.appendChild(btn('Done', '', () => stopPicker()));
+      bar.appendChild(btn(str('picker_done'), '', () => stopPicker()));
     } else {
-      text.innerHTML =
-        '<b>Select element</b> <span class="hint">· click the part of the page to save · ↑/↓ widen or narrow · Esc to cancel</span>';
+      title.textContent = str('picker_titleSelect');
+      hint.textContent = '· ' + str('picker_hintSelect');
       bar.appendChild(text);
-      bar.appendChild(btn('Cancel', '', () => stopPicker()));
+      bar.appendChild(btn(str('picker_cancel'), '', () => stopPicker()));
     }
   }
 
@@ -779,7 +846,7 @@
     } else {
       state.picked = el;
       stopPicker();
-      chrome.runtime.sendMessage({ type: 'ps:generate-from-content', prep: 'element' }).catch(() => {});
+      requestPreview();
     }
   }
 
@@ -799,10 +866,776 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Element preview modal
+  // ---------------------------------------------------------------------------
+
+  function setUi(msg) {
+    if (msg.strings && typeof msg.strings === 'object') state.strings = msg.strings;
+    if (msg.theme) state.theme = msg.theme;
+  }
+
+  // UI string from the background, with $1..$n substitutions. A missing key shows the key itself.
+  function str(key, subs = []) {
+    let s = state.strings[key] || key;
+    subs.forEach((v, i) => {
+      s = s.replace(new RegExp(`\\$${i + 1}(?![0-9])`, 'g'), () => String(v));
+    });
+    return s;
+  }
+
+  function resolvedTheme() {
+    if (state.theme === 'dark' || state.theme === 'light') return state.theme;
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  }
+
+  // Document-relative box of the picked element, rounded outwards to whole CSS pixels
+  // (Page.captureScreenshot clip coordinates are document-relative with captureBeyondViewport).
+  function pickedRect() {
+    const el = state.picked;
+    if (!el || !el.isConnected) return { ok: false, error: str('picker_errorNoElement') };
+    const r = el.getBoundingClientRect();
+    const left = Math.floor(r.left + window.scrollX);
+    const top = Math.floor(r.top + window.scrollY);
+    const right = Math.ceil(r.right + window.scrollX);
+    const bottom = Math.ceil(r.bottom + window.scrollY);
+    return {
+      ok: true,
+      x: Math.max(0, left),
+      y: Math.max(0, top),
+      width: right - Math.max(0, left),
+      height: bottom - Math.max(0, top),
+      devicePixelRatio: window.devicePixelRatio || 1,
+      description: describeTag(el),
+    };
+  }
+
+  const PREVIEW_CSS = `
+    :host { all: initial; }
+    .overlay { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
+               padding: 16px; box-sizing: border-box; background: rgba(15, 23, 42, 0.55);
+               font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg);
+               --bg: #ffffff; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --stage: #f3f4f6; --check: #e5e7eb;
+               --seg: #f3f4f6; --seg-on: #ffffff; --ghost: #f3f4f6; --ghost-hover: #e5e7eb; --accent: #2563eb;
+               --accent-hover: #1d4ed8; --warn: #92400e; --warn-bg: #fef3c7; --error: #b91c1c; --ok: #15803d; }
+    .overlay.dark { --bg: #1f2937; --fg: #f9fafb; --muted: #9ca3af; --border: #374151; --stage: #111827; --check: #1f2937;
+                    --seg: #111827; --seg-on: #374151; --ghost: #374151; --ghost-hover: #4b5563; --accent: #3b82f6;
+                    --accent-hover: #2563eb; --warn: #fcd34d; --warn-bg: #422006; --error: #fca5a5; --ok: #86efac;
+                    background: rgba(0, 0, 0, 0.65); }
+    .dialog { background: var(--bg); color: var(--fg); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+              width: min(920px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden;
+              border: 1px solid var(--border); box-sizing: border-box; }
+    header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--border); }
+    h2 { all: unset; flex: 1; font-size: 15px; font-weight: 600; }
+    .stage { flex: 1 1 auto; min-height: 120px; max-height: 70vh; overflow: auto; overscroll-behavior: contain;
+             background-color: var(--stage);
+             background-image: conic-gradient(var(--check) 25%, transparent 0 50%, var(--check) 0 75%, transparent 0);
+             background-size: 16px 16px; display: flex; align-items: flex-start; justify-content: center; padding: 16px;
+             box-sizing: border-box; }
+    .stage .shot { display: block; max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.25); background: #fff; }
+    .placeholder { align-self: center; color: var(--muted); padding: 32px 8px; text-align: center; }
+    .placeholder.error { color: var(--error); }
+    .meta { padding: 10px 18px 0; display: flex; flex-direction: column; gap: 6px; }
+    .caption { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .warning { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+    footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px 16px; }
+    .seg { display: inline-flex; margin-right: auto; background: var(--seg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+    .seg button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
+    .seg button[aria-checked="true"] { background: var(--seg-on); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+    .status { order: 10; flex: 1 0 100%; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+    .status:empty { display: none; }
+    .status.error { color: var(--error); }
+    .status.ok { color: var(--ok); }
+    .btn { all: unset; cursor: pointer; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 8px;
+           background: var(--ghost); color: var(--fg); white-space: nowrap; }
+    .btn:hover { background: var(--ghost-hover); }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn.icon { padding: 4px 10px; font-size: 18px; line-height: 1; background: transparent; color: var(--muted); }
+    .btn.icon:hover { background: var(--ghost); color: var(--fg); }
+    .btn[disabled], .seg button[disabled] { opacity: 0.5; cursor: default; pointer-events: none; }
+    .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+  `;
+
+  const PREVIEW_KEY_EVENTS = ['keydown', 'keyup', 'keypress'];
+
+  function make(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'className') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else node.setAttribute(k, v);
+    }
+    node.append(...children);
+    return node;
+  }
+
+  // Build (or reuse) the modal; a new one shows a loading placeholder until ps:show-preview arrives.
+  function openPreview() {
+    if (state.preview) return state.preview;
+    const { host, shadow } = createUiHost('preview', PREVIEW_CSS);
+
+    const title = make('h2', { id: 'ps-title', text: str('preview_title') });
+    const close = make('button', {
+      className: 'btn icon close',
+      type: 'button',
+      'aria-label': str('preview_close'),
+      title: str('preview_close'),
+      text: '×',
+    });
+    const stage = make('div', { className: 'stage' });
+    const caption = make('div', { className: 'caption' });
+    const warning = make('div', { className: 'warning', role: 'note' });
+    warning.hidden = true;
+    const seg = make('div', { className: 'seg', role: 'radiogroup', 'aria-label': str('preview_format') });
+    const status = make('div', { className: 'status', role: 'status', 'aria-live': 'polite' });
+    const reselect = make('button', {
+      className: 'btn reselect',
+      type: 'button',
+      text: str('preview_reselect'),
+    });
+    const copy = make('button', { className: 'btn copy', type: 'button', text: str('preview_copyImage') });
+    const download = make('button', {
+      className: 'btn primary download',
+      type: 'button',
+      text: str('preview_download'),
+    });
+    const dialog = make(
+      'div',
+      { className: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ps-title' },
+      make('header', {}, title, close),
+      stage,
+      make('div', { className: 'meta' }, caption, warning),
+      make('footer', {}, seg, status, reselect, copy, download),
+    );
+    const overlay = make(
+      'div',
+      { className: 'overlay' + (resolvedTheme() === 'dark' ? ' dark' : '') },
+      dialog,
+    );
+    shadow.append(overlay);
+
+    const m = {
+      host,
+      overlay,
+      stage,
+      caption,
+      warning,
+      seg,
+      status,
+      copy,
+      download,
+      reselect,
+      busy: false,
+      data: null,
+      format: 'pdf',
+    };
+    state.preview = m;
+
+    close.addEventListener('click', () => closePreview());
+    reselect.addEventListener('click', () => {
+      closePreview();
+      startPicker('print');
+    });
+    download.addEventListener('click', () => previewDownload(m));
+    copy.addEventListener('click', () => previewCopy(m));
+    overlay.addEventListener('click', (ev) => {
+      if (ev.target === overlay && !m.busy) closePreview();
+    });
+    // Escape is caught on window in the capture phase, before any page handler can swallow it.
+    m.onKey = (ev) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      closePreview();
+    };
+    window.addEventListener('keydown', m.onKey, true);
+    // Other keys typed in the modal (arrows in the format control, Enter/Space on buttons) are not
+    // passed on to the page's own bubbling key handlers.
+    for (const type of PREVIEW_KEY_EVENTS) overlay.addEventListener(type, (ev) => ev.stopPropagation());
+    document.documentElement.appendChild(host);
+    setPreviewLoading(m);
+    return m;
+  }
+
+  function closePreview() {
+    const m = state.preview;
+    if (!m) return;
+    if (m.loading) state.ignoreNextPreview = true;
+    window.removeEventListener('keydown', m.onKey, true);
+    m.host.remove();
+    state.preview = null;
+  }
+
+  // Replace the preview image with a message; nothing can be exported meanwhile.
+  function showPlaceholder(m, className, text) {
+    m.stage.replaceChildren(make('div', { className, text }));
+    renderFormats(m, { formats: [] });
+    m.download.disabled = true;
+    m.copy.hidden = true;
+  }
+
+  function setPreviewLoading(m) {
+    showPlaceholder(m, 'placeholder', str('preview_loading'));
+    m.caption.textContent = '';
+    m.data = null;
+    m.loading = true;
+  }
+
+  function showPreviewError(message) {
+    const m = openPreview();
+    m.loading = false;
+    showPlaceholder(m, 'placeholder error', message || str('preview_errorCapture'));
+    m.reselect.focus();
+  }
+
+  // Click in "select element" mode: open the modal in its loading state and ask the background
+  // to capture the element (it answers with ps:show-preview).
+  function requestPreview() {
+    state.ignoreNextPreview = false;
+    const m = openPreview();
+    const fail = (error) => {
+      if (state.preview === m && m.loading) showPreviewError(error || str('preview_errorCapture'));
+    };
+    chrome.runtime
+      .sendMessage({ type: 'ps:preview-element' })
+      .then((res) => {
+        if (!res || !res.ok) fail(res && res.error);
+      })
+      .catch((err) => fail(errorText(err)));
+  }
+
+  function showPreview(msg) {
+    if (!state.preview && state.ignoreNextPreview) {
+      state.ignoreNextPreview = false;
+      return;
+    }
+    const m = openPreview();
+    m.loading = false;
+    m.overlay.classList.toggle('dark', resolvedTheme() === 'dark');
+    m.data = msg;
+    m.busy = false;
+    // Drawn on a canvas rather than an <img src="data:...">: the image element would be subject
+    // to the page's Content-Security-Policy (img-src), createImageBitmap is not.
+    const canvas = make('canvas', { className: 'shot', role: 'img', 'aria-label': str('preview_imageAlt') });
+    // Displayed at the element's CSS size (the capture is at screen resolution), shrunk to fit.
+    canvas.style.width = Math.max(1, Math.round(msg.width)) + 'px';
+    m.stage.replaceChildren(canvas);
+    createImageBitmap(dataUrlToBlob(msg.dataUrl))
+      .then((bmp) => {
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        canvas.getContext('2d').drawImage(bmp, 0, 0);
+        bmp.close();
+        canvas.dataset.ready = 'true';
+      })
+      .catch(() => showPreviewError(str('preview_errorCapture')));
+    m.stage.scrollTop = 0;
+    m.caption.textContent = str('preview_caption', [
+      msg.description || 'element',
+      Math.round(msg.width),
+      Math.round(msg.height),
+    ]);
+    const formats = ['pdf', 'png', 'jpeg'];
+    if (msg.markdownEnabled) formats.push('markdown');
+    renderFormats(m, { formats, selected: formats.includes(msg.format) ? msg.format : 'pdf' });
+    m.download.disabled = false;
+    setStatus(m, '');
+    m.download.focus();
+  }
+
+  const FORMAT_LABELS = {
+    pdf: 'preview_formatPdf',
+    png: 'preview_formatPng',
+    jpeg: 'preview_formatJpeg',
+    markdown: 'preview_formatMarkdown',
+  };
+
+  function renderFormats(m, { formats, selected = 'pdf' }) {
+    m.seg.replaceChildren();
+    m.seg.hidden = !formats.length;
+    for (const f of formats) {
+      const b = make('button', {
+        type: 'button',
+        role: 'radio',
+        'data-format': f,
+        text: str(FORMAT_LABELS[f]),
+      });
+      b.addEventListener('click', () => selectFormat(m, f));
+      b.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+        ev.preventDefault();
+        const i = formats.indexOf(m.format) + (ev.key === 'ArrowRight' ? 1 : -1);
+        selectFormat(m, formats[(i + formats.length) % formats.length]);
+        m.seg.querySelector(`[data-format="${m.format}"]`).focus();
+      });
+      m.seg.appendChild(b);
+    }
+    if (formats.length) selectFormat(m, selected);
+  }
+
+  function selectFormat(m, format) {
+    m.format = format;
+    for (const b of m.seg.querySelectorAll('button')) {
+      const on = b.dataset.format === format;
+      b.setAttribute('aria-checked', String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    const image = format === 'png' || format === 'jpeg';
+    m.copy.hidden = format !== 'png' || !m.data;
+    const warn = image && m.data && m.data.imageWarning;
+    m.warning.hidden = !warn;
+    m.warning.textContent = warn || '';
+  }
+
+  function setStatus(m, text, kind = '') {
+    m.status.textContent = text;
+    m.status.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function setBusy(m, busy) {
+    m.busy = busy;
+    m.download.disabled = busy;
+    m.reselect.disabled = busy;
+    m.copy.disabled = busy;
+    for (const b of m.seg.querySelectorAll('button')) b.disabled = busy;
+  }
+
+  async function previewDownload(m) {
+    if (m.busy || !m.data) return;
+    const format = m.format;
+    setBusy(m, true);
+    setStatus(m, str('preview_saving'));
+    let res;
+    try {
+      if (format === 'pdf') {
+        res = await chrome.runtime.sendMessage({
+          type: 'ps:generate-from-content',
+          prep: 'element',
+          format: 'pdf',
+        });
+      } else if (format === 'markdown') {
+        res = await chrome.runtime.sendMessage({ type: 'ps:export-markdown-from-content', prep: 'element' });
+      } else {
+        res = await chrome.runtime.sendMessage({ type: 'ps:export-element', format });
+      }
+    } catch (err) {
+      res = { ok: false, error: errorText(err) };
+    }
+    if (state.preview !== m) return; // closed meanwhile
+    setBusy(m, false);
+    if (res && res.ok) {
+      if (res.warning) {
+        // Keep the modal open so the warning can be read.
+        setStatus(m, str('preview_saved', [res.filename || '']), 'ok');
+        m.warning.hidden = false;
+        m.warning.textContent = res.warning;
+      } else {
+        closePreview();
+      }
+    } else {
+      setStatus(m, (res && res.error) || str('preview_errorGeneric'), 'error');
+    }
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const mime = (/^data:([^;,]+)/.exec(dataUrl) || [])[1] || 'application/octet-stream';
+    const bin = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  // Copies the preview image (screen resolution). Must run synchronously inside the click so the
+  // clipboard write keeps the user activation: the PNG bytes are decoded from the data URL in place.
+  function previewCopy(m) {
+    if (!m.data || !m.data.dataUrl) return;
+    if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+      setStatus(m, str('preview_errorCopy'), 'error');
+      return;
+    }
+    try {
+      const blob = dataUrlToBlob(m.data.dataUrl);
+      navigator.clipboard
+        .write([new ClipboardItem({ 'image/png': blob })])
+        .then(() => state.preview === m && setStatus(m, str('preview_copied'), 'ok'))
+        .catch(() => state.preview === m && setStatus(m, str('preview_errorCopy'), 'error'));
+    } catch {
+      setStatus(m, str('preview_errorCopy'), 'error');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // HTML -> Markdown (experimental export)
+  // ---------------------------------------------------------------------------
+  // Works on the live DOM (no preparation needed): elements hidden with display:none (including
+  // the user's removals) are skipped, open shadow roots and slots are followed. Output is
+  // CommonMark + GFM tables. Fenced code blocks are kept aside as placeholders so the final
+  // whitespace normalisation never touches their contents.
+
+  const MD_SKIP =
+    /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|HEAD|META|LINK|TITLE|BASE|IFRAME|CANVAS|VIDEO|AUDIO|OBJECT|EMBED|SELECT|DATALIST|MAP)$/;
+  const MD_INLINE_CODE = /^(CODE|KBD|SAMP|TT)$/;
+  const MD_BR = '\u0001'; // hard line break marker inside inline text
+  const MD_PRE = '\u0002'; // fenced-block placeholder delimiter
+
+  function toMarkdown(prep) {
+    const { root: prepared, error } = prepRoot(prep);
+    if (error) return { ok: false, error };
+    const root = prepared || document.body;
+    if (!root) return { ok: false, error: 'This page has no content.' };
+    const ctx = { pres: [] };
+    // A picked element may itself be a list, table, code block or an inline element.
+    let body;
+    if (root === document.body || root === document.documentElement) body = mdBlocks(root, ctx, false);
+    else if (!mdIsBlock(root)) body = mdEscapeLineStarts(mdFinishInline(mdInline(root, ctx)));
+    else body = mdBlock(root, ctx);
+    const title = (document.title || '').trim();
+    const hasH1 = root.tagName === 'H1' || !!root.querySelector('h1');
+    if (!hasH1 && title) body = '# ' + mdEscape(title) + '\n\n' + body;
+    body += '\n\nSource: <' + location.href + '>';
+    // At most one blank line between blocks, no trailing spaces on blank lines.
+    let md =
+      body
+        .replace(/^[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim() + '\n';
+    // Put the fenced code blocks back, indented like the line that holds the placeholder.
+    md = md.replace(new RegExp(`^(.*?)${MD_PRE}(\\d+)${MD_PRE}`, 'gm'), (_, prefix, i) => {
+      const cont = prefix.replace(/[^>\s]/g, ' ');
+      return ctx.pres[Number(i)]
+        .split('\n')
+        .map((line, k) => (k === 0 ? prefix : line ? cont : cont.replace(/\s+$/, '')) + line)
+        .join('\n');
+    });
+    return { ok: true, markdown: md, title };
+  }
+
+  // Children in the rendered (flat) tree: a shadow host's shadow root, a slot's assigned nodes.
+  function mdChildren(node) {
+    if (node.shadowRoot) return node.shadowRoot.childNodes;
+    if (node.tagName === 'SLOT') {
+      const assigned = node.assignedNodes();
+      return assigned.length ? assigned : node.childNodes;
+    }
+    return node.childNodes;
+  }
+
+  function mdHidden(el) {
+    if (MD_SKIP.test(el.tagName.toUpperCase()) || el.hasAttribute(UI_ATTR)) return true;
+    return getComputedStyle(el).display === 'none';
+  }
+
+  function mdIsBlock(el) {
+    if (/^(H[1-6]|P|PRE|UL|OL|TABLE|BLOCKQUOTE|HR|DL|LI|FIGURE|FIGCAPTION|DETAILS|SUMMARY)$/.test(el.tagName))
+      return true;
+    const d = getComputedStyle(el).display;
+    return !(d === 'inline' || d.startsWith('inline-') || d === 'contents' || d === 'ruby');
+  }
+
+  function mdEscape(text) {
+    return text.replace(/([\\`*_[\]<])/g, '\\$1');
+  }
+
+  // Escape characters that would turn the start of a paragraph line into a heading, quote or list.
+  function mdEscapeLineStarts(text) {
+    return text
+      .split('\n')
+      .map((l) =>
+        l
+          .replace(/^(#{1,6}(?:\s|$)|>|[-+](?:\s|$)|=+\s*$)/, '\\$1')
+          .replace(/^(\d+)([.)](?:\s|$))/, '$1\\$2'),
+      )
+      .join('\n');
+  }
+
+  // Collapse inline whitespace like a browser, then turn hard-break markers into Markdown breaks.
+  function mdFinishInline(raw) {
+    return raw
+      .replace(/[ \t\n\r\f]+/g, ' ')
+      .split(MD_BR)
+      .map((l) => l.trim())
+      .join('  \n')
+      .replace(/^(?: {2}\n)+|(?: {2}\n)+$/g, '')
+      .trim();
+  }
+
+  // Block content of a container: runs of inline content become paragraphs, block children are
+  // rendered by mdBlock. `tight` joins blocks with a single newline (list items).
+  function mdBlocks(parent, ctx, tight) {
+    const blocks = [];
+    let inline = '';
+    const flush = () => {
+      const text = mdFinishInline(inline);
+      if (text) blocks.push(mdEscapeLineStarts(text));
+      inline = '';
+    };
+    for (const child of mdChildren(parent)) {
+      if (child.nodeType === 3) {
+        inline += mdEscape(child.data);
+      } else if (child.nodeType === 1) {
+        if (mdHidden(child)) continue;
+        if (child.tagName === 'BR') inline += MD_BR;
+        else if (mdIsBlock(child)) {
+          flush();
+          const b = mdBlock(child, ctx);
+          if (b && b.trim()) blocks.push(b);
+        } else inline += mdInline(child, ctx);
+      }
+    }
+    flush();
+    return blocks.join(tight ? '\n' : '\n\n');
+  }
+
+  function mdBlock(el, ctx) {
+    const tag = el.tagName;
+    if (/^H[1-6]$/.test(tag)) {
+      const text = mdInlineLine(el, ctx);
+      return text ? '#'.repeat(Number(tag[1])) + ' ' + text : '';
+    }
+    switch (tag) {
+      case 'PRE':
+        return mdPre(el, ctx);
+      case 'UL':
+      case 'OL':
+        return mdList(el, ctx);
+      case 'TABLE':
+        return mdTable(el, ctx);
+      case 'HR':
+        return '---';
+      case 'BLOCKQUOTE': {
+        const inner = mdBlocks(el, ctx, false);
+        return inner
+          ? inner
+              .split('\n')
+              .map((l) => (l ? '> ' + l : '>'))
+              .join('\n')
+          : '';
+      }
+      case 'DL':
+        return mdDefinitionList(el, ctx);
+      case 'LI':
+        return mdBlocks(el, ctx, true); // stray <li> outside a list
+      default:
+        return mdBlocks(el, ctx, false);
+    }
+  }
+
+  function mdInlineChildren(el, ctx) {
+    let out = '';
+    for (const child of mdChildren(el)) {
+      if (child.nodeType === 3) out += mdEscape(child.data);
+      else if (child.nodeType === 1 && !mdHidden(child)) {
+        if (child.tagName === 'BR') out += MD_BR;
+        else {
+          // Block-level boxes inside inline content (e.g. a card <a> wrapping divs) are separated by spaces.
+          const piece = mdInline(child, ctx);
+          out += mdIsBlock(child) ? ' ' + piece + ' ' : piece;
+        }
+      }
+    }
+    return out;
+  }
+
+  // Inline content of `el` on a single line (hard breaks become spaces): headings, <dt> terms.
+  function mdInlineLine(el, ctx) {
+    return mdFinishInline(mdInlineChildren(el, ctx)).replace(/ {2}\n/g, ' ');
+  }
+
+  // Leading whitespace, content, trailing whitespace.
+  function splitOuterSpace(text) {
+    return /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  }
+
+  // Wrap inline content in a delimiter, keeping surrounding whitespace outside of it
+  // ("<b> bold </b>" -> " **bold** ", which is valid emphasis).
+  function mdWrap(content, open, close = open) {
+    const m = splitOuterSpace(content);
+    return m[2] ? m[1] + open + m[2] + close + m[3] : content;
+  }
+
+  function mdInline(el, ctx) {
+    const tag = el.tagName;
+    if (tag === 'BR') return MD_BR;
+    if (tag === 'IMG') return mdImage(el);
+    if (MD_INLINE_CODE.test(tag)) {
+      const code = (el.textContent || '').replace(/\s+/g, ' ');
+      if (!code.trim()) return code;
+      const run = Math.max(0, ...(code.match(/`+/g) || []).map((r) => r.length));
+      const fence = '`'.repeat(run + 1);
+      const pad = code.startsWith('`') || code.endsWith('`') ? ' ' : '';
+      return fence + pad + code + pad + fence;
+    }
+    const inner = mdInlineChildren(el, ctx);
+    switch (tag) {
+      case 'STRONG':
+      case 'B':
+        return mdWrap(inner, '**');
+      case 'EM':
+      case 'I':
+      case 'CITE':
+      case 'DFN':
+        return mdWrap(inner, '_');
+      case 'DEL':
+      case 'S':
+      case 'STRIKE':
+        return mdWrap(inner, '~~');
+      case 'A':
+        return mdLink(el, inner);
+      default:
+        return inner;
+    }
+  }
+
+  function mdUrl(value) {
+    if (!value) return '';
+    try {
+      const url = new URL(value, document.baseURI).href;
+      return url.replace(/ /g, '%20').replace(/\(/g, '%28').replace(/\)/g, '%29');
+    } catch {
+      return '';
+    }
+  }
+
+  function mdLink(a, inner) {
+    const href = a.getAttribute('href');
+    const url = href && !/^\s*javascript:/i.test(href) ? mdUrl(href) : '';
+    const text = inner.split(MD_BR).join(' ');
+    if (!url) return text;
+    const m = splitOuterSpace(text);
+    const label = m[2] || mdEscape(url);
+    return `${m[1]}[${label}](${url})${m[3]}`;
+  }
+
+  function mdImage(img) {
+    const alt = mdEscape((img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim());
+    let src = img.currentSrc || img.getAttribute('src') || '';
+    // Inline data: images would bloat the file; keep small ones only.
+    if (src.startsWith('data:') && src.length > 2048) src = '';
+    const url = src.startsWith('data:') ? src : mdUrl(src);
+    if (!url) return alt;
+    return `![${alt}](${url})`;
+  }
+
+  function mdPre(pre, ctx) {
+    const code = pre.querySelector('code');
+    const cls = `${pre.className || ''} ${(code && code.className) || ''}`;
+    const lang = (/(?:^|\s)(?:language|lang)-([\w+#.-]+)/.exec(cls) || [])[1] || '';
+    let text = pre.innerText || pre.textContent || '';
+    text = text.replace(/\r\n?/g, '\n').replace(/^\n+|\s+$/g, '');
+    const run = Math.max(0, ...(text.match(/^`{3,}/gm) || []).map((r) => r.length));
+    const fence = '`'.repeat(Math.max(3, run + 1));
+    ctx.pres.push(`${fence}${lang}\n${text}\n${fence}`);
+    return MD_PRE + (ctx.pres.length - 1) + MD_PRE;
+  }
+
+  function mdList(list, ctx) {
+    const ordered = list.tagName === 'OL';
+    let n = ordered ? parseInt(list.getAttribute('start') || '1', 10) : 0;
+    if (!Number.isFinite(n)) n = 1;
+    const items = [];
+    for (const li of list.children) {
+      if (mdHidden(li)) continue;
+      if (li.tagName !== 'LI') {
+        // A list nested directly in a list (invalid but common) belongs to the previous item.
+        const b = mdBlock(li, ctx);
+        if (b && b.trim()) {
+          const pad = items.length ? ' '.repeat(ordered ? String(n - 1).length + 2 : 2) : '';
+          items.push(
+            b
+              .split('\n')
+              .map((l) => (l ? pad + l : l))
+              .join('\n'),
+          );
+        }
+        continue;
+      }
+      const marker = ordered ? `${n++}. ` : '- ';
+      const indent = ' '.repeat(marker.length);
+      const body = mdBlocks(li, ctx, true) || '';
+      const lines = body.split('\n');
+      items.push(
+        marker +
+          lines[0] +
+          lines
+            .slice(1)
+            .map((l) => '\n' + (l ? indent + l : ''))
+            .join(''),
+      );
+    }
+    return items.join('\n');
+  }
+
+  function mdDefinitionList(dl, ctx) {
+    const parts = [];
+    // Definition lists may wrap dt/dd pairs in <div>s.
+    const entries = [];
+    for (const c of dl.children) {
+      if (c.tagName === 'DIV') entries.push(...c.children);
+      else entries.push(c);
+    }
+    for (const c of entries) {
+      if (mdHidden(c)) continue;
+      if (c.tagName === 'DT') {
+        const term = mdInlineLine(c, ctx);
+        if (term) parts.push({ term: `**${term}**`, defs: [] });
+      } else if (c.tagName === 'DD') {
+        const def = mdBlocks(c, ctx, true);
+        if (!def) continue;
+        if (!parts.length) parts.push({ term: '', defs: [] });
+        parts[parts.length - 1].defs.push(def);
+      }
+    }
+    return parts.map((p) => [p.term, ...p.defs].filter(Boolean).join('  \n')).join('\n\n');
+  }
+
+  function mdTable(table, ctx) {
+    const rows = [];
+    for (const row of table.rows) {
+      if (row.closest('table') !== table || mdHidden(row)) continue;
+      const cells = [];
+      for (const cell of row.cells) {
+        if (mdHidden(cell)) continue;
+        const text = mdFinishInline(mdInlineChildren(cell, ctx))
+          .replace(/ {2}\n/g, ' <br> ')
+          .replace(/\|/g, '\\|');
+        cells.push(text);
+        for (let i = 1; i < Math.min(cell.colSpan || 1, 50); i++) cells.push('');
+      }
+      if (cells.length) rows.push(cells);
+    }
+    if (!rows.length) return '';
+    const width = Math.max(...rows.map((r) => r.length));
+    for (const r of rows) while (r.length < width) r.push('');
+    // GFM needs exactly one header row: use the first row (header or not) and keep the rest as body.
+    const line = (cells) => '| ' + cells.map((c) => c || ' ').join(' | ') + ' |';
+    const out = [
+      line(rows[0]),
+      '| ' + Array(width).fill('---').join(' | ') + ' |',
+      ...rows.slice(1).map(line),
+    ];
+    const caption =
+      table.caption && !mdHidden(table.caption) ? mdFinishInline(mdInlineChildren(table.caption, ctx)) : '';
+    return (caption ? mdEscapeLineStarts(caption) + '\n\n' : '') + out.join('\n');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
+
+  function errorText(err) {
+    return String((err && err.message) || err);
+  }
 
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
+
   function nextFrame() {
     return new Promise((r) => requestAnimationFrame(() => r()));
   }

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Element Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  header.fixed { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #333; color: #fff; z-index: 10; }
+  #before { height: 2000px; padding-top: 60px; background: linear-gradient(#fff, #ddd); }
+  /* The padding keeps #red far below the fold even after isolation (relax() does not touch padding). */
+  #pad { padding-top: 3000px; }
+  #red { width: 400px; height: 300px; margin-left: 100px; background: #ff0000; color: #fff; font-size: 11px; }
+  .gap { height: 1500px; background: #eee; }
+  /* Stripes: 100 px (tall) / 1000 px (huge) bands of rgb(i*10, 100, 255-i*10), built below.
+     pointer-events: none so the picker hovers the striped element itself, not a band. */
+  .stripes { width: 500px; }
+  .stripes > div { pointer-events: none; }
+  #huge { width: 300px; }
+</style>
+</head>
+<body>
+<header class="fixed">ELEMENT-FIXED-HEADER</header>
+<div id="before">BEFORE-MARK content above the selected element</div>
+<div id="pad"><div id="red">RED-MARK element text</div></div>
+<div class="gap"></div>
+<div id="tall" class="stripes" data-n="24" data-h="100"></div>
+<div class="gap"></div>
+<div id="huge" class="stripes" data-n="20" data-h="1000"></div>
+<div class="gap">AFTER-MARK</div>
+<script>
+  for (const box of document.querySelectorAll('.stripes')) {
+    const n = Number(box.dataset.n);
+    const h = Number(box.dataset.h);
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('div');
+      d.style.cssText = `height:${h}px;background:rgb(${i * 10},100,${255 - i * 10})`;
+      box.appendChild(d);
+    }
+  }
+</script>
+</body>
+</html>
