@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Picker Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  #top { padding: 20px; background: #eef; }
+  .spacer { height: 900px; background: linear-gradient(#fff, #ddd); }
+  #target { height: 900px; margin: 0 40px; background: #fee; }
+  #links a { display: inline-block; padding: 20px; margin: 10px; background: #efe; }
+  x-card { display: block; margin: 20px; }
+</style>
+</head>
+<body>
+<div id="top">TOP-MARK first child of body</div>
+<div id="links">
+  <a id="nav-link" href="/nav-target.html">plain link</a>
+  <a id="spa-link" data-spa href="/spa-route">SPA link</a>
+  <a id="mid-link" href="/middle-target.html">middle-click link</a>
+  <a id="dbl-link" href="#dbl">dblclick area</a>
+</div>
+<p id="outside">OUTSIDE-MARK light DOM paragraph</p>
+<x-card id="card"></x-card>
+<x-layout id="layout"><div slot="main" id="slotted">SLOTTED-MARK light DOM content rendered through a slot</div></x-layout>
+<div class="spacer"></div>
+<div id="target">TARGET-MARK tall block</div>
+<div class="spacer"></div>
+<script>
+  window.__events = [];
+  // A client-side router that listens in the capture phase on document (as some SPA
+  // frameworks and analytics libraries do).
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[data-spa]');
+    if (a) { e.preventDefault(); history.pushState({}, '', a.getAttribute('href')); }
+  }, true);
+  document.addEventListener('dblclick', () => window.__events.push('dblclick'));
+  // A page-level shortcut handler that swallows Escape in the capture phase on document.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopImmediatePropagation(); window.__events.push('page-esc'); }
+  }, true);
+
+  const card = document.getElementById('card');
+  const root = card.attachShadow({ mode: 'open' });
+  root.innerHTML =
+    '<style>section{padding:30px;background:#def} #shadow-other{padding:10px;background:#fed}</style>' +
+    '<div id="shadow-other">SHADOW-OTHER-MARK</div>' +
+    '<section id="inner"><h2>SHADOW-MARK inside a web component</h2><p>Picked content lives in an open shadow root.</p></section>';
+
+  const layout = document.getElementById('layout');
+  layout.attachShadow({ mode: 'open' }).innerHTML =
+    '<style>:host{display:block;margin:20px} #chrome{padding:10px;background:#ddd} .main{padding:10px}</style>' +
+    '<div id="chrome">LAYOUT-CHROME-MARK</div><div class="main"><slot name="main"></slot></div>';
+</script>
+</body>
+</html>

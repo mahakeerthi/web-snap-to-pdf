@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PageSnap PDF settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>PageSnap PDF settings</h1>
+    <p class="muted">Paper, margins and layout options live in the toolbar popup. These are the defaults that apply everywhere.</p>
+
+    <section>
+      <h2>Saving</h2>
+      <div class="field">
+        <label for="filenameTemplate">File name pattern</label>
+        <input type="text" id="filenameTemplate" placeholder="{title}" aria-describedby="filename-hint" spellcheck="false">
+        <span id="filename-hint" class="hint">Placeholders: <code>{title}</code> <code>{domain}</code> <code>{date}</code> <code>{time}</code>. Preview: <b id="filename-preview"></b></span>
+      </div>
+      <label class="toggle"><input type="checkbox" id="saveAs"><span>Ask where to save each PDF</span></label>
+      <div class="field">
+        <label for="output">Default action</label>
+        <select id="output" aria-describedby="output-hint">
+          <option value="download">Download the PDF</option>
+          <option value="open">Open a preview tab</option>
+        </select>
+        <span id="output-hint" class="hint">Used by the keyboard shortcut, the right-click menu and the in-page tools.</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Page handling</h2>
+      <label class="toggle"><input type="checkbox" id="expandScroll"><span>Expand inner scrollable areas so nothing is clipped (chat apps, docs sites)</span></label>
+      <label class="toggle"><input type="checkbox" id="preferCssPageSize"><span>Let the page's own <code>@page</code> CSS size override the chosen paper size</span></label>
+    </section>
+
+    <section>
+      <h2>Keyboard shortcuts</h2>
+      <p>Default: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> saves the page, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> saves the article only.</p>
+      <button type="button" id="open-shortcuts" class="secondary">Change shortcuts</button>
+    </section>
+
+    <section>
+      <h2>About</h2>
+      <p>PageSnap PDF renders pages with Chrome's built-in print engine, entirely on your device. Nothing is uploaded anywhere.</p>
+      <p class="hint">Chrome shows a “PageSnap PDF started debugging this browser” bar while a PDF is being generated. That is how Chrome exposes its PDF engine to extensions; it disappears as soon as the PDF is ready.</p>
+      <button type="button" id="reset" class="danger">Reset all settings</button>
+    </section>
+    <p id="saved" class="saved" aria-live="polite"></p>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

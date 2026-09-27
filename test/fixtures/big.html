@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Big Fixture</title>
+<style>body{font-family:sans-serif} canvas{display:block;margin:8px 0}</style></head>
+<body>
+<h1>BIG-MARK noise images</h1>
+<p>Each canvas holds incompressible noise so the PDF is several megabytes.</p>
+<script>
+  for (let i = 0; i < 3; i++) {
+    const c = document.createElement('canvas'); c.width = 1400; c.height = 1400;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(1400, 1400);
+    const d = img.data;
+    for (let j = 0; j < d.length; j += 4) { d[j] = Math.random() * 255; d[j+1] = Math.random() * 255; d[j+2] = Math.random() * 255; d[j+3] = 255; }
+    ctx.putImageData(img, 0, 0);
+    document.body.appendChild(c);
+  }
+</script>
+</body>
+</html>

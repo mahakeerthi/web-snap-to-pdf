@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Many Elements Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  section { padding: 2px 8px; }
+  section h3 { margin: 0; font-size: 12px; }
+  section h3.stick { position: sticky; top: 0; background: #ffd; }
+  .box { height: 40px; overflow: auto; border: 1px solid #ccc; }
+  .box div { height: 120px; }
+  #chat { position: fixed; right: 16px; bottom: 16px; width: 56px; height: 56px; background: #2563eb; border-radius: 50%; }
+  #cookie { position: fixed; left: 0; right: 0; bottom: 0; height: 80px; background: #111; color: #fff; }
+</style>
+</head>
+<body>
+<script>
+  // ~30k elements; the fixed cookie banner and chat bubble are appended last, like
+  // consent managers and chat widgets do on real sites.
+  const parts = [];
+  for (let i = 0; i < 2900; i++) {
+    parts.push(
+      '<section><h3' + (i % 100 === 0 ? ' class="stick"' : '') + '>Section ' + i + '</h3>' +
+      '<p>Lorem <a href="#s' + i + '">link</a> <b>bold</b> <i>it</i> <span>x</span></p>' +
+      '<ul><li>a</li><li>b</li></ul>' +
+      (i % 50 === 0 ? '<div class="box"><div>scroll box ' + i + '</div></div>' : '') +
+      '</section>',
+    );
+  }
+  document.body.insertAdjacentHTML('beforeend', parts.join(''));
+  document.body.insertAdjacentHTML('beforeend', '<div id="chat"></div><div id="cookie">COOKIE-BANNER-MARK We use cookies.</div>');
+  window.__count = document.body.getElementsByTagName('*').length;
+</script>
+</body>
+</html>

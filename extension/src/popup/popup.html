@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PageSnap PDF</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <img src="../../icons/icon32.png" alt="" width="28" height="28">
+    <div class="title-block">
+      <h1>PageSnap PDF</h1>
+      <p id="page-title" class="muted" title="">Reading page…</p>
+    </div>
+    <button type="button" id="open-options" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <div id="blocked" class="notice hidden" role="status">
+    This page can’t be converted. Chrome blocks extensions on browser pages, the Web Store and other extensions.
+  </div>
+
+  <main id="main">
+    <section class="row">
+      <div class="seg" data-key="contentMode" role="group" aria-label="Content">
+        <button type="button" data-value="page" class="active" aria-pressed="true">Full page</button>
+        <button type="button" data-value="article" aria-pressed="false">Article only</button>
+      </div>
+      <div class="seg" data-key="layout" role="group" aria-label="Layout">
+        <button type="button" data-value="paged" class="active" aria-pressed="true">Page breaks</button>
+        <button type="button" data-value="single" aria-pressed="false">Single page</button>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <label>Paper size
+        <select id="format"></select>
+      </label>
+      <div class="field">
+        <span id="orientation-label">Orientation</span>
+        <div class="seg small" data-key="orientation" role="group" aria-labelledby="orientation-label">
+          <button type="button" data-value="portrait" class="active" aria-pressed="true">Portrait</button>
+          <button type="button" data-value="landscape" aria-pressed="false">Landscape</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <label>Margins
+        <select id="marginPreset">
+          <option value="none">None</option>
+          <option value="minimal">Minimal (5 mm)</option>
+          <option value="default">Default (10 mm)</option>
+          <option value="wide">Wide (20 mm)</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <label>Layout width
+        <select id="layoutWidth"></select>
+      </label>
+    </section>
+
+    <section id="custom-margins" class="grid4 hidden" role="group" aria-label="Custom margins in millimetres">
+      <label>Top <input type="number" id="m-top" min="0" max="100" step="1"></label>
+      <label>Right <input type="number" id="m-right" min="0" max="100" step="1"></label>
+      <label>Bottom <input type="number" id="m-bottom" min="0" max="100" step="1"></label>
+      <label>Left <input type="number" id="m-left" min="0" max="100" step="1"></label>
+      <p class="muted span4">Millimetres</p>
+    </section>
+
+    <section id="scale-row" class="range-row">
+      <label for="scale">Scale <span id="scale-value" class="muted">100%</span></label>
+      <input type="range" id="scale" min="10" max="200" step="5">
+    </section>
+
+    <section class="toggles">
+      <label class="toggle"><input type="checkbox" id="printBackground"><span>Print background colours and images</span></label>
+      <label class="toggle"><input type="checkbox" id="mediaScreen"><span>Use screen styles instead of print styles</span></label>
+      <label class="toggle"><input type="checkbox" id="hideFixed"><span>Hide sticky and fixed bars</span></label>
+      <label class="toggle"><input type="checkbox" id="loadLazy"><span>Scroll page to load lazy images</span></label>
+      <label class="toggle"><input type="checkbox" id="outline"><span>Add PDF bookmarks from headings</span></label>
+      <label class="toggle"><input type="checkbox" id="headerFooter"><span>Header and footer</span></label>
+      <div id="hf-options" class="chips hidden" role="group" aria-label="Header and footer contents">
+        <label class="chip"><input type="checkbox" id="hfTitle"><span>Title</span></label>
+        <label class="chip"><input type="checkbox" id="hfDate"><span>Date</span></label>
+        <label class="chip"><input type="checkbox" id="hfUrl"><span>URL</span></label>
+        <label class="chip"><input type="checkbox" id="hfPageNumbers"><span>Page numbers</span></label>
+      </div>
+      <label id="ranges-row" class="inline">Pages to include
+        <input type="text" id="pageRanges" placeholder="All (e.g. 1-3, 5)">
+      </label>
+    </section>
+
+    <section class="tools" aria-labelledby="tools-heading">
+      <h2 id="tools-heading">Page tools</h2>
+      <div class="tool-grid">
+        <button type="button" id="tool-select" class="tool" title="Click any part of the page to save only that element">Select element</button>
+        <button type="button" id="tool-remove" class="tool" title="Click ads, banners or anything else to remove it before saving">Remove elements</button>
+        <button type="button" id="tool-reset" class="tool hidden" title="Undo all removed elements">Reset page (<span id="removed-count">0</span>)</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div id="status" class="status" aria-live="polite"></div>
+    <div class="actions">
+      <button type="button" id="btn-open" class="secondary">Preview</button>
+      <button type="button" id="btn-download" class="primary">Download PDF</button>
+    </div>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

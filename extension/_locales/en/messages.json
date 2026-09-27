@@ -1,0 +1,5 @@
+{
+  "extName": { "message": "PageSnap PDF", "description": "Extension name" },
+  "extDescription": { "message": "Save any web page as a PDF in one click. Keeps styles and clickable links, paged or single-page layout, runs 100% locally with Chrome's own PDF engine.", "description": "Extension description" },
+  "actionTitle": { "message": "PageSnap PDF - save this page as PDF", "description": "Toolbar button tooltip" }
+}

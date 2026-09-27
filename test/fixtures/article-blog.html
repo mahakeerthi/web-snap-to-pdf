@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blog Fixture</title>
+<style>
+  body { margin: 0; font-family: Georgia, serif; }
+  .site-header { background: #222; color: #fff; padding: 12px; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <nav><a href="/">Home</a> <a href="/about">About</a> <a href="/archive">Archive</a></nav>
+</header>
+<main>
+  <!-- WordPress-style markup: the title lives outside .entry-content, comments sit below the article. -->
+  <article class="post" data-expect="article">
+    <header class="entry-header">
+      <h1 class="entry-title">BLOG-TITLE-MARK Notes on building a print pipeline</h1>
+      <p class="byline">By A. Writer · 12 minutes</p>
+    </header>
+    <div class="entry-content" id="entry"></div>
+    <footer class="entry-footer">Tagged <a href="/t/pdf">pdf</a>, <a href="/t/chrome">chrome</a></footer>
+  </article>
+  <section id="comments" class="comments">
+    <h2>COMMENTS-MARK 14 responses</h2>
+    <div id="comment-list"></div>
+  </section>
+</main>
+<footer class="site-footer">SITE-FOOTER-MARK</footer>
+<script>
+  const para = 'Printing the web faithfully means dealing with sticky headers, lazy images and inner scroll panes, and every one of them has a slightly different failure mode. ';
+  let body = '';
+  for (let i = 0; i < 8; i++) body += '<p>' + para.repeat(3) + '</p>';
+  document.getElementById('entry').innerHTML = body;
+  let comments = '';
+  for (let i = 0; i < 14; i++) {
+    comments += '<article class="comment"><p class="who">Reader ' + i + '</p><p>' +
+      'Great write-up, I ran into exactly the same issue with a sticky table header on our docs site last month. ' .repeat(2) +
+      '</p></article>';
+  }
+  document.getElementById('comment-list').innerHTML = comments;
+</script>
+</body>
+</html>

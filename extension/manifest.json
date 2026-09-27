@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "PageSnap PDF",
+  "version": "1.0.0",
+  "description": "Save any web page as a PDF in one click. Keeps styles and clickable links, paged or single-page layout, runs 100% locally with Chrome's own PDF engine.",
+  "minimum_chrome_version": "128",
+  "permissions": [
+    "debugger",
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "contextMenus"
+  ],
+  "action": {
+    "default_title": "PageSnap PDF - save this page as PDF",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": false
+  },
+  "commands": {
+    "save-pdf": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Save the current page as PDF with your saved settings"
+    },
+    "save-article": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "Save only the main article of the current page as PDF"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

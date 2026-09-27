@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Docs Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  main { display: grid; grid-template-columns: 240px 1fr 200px; gap: 16px; }
+  nav.sidebar { font-size: 13px; }
+  aside.toc { font-size: 12px; }
+  pre { background: #f4f4f4; padding: 8px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="topbar">DOCS-TOPBAR <a href="/">Docs</a> <a href="/api">API</a></div>
+<main>
+  <nav class="sidebar" id="sidebar"></nav>
+  <article data-expect="article">
+    <h1>DOCS-TITLE-MARK Configuring the print engine</h1>
+    <div id="docbody"></div>
+  </article>
+  <aside class="toc"><p>On this page</p><ul id="toc"></ul></aside>
+</main>
+<script>
+  // Sidebar: many links, section headings as plain list text (non-link text).
+  let nav = '';
+  for (let s = 0; s < 8; s++) {
+    nav += '<ul><li>Section heading number ' + s + ' of the guide<ul>';
+    for (let i = 0; i < 12; i++) nav += '<li><a href="/p' + s + '-' + i + '">Page ' + s + '.' + i + ' about some configuration topic</a></li>';
+    nav += '</ul></li></ul>';
+  }
+  document.getElementById('sidebar').innerHTML = nav;
+  let doc = '';
+  for (let i = 0; i < 6; i++) {
+    doc += '<h2 id="s' + i + '">Step ' + i + '</h2>';
+    doc += '<p>Use the <code>printToPDF</code> command with the options below; margins are in inches and the scale is clamped between 0.1 and 2. ' +
+      'See the <a href="/api#print">API reference</a> for details.</p>';
+    doc += '<pre>const { data } = await send("Page.printToPDF", { paperWidth: 8.27, paperHeight: 11.69, scale: 1 });</pre>';
+  }
+  document.getElementById('docbody').innerHTML = doc;
+  let toc = '';
+  for (let i = 0; i < 6; i++) toc += '<li><a href="#s' + i + '">Step ' + i + '</a></li>';
+  document.getElementById('toc').innerHTML = toc;
+</script>
+</body>
+</html>

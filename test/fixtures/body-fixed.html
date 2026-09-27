@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll-locked Body Fixture</title>
+<style>
+  /* Scroll lock used by modal libraries and some app shells: the body itself is the scroller. */
+  body { position: fixed; top: 0; right: 0; bottom: 0; left: 0; overflow-y: auto; margin: 0; font-family: sans-serif; }
+  p { margin: 12px 16px; }
+</style>
+</head>
+<body>
+<h1>BODY-LOCK-MARK</h1>
+<div id="paras"></div>
+<p id="end">BODY-END-MARK</p>
+<script>
+  let h = '';
+  for (let i = 0; i < 120; i++) h += '<p>Paragraph ' + i + ' of a page whose body is position: fixed with its own scrollbar.</p>';
+  document.getElementById('paras').innerHTML = h;
+</script>
+</body>
+</html>

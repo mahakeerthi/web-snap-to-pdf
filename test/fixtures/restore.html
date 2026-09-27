@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Restore Fixture</title>
+<style>
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: sans-serif; }
+  #fixedbar { position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #333; }
+  #sticky { top: 40px; background: #ffd; padding: 8px; }
+  #inner { height: 200px; overflow-y: auto; border: 1px solid #999; }
+  #inner p { margin: 0; height: 40px; }
+  .spacer { height: 1200px; background: linear-gradient(#fff, #ddd); }
+</style>
+</head>
+<body>
+<div id="fixedbar" style="color: rgb(255, 255, 255) !important;">FIXED-BAR-MARK</div>
+<div id="sticky" style="position: sticky;">STICKY-MARK</div>
+<div class="spacer"></div>
+<div id="inner" style="max-height: 180px !important; overflow-y: auto;"></div>
+<p>
+  <img id="lazy1" loading="lazy" width="50" height="50" alt=""
+       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+  <img id="lazy2" loading="lazy" width="50" height="50" alt=""
+       data-src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+</p>
+<div class="spacer"></div>
+<script>
+  const inner = document.getElementById('inner');
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('p');
+    p.textContent = 'INNER-LINE-' + i;
+    inner.appendChild(p);
+  }
+</script>
+</body>
+</html>

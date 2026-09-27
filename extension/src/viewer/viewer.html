@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PDF preview – PageSnap PDF</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <header>
+    <img src="../../icons/icon32.png" alt="" width="22" height="22">
+    <div class="meta">
+      <span id="filename" class="name">Loading preview…</span>
+      <span id="size" class="muted"></span>
+    </div>
+    <div class="actions">
+      <button type="button" id="btn-download" class="primary" disabled>Download</button>
+      <button type="button" id="btn-close">Close</button>
+    </div>
+  </header>
+  <div id="message" class="message hidden" role="status"></div>
+  <iframe id="frame" title="PDF preview"></iframe>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

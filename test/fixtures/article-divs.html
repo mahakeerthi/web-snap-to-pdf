@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Div Soup Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .wrap { display: flex; gap: 16px; }
+  .post { flex: 1; }
+  .side { width: 240px; }
+  pre { background: #f4f4f4; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!-- No semantic elements at all. A tiny ".content" widget in the sidebar is the only
+     selector-based candidate, which must not prevent the generic fallback. -->
+<div id="page">
+  <div class="hd">DIVS-HEADER <a href="/">Home</a> <a href="/blog">Blog</a> <a href="/contact">Contact</a></div>
+  <div class="wrap">
+    <div class="post" data-expect="article">
+      <h1>DIVS-TITLE-MARK A post made only of divs</h1>
+      <p>Intro paragraph one explaining what the snippet below does and why you might want it.</p>
+      <p>Intro paragraph two with a little more context before the long listing starts.</p>
+      <div class="code-wrap"><pre id="listing"></pre></div>
+      <p>Closing paragraph DIVS-OUTRO-MARK.</p>
+    </div>
+    <div class="side">
+      <div class="content">Newsletter: get one short email a month.</div>
+      <div class="links"></div>
+    </div>
+  </div>
+  <div class="comments"><div class="c-title">DIVS-COMMENTS-MARK</div><div id="clist"></div></div>
+</div>
+<script>
+  let code = '';
+  for (let i = 0; i < 60; i++) code += 'function step' + i + '(input) { return transform(input, { index: ' + i + ', strict: true }); }\n';
+  document.getElementById('listing').textContent = code;
+  let links = '';
+  for (let i = 0; i < 25; i++) links += '<div><a href="/p' + i + '">Popular post number ' + i + '</a></div>';
+  document.querySelector('.side .links').innerHTML = links;
+  let c = '';
+  for (let i = 0; i < 10; i++) c += '<div class="c"><p>Comment ' + i + ': thanks, this saved me an afternoon of debugging the same problem.</p></div>';
+  document.getElementById('clist').innerHTML = c;
+</script>
+</body>
+</html>

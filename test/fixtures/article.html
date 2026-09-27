@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture Article: The Long Read</title>
+<style>
+  body { margin: 0; font-family: Georgia, serif; }
+  header.fixed { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #222; color: #fff; padding: 12px; }
+  .layout { display: grid; grid-template-columns: 1fr 260px; gap: 24px; padding: 72px 24px 24px; }
+  aside { position: sticky; top: 60px; align-self: start; background: #eef; padding: 12px; }
+  article p { line-height: 1.5; }
+  footer { background: #ddd; padding: 16px; }
+  .screen-only { display: block; }
+  .print-only { display: none; }
+  @media print {
+    .screen-only { display: none; }
+    .print-only { display: block; }
+  }
+  img.lazy { display: block; width: 300px; height: 120px; background: #ccc; margin: 12px 0; }
+</style>
+</head>
+<body>
+<header class="fixed">FIXED-HEADER-MARK site navigation</header>
+<div class="layout">
+  <article id="story">
+    <h1>ARTICLE-MARK The Long Read</h1>
+    <p class="screen-only">SCREEN-ONLY-MARK this paragraph only shows on screen.</p>
+    <p class="print-only">PRINT-ONLY-MARK this paragraph only shows in print.</p>
+    <p>Visit <a href="https://example.com/link-target">the example link</a> for more.</p>
+    <div id="body"></div>
+  </article>
+  <aside id="sidebar">
+    <h3>SIDEBAR-MARK Related</h3>
+    <ul><li><a href="#">Nav one</a></li><li><a href="#">Nav two</a></li></ul>
+  </aside>
+</div>
+<footer>FOOTER-MARK © fixture</footer>
+<script>
+  // Build a long article with headings and lazily-loaded images.
+  const body = document.getElementById('body');
+  const words = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua'.split(' ');
+  let html = '';
+  for (let s = 1; s <= 12; s++) {
+    html += `<h2>Section ${s}</h2>`;
+    for (let p = 0; p < 6; p++) {
+      let para = '';
+      for (let w = 0; w < 60; w++) para += words[(s * 7 + p * 3 + w) % words.length] + ' ';
+      html += `<p>${para}</p>`;
+    }
+    html += `<img class="lazy" loading="lazy" data-index="${s}" alt="lazy ${s}">`;
+  }
+  body.innerHTML = html;
+
+  // Simulate a JS lazy loader: images get a real src only when scrolled into view.
+  window.__lazyLoaded = 0;
+  window.__lazyTotal = document.querySelectorAll('img.lazy').length;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting || e.target.dataset.done) continue;
+      e.target.dataset.done = '1';
+      const c = document.createElement('canvas'); c.width = 300; c.height = 120;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#4a90d9'; ctx.fillRect(0, 0, 300, 120);
+      ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif'; ctx.fillText('image ' + e.target.dataset.index, 20, 70);
+      e.target.src = c.toDataURL('image/png');
+      window.__lazyLoaded++;
+      io.unobserve(e.target);
+    }
+  }, { rootMargin: '0px' });
+  document.querySelectorAll('img.lazy').forEach((img) => io.observe(img));
+</script>
+</body>
+</html>

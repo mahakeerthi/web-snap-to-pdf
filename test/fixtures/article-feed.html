@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Story With Feed Fixture</title>
+<style>body { margin: 0; font-family: sans-serif; } main, .feed { max-width: 760px; margin: 0 auto; }</style>
+</head>
+<body>
+<!-- A news story followed by a much longer, unlabeled "more stories" feed outside <main>. -->
+<main>
+  <article data-expect="article">
+    <h1>FEED-STORY-MARK The story itself</h1>
+    <div id="story"></div>
+  </article>
+</main>
+<div class="feed" id="feed"></div>
+<script>
+  let s = '';
+  for (let i = 0; i < 6; i++) s += '<p>The story paragraph ' + i + ' explains the news in a couple of sentences, with enough words to be a real paragraph of prose.</p>';
+  document.getElementById('story').innerHTML = s;
+  let f = '';
+  for (let i = 0; i < 24; i++) f += '<div class="card"><h3>More story ' + i + '</h3><p>FEED-CARD-MARK teaser text for another story that is long enough to look like a paragraph of real prose.</p></div>';
+  document.getElementById('feed').innerHTML = f;
+</script>
+</body>
+</html>
