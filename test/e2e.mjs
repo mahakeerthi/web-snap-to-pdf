@@ -31,15 +31,15 @@ const base = `http://127.0.0.1:${server.address().port}`;
 // The shipped extension relies on activeTab (granted by a real user click), which automation
 // cannot trigger. Test against a copy whose manifest additionally has host permission for the
 // local fixture server only.
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-ext-'));
+const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-ext-'));
 fs.cpSync(extDir, testExtDir, { recursive: true });
 const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
 manifest.host_permissions = [`${base}/*`];
 fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-'));
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-'));
 // Downloads go to a fresh temp dir via Chrome's own profile prefs (never ~/Downloads).
-const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-dl-'));
+const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-dl-'));
 fs.mkdirSync(path.join(userDataDir, 'Default'), { recursive: true });
 fs.writeFileSync(
   path.join(userDataDir, 'Default', 'Preferences'),
@@ -105,7 +105,7 @@ async function openTab(url) {
   return { page, tabId };
 }
 async function generate(opts) {
-  const res = await sw.evaluate((o) => globalThis.__pagesnap.generate(o), { output: 'return', ...opts });
+  const res = await sw.evaluate((o) => globalThis.__websnap.generate(o), { output: 'return', ...opts });
   if (!res || !res.base64) throw new Error('no pdf returned');
   return Buffer.from(res.base64, 'base64');
 }
@@ -263,17 +263,17 @@ await test('article mode isolates the main content and restores the page', async
 
 await test('remove-elements picker hides clicked element; reset restores it', async () => {
   const { page, tabId } = await openTab(articleUrl);
-  const started = await sw.evaluate((id) => globalThis.__pagesnap.startPicker(id, 'remove'), tabId);
+  const started = await sw.evaluate((id) => globalThis.__websnap.startPicker(id, 'remove'), tabId);
   check(started && started.ok, 'picker started through the background (content script injected)');
   const box = await page.locator('#sidebar h3').boundingBox();
   await page.mouse.move(box.x + 5, box.y + 5);
   await page.mouse.click(box.x + 5, box.y + 5);
-  const st = await sw.evaluate((id) => globalThis.__pagesnap.pageState(id), tabId);
+  const st = await sw.evaluate((id) => globalThis.__websnap.pageState(id), tabId);
   check(st.removed === 1, `one element removed (${st.removed})`);
   await page.keyboard.press('Escape');
   const text = pdfText(savePdf('removed.pdf', await generate({ tabId, settings: { loadLazy: false } })));
   check(!text.includes('SIDEBAR-MARK'), 'removed element absent from PDF');
-  await sw.evaluate((id) => globalThis.__pagesnap.resetPage(id), tabId);
+  await sw.evaluate((id) => globalThis.__websnap.resetPage(id), tabId);
   const vis = await page.evaluate(() => getComputedStyle(document.querySelector('#sidebar h3')).display);
   check(vis !== 'none', 'reset restores removed element');
   await page.close();
@@ -281,7 +281,7 @@ await test('remove-elements picker hides clicked element; reset restores it', as
 
 await test('select-element picker opens a preview; Download (PDF) saves just that element', async () => {
   const { page, tabId } = await openTab(articleUrl);
-  const started = await sw.evaluate((id) => globalThis.__pagesnap.startPicker(id, 'print'), tabId);
+  const started = await sw.evaluate((id) => globalThis.__websnap.startPicker(id, 'print'), tabId);
   check(started && started.ok, 'picker started through the background (content script injected)');
   const box = await page.locator('#sidebar').boundingBox();
   await page.mouse.move(box.x + 10, box.y + 10);
@@ -289,7 +289,7 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
   // The click opens the in-page preview modal (shadow DOM) instead of downloading right away.
   const modal = () =>
     page.evaluate(() => {
-      const host = document.querySelector('[data-pagesnap-ui="preview"]');
+      const host = document.querySelector('[data-websnap-ui="preview"]');
       if (!host) return null;
       const sr = host.shadowRoot;
       const canvas = sr.querySelector('.stage canvas');
@@ -331,7 +331,7 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
 
 await test('large PDF downloads through the data URL path', async () => {
   const { page, tabId } = await openTab(`${base}/big.html`);
-  const res = await sw.evaluate((o) => globalThis.__pagesnap.generate(o), {
+  const res = await sw.evaluate((o) => globalThis.__websnap.generate(o), {
     tabId,
     output: 'download',
     settings: { filenameTemplate: '{title}-{date}', loadLazy: false },
@@ -354,7 +354,7 @@ await test('restricted pages are rejected with a friendly error', async () => {
   );
   let error = '';
   try {
-    await sw.evaluate((o) => globalThis.__pagesnap.generate(o), { tabId, output: 'return' });
+    await sw.evaluate((o) => globalThis.__websnap.generate(o), { tabId, output: 'return' });
   } catch (err) {
     error = String(err.message || err);
   }

@@ -1,4 +1,4 @@
-# Chrome Web Store listing — PageSnap PDF 1.1.0
+# Chrome Web Store listing — Web Snap PDF 1.1.0
 
 Exact text to paste into the Developer Dashboard. The dashboard fields are plain text: copy the
 contents of each `text` block, not the Markdown around it. Checklist and background:
@@ -9,7 +9,7 @@ contents of each `text` block, not the Markdown around it. Checklist and backgro
 **Name** (from the manifest, `__MSG_extName__`):
 
 ```text
-PageSnap PDF
+Web Snap PDF
 ```
 
 **Summary** (from the manifest, `__MSG_extDescription__` in `extension/_locales/en/messages.json`;
@@ -24,7 +24,7 @@ Save any web page as a PDF in one click. Keeps styles and links, paged or single
 **Description:**
 
 ```text
-PageSnap PDF turns the page you are reading into a clean PDF with Chrome's built-in print engine. Text stays selectable, links stay clickable, and nothing is uploaded anywhere.
+Web Snap PDF turns the page you are reading into a clean PDF with Chrome's built-in print engine. Text stays selectable, links stay clickable, and nothing is uploaded anywhere.
 
 Three ways to save
 • Full page – the whole page, top to bottom
@@ -49,7 +49,7 @@ Private by design
 No account, no uploads, no tracking, no ads. Pages are converted on your device and the files go straight to your Downloads folder. Free, with no paid tier.
 
 Good to know
-While a PDF is generated or an element is captured, Chrome shows "PageSnap PDF started debugging this browser". That is how Chrome lets extensions use its PDF and screenshot engine; the bar disappears as soon as the file is ready. Chrome does not allow extensions on its own pages (chrome://) or on the Chrome Web Store.
+While a PDF is generated or an element is captured, Chrome shows "Web Snap PDF started debugging this browser". That is how Chrome lets extensions use its PDF and screenshot engine; the bar disappears as soon as the file is ready. Chrome does not allow extensions on its own pages (chrome://) or on the Chrome Web Store.
 ```
 
 **Category:** Tools (alternative: Workflow & Planning / Productivity, depending on the dashboard's
@@ -62,7 +62,7 @@ current category list).
 **Single purpose description:**
 
 ```text
-PageSnap PDF saves the web page in the current tab, or a part of it that the user selects, as a file on the user's device: a PDF, or a PNG/JPEG image of a selected element (and, only if the user turns on the experimental option, a Markdown text file). All conversion happens locally with Chrome's own rendering engine.
+Web Snap PDF saves the web page in the current tab, or a part of it that the user selects, as a file on the user's device: a PDF, or a PNG/JPEG image of a selected element (and, only if the user turns on the experimental option, a Markdown text file). All conversion happens locally with Chrome's own rendering engine.
 ```
 
 **Permission justifications:**
@@ -119,7 +119,7 @@ creditworthiness or lending).
 repository and paste the URL):
 
 ```text
-PageSnap PDF does not collect, transmit or sell any data. Web pages are converted to PDF, image or Markdown files locally in your browser using Chrome's built-in engine, and the files are saved only to your device. Your settings are stored with Chrome's extension storage (synced by Chrome if you use Chrome Sync). The extension makes no network requests and contains no analytics or remote code.
+Web Snap PDF does not collect, transmit or sell any data. Web pages are converted to PDF, image or Markdown files locally in your browser using Chrome's built-in engine, and the files are saved only to your device. Your settings are stored with Chrome's extension storage (synced by Chrome if you use Chrome Sync). The extension makes no network requests and contains no analytics or remote code.
 ```
 
 ## Graphic assets

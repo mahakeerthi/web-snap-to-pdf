@@ -1,11 +1,11 @@
-# PageSnap PDF
+# Web Snap PDF
 
 A Chrome extension (Manifest V3) that saves the current web page as a PDF in one click. It uses
 Chrome's own print engine (`Page.printToPDF` through `chrome.debugger`), so styles and clickable
 links are kept and nothing ever leaves your machine. A single element can also be saved as a PNG or
 JPEG image, and pages can optionally be exported as Markdown (experimental).
 
-PageSnap PDF is an independent, from-scratch implementation of the feature set of the "Web to PDF"
+Web Snap PDF is an independent, from-scratch implementation of the feature set of the "Web to PDF"
 extension. It shares no code or branding with it, and everything is free: there is no account,
 licence key or paid tier. MIT licensed (see [LICENSE](LICENSE)).
 
@@ -51,7 +51,7 @@ only the features listed below; it is not a full audit of the original.
 | HTML file to PDF                                 | Not included         | Converts open tabs only (see Limitations for `file://`)                           |
 | Paid tier                                        | Not included         |                                                                                   |
 
-### PageSnap-specific details
+### Web Snap-specific details
 
 - The popup's summary line always shows the settings that will actually be used (including margins
   raised for the header/footer), so nothing hidden under Export settings changes a PDF silently.
@@ -83,7 +83,7 @@ Popup and options shots come from `npm run test:ui` (`test/out/ui/`); the previe
 2. Open `chrome://extensions` and switch on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the `extension/` folder (the one that contains `manifest.json`),
    not the repository root.
-4. Pin PageSnap PDF from the puzzle-piece menu so the toolbar button is visible.
+4. Pin Web Snap PDF from the puzzle-piece menu so the toolbar button is visible.
 
 After pulling changes, click the reload icon on the extension's card and reload any tab you want to
 convert.
@@ -211,7 +211,7 @@ the service worker downloads the text. Details: [docs/ARCHITECTURE.md](docs/ARCH
 ### The "started debugging this browser" bar
 
 While a PDF is generated, and while an element is captured for the preview or as an image, Chrome
-shows a bar saying _PageSnap PDF started debugging this browser_. Chrome shows it whenever any
+shows a bar saying _Web Snap PDF started debugging this browser_. Chrome shows it whenever any
 extension attaches `chrome.debugger`, and an extension cannot hide it. `chrome.debugger` is the
 only extension API that reaches Chrome's `Page.printToPDF` and full-element screenshots. The
 debugger is attached for one export only and detached right after, so the bar goes away. Clicking
@@ -277,14 +277,14 @@ npm run check:locales          # every locale has the English keys and placehold
 npm run lint                   # ESLint
 npm run format                 # Prettier (--write); format:check only checks
 npm run check                  # lint + format:check + check:locales (what CI runs first)
-npm run package                # dist/pagesnap-pdf-<version>.zip for the Web Store
+npm run package                # dist/web-snap-pdf-<version>.zip for the Web Store
 HEADED=1 npm test              # watch it in a real window
 npm run build:icons            # rasterise extension/icons/icon.svg to 16/32/48/128 px PNGs
 node scripts/screenshot-preview.mjs   # docs/images/preview-modal-{light,dark}.png
 ```
 
 The e2e suites serve `test/fixtures/` on a local port, load the extension into Chromium and call
-the service worker's test hook (`globalThis.__pagesnap`), then check the output (poppler for PDFs,
+the service worker's test hook (`globalThis.__websnap`), then check the output (poppler for PDFs,
 a small PNG decoder for images). Automation cannot grant `activeTab`, so the harness copies
 `extension/` to a temp dir and adds a `host_permissions` entry for the local fixture server only;
 the shipped manifest is unchanged. CI (`.github/workflows/ci.yml`, Ubuntu) runs `npm run check` and
@@ -317,7 +317,7 @@ docs/                      ARCHITECTURE.md, RELEASE.md, store/listing.md, images
 | "This page cannot be converted…"                                      | Browser page, Web Store or another extension. Nothing to do.                        |
 | "Another tool (usually DevTools) is attached to this tab"             | Close DevTools on that tab and try again.                                           |
 | "Could not reach the page content. Reload the page and try again."    | The tab was open before the extension was installed or reloaded. Reload the tab.    |
-| "Chrome does not allow extensions to access this page." on `file://`  | Enable "Allow access to file URLs" for PageSnap PDF in `chrome://extensions`.       |
+| "Chrome does not allow extensions to access this page." on `file://`  | Enable "Allow access to file URLs" for Web Snap PDF in `chrome://extensions`.       |
 | "PDF generation was cancelled."                                       | The debugger bar's Cancel was clicked, or the tab navigated/closed mid-run.         |
 | "A PDF is already being generated…" / "An export is already running…" | Wait for the current export to finish.                                              |
 | "Could not detect an article on this page."                           | Use Select element instead.                                                         |

@@ -13,7 +13,7 @@ const extDir = path.join(root, 'extension');
 const outDir = path.join(root, 'test/out/ui');
 fs.mkdirSync(outDir, { recursive: true });
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-ui-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-ui-'));
 const context = await chromium.launchPersistentContext(tmpDir, {
   headless: true,
   channel: 'chromium',

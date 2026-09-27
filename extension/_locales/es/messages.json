@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "PageSnap PDF",
+    "message": "Web Snap PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "PageSnap PDF - guardar esta página como PDF",
+    "message": "Web Snap PDF - guardar esta página como PDF",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -512,7 +512,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "Configuración de PageSnap PDF",
+    "message": "Configuración de Web Snap PDF",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -600,11 +600,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "PageSnap PDF genera las páginas con el motor de impresión integrado de Chrome, todo en tu dispositivo. No se sube nada a ningún sitio.",
+    "message": "Web Snap PDF genera las páginas con el motor de impresión integrado de Chrome, todo en tu dispositivo. No se sube nada a ningún sitio.",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "Mientras se genera un PDF, Chrome muestra la barra “PageSnap PDF ha empezado a depurar este navegador”. Es la forma en que Chrome ofrece su motor de PDF a las extensiones; desaparece en cuanto el PDF está listo.",
+    "message": "Mientras se genera un PDF, Chrome muestra la barra “Web Snap PDF ha empezado a depurar este navegador”. Es la forma en que Chrome ofrece su motor de PDF a las extensiones; desaparece en cuanto el PDF está listo.",
     "description": "About text"
   },
   "options_reset": {

@@ -1,6 +1,6 @@
-# Contributing to PageSnap PDF
+# Contributing to Web Snap PDF
 
-Thanks for helping out. PageSnap PDF is a Chrome (Manifest V3) extension with no build step: the
+Thanks for helping out. Web Snap PDF is a Chrome (Manifest V3) extension with no build step: the
 `extension/` folder is loaded as-is, and everything else in the repository is tooling and tests.
 
 ## Setup
@@ -29,7 +29,7 @@ npm run test:content   # content-script checks: prepare/restore, pickers, previe
 npm run test:ui        # renders popup/options/viewer light + dark into test/out/ui/, fails on errors
 npm run test:all       # all three test suites in sequence
 HEADED=1 npm test      # watch a run in a real browser window
-npm run package        # zip extension/ into dist/pagesnap-pdf-<version>.zip for the Web Store
+npm run package        # zip extension/ into dist/web-snap-pdf-<version>.zip for the Web Store
 ```
 
 CI (`.github/workflows/ci.yml`) runs `npm run check` and all three test suites on every push and

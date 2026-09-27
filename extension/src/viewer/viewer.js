@@ -20,7 +20,7 @@ async function main() {
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
 
-  document.title = `${filename} – PageSnap PDF`;
+  document.title = `${filename} – Web Snap PDF`;
   $('filename').textContent = filename;
   $('size').textContent = formatBytes(bytes.length);
   $('frame').src = url;

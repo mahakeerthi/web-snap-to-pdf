@@ -47,15 +47,15 @@ Run every command from the project root. The exact text to paste into the dashbo
 npm run package
 ```
 
-builds `dist/pagesnap-pdf-<version>.zip` (git-ignored; fails if `package.json` and the manifest
+builds `dist/web-snap-pdf-<version>.zip` (git-ignored; fails if `package.json` and the manifest
 disagree on the version). The zip must contain the **contents** of `extension/`,
 with `manifest.json` at the zip root. Manual equivalent, and the check to run either way:
 
 ```sh
 VERSION=$(node -p "require('./extension/manifest.json').version")
 mkdir -p dist
-(cd extension && zip -r -X "../dist/pagesnap-pdf-$VERSION.zip" . -x '*.DS_Store')
-unzip -l "dist/pagesnap-pdf-$VERSION.zip" | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
+(cd extension && zip -r -X "../dist/web-snap-pdf-$VERSION.zip" . -x '*.DS_Store')
+unzip -l "dist/web-snap-pdf-$VERSION.zip" | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
 ```
 
 - [ ] Nothing outside `extension/` is in the zip (no `node_modules/`, `test/`, `scripts/`, `docs/`).
@@ -65,7 +65,7 @@ unzip -l "dist/pagesnap-pdf-$VERSION.zip" | grep -E ' manifest\.json$'   # must 
 
 Paste from [store/listing.md](store/listing.md):
 
-- **Name:** PageSnap PDF.
+- **Name:** Web Snap PDF.
 - **Summary:** comes from the manifest description (`extDescription` in
   `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
   the summary for other store languages automatically.
@@ -128,13 +128,13 @@ downloads through `downloads`).
 
 ## 6. Branding
 
-- [ ] Name, icon, screenshots, promo tiles and description are PageSnap PDF's own. Do not use the
+- [ ] Name, icon, screenshots, promo tiles and description are Web Snap PDF's own. Do not use the
       name "Web to PDF", the webtopdf.space domain, or the original extension's logo, colours,
-      screenshots or listing text, and do not describe PageSnap as affiliated with it. Copying
+      screenshots or listing text, and do not describe Web Snap as affiliated with it. Copying
       another listing's branding risks rejection or takedown for impersonation.
 
 ## 7. Submit
 
-- [ ] Upload `dist/pagesnap-pdf-<version>.zip` in the Developer Dashboard (new item or Package → Upload new package).
+- [ ] Upload `dist/web-snap-pdf-<version>.zip` in the Developer Dashboard (new item or Package → Upload new package).
 - [ ] Fill in listing, privacy practices and distribution (visibility, regions).
 - [ ] Submit for review; after approval, install from the store in a clean profile and repeat the smoke test.

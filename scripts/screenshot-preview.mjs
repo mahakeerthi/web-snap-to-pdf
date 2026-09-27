@@ -35,13 +35,13 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 // Automation cannot grant activeTab, so use a copy of the extension with host permission for the
 // local fixture server only (the shipped manifest is unchanged).
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-shot-ext-'));
+const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-shot-ext-'));
 fs.cpSync(extDir, testExtDir, { recursive: true });
 const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
 manifest.host_permissions = [`${base}/*`];
 fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-shot-'));
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-shot-'));
 const context = await chromium.launchPersistentContext(userDataDir, {
   headless: true,
   channel: 'chromium',
@@ -79,7 +79,7 @@ try {
       (s) => document.querySelector(s).scrollIntoView({ block: 'center', behavior: 'instant' }),
       TARGET,
     );
-    const started = await sw.evaluate((id) => globalThis.__pagesnap.startPicker(id, 'print'), tabId);
+    const started = await sw.evaluate((id) => globalThis.__websnap.startPicker(id, 'print'), tabId);
     if (!started || !started.ok) throw new Error('picker did not start: ' + JSON.stringify(started));
 
     const r = await page.evaluate((s) => {
@@ -96,7 +96,7 @@ try {
     for (let i = 0; i < 150 && !ready; i++) {
       await page.waitForTimeout(100);
       ready = await page.evaluate(() => {
-        const host = document.querySelector('[data-pagesnap-ui="preview"]');
+        const host = document.querySelector('[data-websnap-ui="preview"]');
         const canvas = host && host.shadowRoot.querySelector('.stage canvas');
         return !!(canvas && canvas.dataset.ready);
       });

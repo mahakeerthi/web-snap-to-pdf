@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "PageSnap PDF",
+    "message": "Web Snap PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "PageSnap PDF - 将此页面保存为 PDF",
+    "message": "Web Snap PDF - 将此页面保存为 PDF",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -512,7 +512,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "PageSnap PDF 设置",
+    "message": "Web Snap PDF 设置",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -600,11 +600,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "PageSnap PDF 使用 Chrome 内置的打印引擎渲染页面，全程在你的设备上完成，不会上传任何内容。",
+    "message": "Web Snap PDF 使用 Chrome 内置的打印引擎渲染页面，全程在你的设备上完成，不会上传任何内容。",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "生成 PDF 期间，Chrome 会显示“PageSnap PDF 已开始调试此浏览器”提示栏。这是 Chrome 向扩展程序开放其 PDF 引擎的方式；PDF 生成完毕后提示栏会立即消失。",
+    "message": "生成 PDF 期间，Chrome 会显示“Web Snap PDF 已开始调试此浏览器”提示栏。这是 Chrome 向扩展程序开放其 PDF 引擎的方式；PDF 生成完毕后提示栏会立即消失。",
     "description": "About text"
   },
   "options_reset": {

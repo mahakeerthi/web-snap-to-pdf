@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "PageSnap PDF",
+    "message": "Web Snap PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "PageSnap PDF - このページを PDF で保存",
+    "message": "Web Snap PDF - このページを PDF で保存",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -512,7 +512,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "PageSnap PDF の設定",
+    "message": "Web Snap PDF の設定",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -600,11 +600,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "PageSnap PDF は Chrome 内蔵の印刷エンジンでページを出力し、処理はすべてお使いのデバイス上で行います。どこにも何もアップロードされません。",
+    "message": "Web Snap PDF は Chrome 内蔵の印刷エンジンでページを出力し、処理はすべてお使いのデバイス上で行います。どこにも何もアップロードされません。",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "PDF の生成中、Chrome には「PageSnap PDF がこのブラウザのデバッグを開始しました」というバーが表示されます。これは Chrome が拡張機能に PDF エンジンを提供する仕組みによるもので、PDF が完成するとすぐに消えます。",
+    "message": "PDF の生成中、Chrome には「Web Snap PDF がこのブラウザのデバッグを開始しました」というバーが表示されます。これは Chrome が拡張機能に PDF エンジンを提供する仕組みによるもので、PDF が完成するとすぐに消えます。",
     "description": "About text"
   },
   "options_reset": {

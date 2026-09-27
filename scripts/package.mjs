@@ -1,4 +1,4 @@
-// Zips extension/ into dist/pagesnap-pdf-<version>.zip for the Chrome Web Store, with
+// Zips extension/ into dist/web-snap-pdf-<version>.zip for the Chrome Web Store, with
 // manifest.json at the zip root. Uses the `zip` CLI (preinstalled on macOS and ubuntu runners).
 // Run with: npm run package
 import fs from 'node:fs';
@@ -17,7 +17,7 @@ if (pkg.version !== version) {
   process.exit(1);
 }
 
-const zipPath = path.join(distDir, `pagesnap-pdf-${version}.zip`);
+const zipPath = path.join(distDir, `web-snap-pdf-${version}.zip`);
 fs.mkdirSync(distDir, { recursive: true });
 // `zip` updates an existing archive in place and never drops stale entries: start fresh.
 fs.rmSync(zipPath, { force: true });

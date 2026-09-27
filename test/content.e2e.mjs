@@ -35,15 +35,15 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 // --- browser with extension (same setup as test/e2e.mjs) -------------------------------
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-ext-'));
+const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-ext-'));
 fs.cpSync(extDir, testExtDir, { recursive: true });
 const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
 manifest.host_permissions = [`${base}/*`];
 fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-'));
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-'));
 // Downloads go to a fresh temp dir via Chrome's own profile prefs (never ~/Downloads).
-const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pagesnap-dl-'));
+const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-dl-'));
 fs.mkdirSync(path.join(userDataDir, 'Default'), { recursive: true });
 fs.writeFileSync(
   path.join(userDataDir, 'Default', 'Preferences'),
@@ -157,7 +157,7 @@ function snapshotDom() {
   const els = [];
   const walk = (scope) => {
     for (const el of scope.querySelectorAll('*')) {
-      if (el.hasAttribute('data-pagesnap-ui')) continue;
+      if (el.hasAttribute('data-websnap-ui')) continue;
       const style = {};
       for (let i = 0; i < el.style.length; i++) {
         const p = el.style[i];
@@ -168,7 +168,7 @@ function snapshotDom() {
         style: JSON.stringify(style),
         hasStyle: el.hasAttribute('style'),
         loading: el.getAttribute('loading'),
-        marker: el.hasAttribute('data-pagesnap-root'),
+        marker: el.hasAttribute('data-websnap-root'),
         scrollTop: el.scrollTop,
       });
       if (el.shadowRoot) walk(el.shadowRoot);
@@ -209,7 +209,7 @@ function pdfText(buf, name) {
 }
 async function pickerRect(page) {
   return page.evaluate(() => {
-    const host = document.querySelector('[data-pagesnap-ui]');
+    const host = document.querySelector('[data-websnap-ui]');
     if (!host) return null;
     const hl = host.shadowRoot.querySelector('.hl');
     const bar = host.shadowRoot.querySelector('.bar');
@@ -241,7 +241,7 @@ async function pageState(tabId) {
 }
 // Start the picker the way the popup does (through the background, which sends the UI strings).
 async function startPicker(tabId, mode) {
-  return sw.evaluate(({ tabId, mode }) => globalThis.__pagesnap.startPicker(tabId, mode), { tabId, mode });
+  return sw.evaluate(({ tabId, mode }) => globalThis.__websnap.startPicker(tabId, mode), { tabId, mode });
 }
 async function setSettings(partial) {
   await sw.evaluate((p) => chrome.storage.sync.set({ settings: p }), partial);
@@ -259,7 +259,7 @@ async function waitFor(fn, { timeout = 15000, interval = 100, label = 'condition
 // State of the preview modal, read from its (open) shadow root.
 async function previewInfo(page) {
   return page.evaluate(() => {
-    const host = document.querySelector('[data-pagesnap-ui="preview"]');
+    const host = document.querySelector('[data-websnap-ui="preview"]');
     if (!host) return null;
     const sr = host.shadowRoot;
     const q = (s) => sr.querySelector(s);
@@ -291,7 +291,7 @@ async function previewPixel(page, fx, fy) {
   return page.evaluate(
     ({ fx, fy }) => {
       const c = document
-        .querySelector('[data-pagesnap-ui="preview"]')
+        .querySelector('[data-websnap-ui="preview"]')
         .shadowRoot.querySelector('.stage canvas');
       const d = c
         .getContext('2d')
@@ -304,7 +304,7 @@ async function previewPixel(page, fx, fy) {
 async function clickPreview(page, selector) {
   const r = await page.evaluate((s) => {
     const b = document
-      .querySelector('[data-pagesnap-ui="preview"]')
+      .querySelector('[data-websnap-ui="preview"]')
       .shadowRoot.querySelector(s)
       .getBoundingClientRect();
     return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
@@ -339,7 +339,7 @@ async function pickElement(page, tabId, selector, { scroll = true, widenTo = nul
   await wait(50);
   const tag = () =>
     page.evaluate(
-      () => document.querySelector('[data-pagesnap-ui]').shadowRoot.querySelector('.tag').textContent,
+      () => document.querySelector('[data-websnap-ui]').shadowRoot.querySelector('.tag').textContent,
     );
   for (let i = 0; widenTo && i < 8 && !(await tag()).startsWith(widenTo); i++)
     await page.keyboard.press('ArrowUp');
@@ -542,7 +542,7 @@ await test('scroll containers: app shell, code blocks, line-clamp and image crop
   // End to end: the PDF contains the last message of the inner pane.
   await send(tabId, { type: 'ps:restore' });
   const r = await sw.evaluate(
-    (o) => globalThis.__pagesnap.generate(o).catch((e) => ({ error: String(e && e.message) })),
+    (o) => globalThis.__websnap.generate(o).catch((e) => ({ error: String(e && e.message) })),
     { tabId, output: 'return', settings: { loadLazy: false } },
   );
   if (r && r.base64) {
@@ -573,7 +573,7 @@ await test('scroll-locked page: body { position: fixed; overflow: auto } prints 
   );
   await send(tabId, { type: 'ps:restore' });
   const r = await sw.evaluate(
-    (o) => globalThis.__pagesnap.generate(o).catch((e) => ({ error: String(e && e.message) })),
+    (o) => globalThis.__websnap.generate(o).catch((e) => ({ error: String(e && e.message) })),
     { tabId, output: 'return', settings: { loadLazy: false } },
   );
   if (r && r.base64) {
@@ -599,7 +599,7 @@ async function articleCase(
   const res = await send(tabId, { ...PREP_ALL, prep: 'article' });
   check(res.ok, `${label}: article detected`, res.error || '');
   const info = await page.evaluate((expectSel) => {
-    const chosen = document.querySelector('[data-pagesnap-root]');
+    const chosen = document.querySelector('[data-websnap-root]');
     const expected = document.querySelector(expectSel);
     const describe = (el) =>
       el
@@ -755,7 +755,7 @@ await test('picker: Escape stops the picker even if the page swallows Escape in 
   await page.keyboard.press('Escape');
   await wait(100);
   const st = await pageState(tabId);
-  const host = await page.evaluate(() => !!document.querySelector('[data-pagesnap-ui]'));
+  const host = await page.evaluate(() => !!document.querySelector('[data-websnap-ui]'));
   check(!st.pickerActive && !host, 'picker stopped and its UI removed', JSON.stringify({ st, host }));
   await page.close();
 });
@@ -788,7 +788,7 @@ await test('picker: ArrowUp never widens to <body>; clicks on own toolbar are ig
   const before = (await pageState(tabId)).removed;
   const bar = await page.evaluate(() => {
     const b = document
-      .querySelector('[data-pagesnap-ui]')
+      .querySelector('[data-websnap-ui]')
       .shadowRoot.querySelector('.bar span')
       .getBoundingClientRect();
     return { x: b.left + 5, y: b.top + b.height / 2 };
@@ -803,7 +803,7 @@ await test('picker: ArrowUp never widens to <body>; clicks on own toolbar are ig
   );
   const done = await page.evaluate(() => {
     const b = [
-      ...document.querySelector('[data-pagesnap-ui]').shadowRoot.querySelectorAll('.bar button'),
+      ...document.querySelector('[data-websnap-ui]').shadowRoot.querySelectorAll('.bar button'),
     ].find((x) => x.textContent === 'Done');
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -812,7 +812,7 @@ await test('picker: ArrowUp never widens to <body>; clicks on own toolbar are ig
   await page.mouse.click(done.x, done.y);
   await wait(100);
   const afterDone = await pageState(tabId);
-  const hostGone = await page.evaluate(() => !document.querySelector('[data-pagesnap-ui]'));
+  const hostGone = await page.evaluate(() => !document.querySelector('[data-websnap-ui]'));
   check(
     !afterDone.pickerActive && hostGone && afterDone.removed === before,
     'toolbar "Done" button still works (stops the picker, keeps removals)',
@@ -916,7 +916,7 @@ await test('shadow DOM: "select element" isolation crosses the shadow boundary',
   const st = await page.evaluate(() => {
     const sr = document.getElementById('card').shadowRoot;
     return {
-      picked: sr.getElementById('inner').hasAttribute('data-pagesnap-root'),
+      picked: sr.getElementById('inner').hasAttribute('data-websnap-root'),
       outside: getComputedStyle(document.getElementById('outside')).display,
       target: getComputedStyle(document.getElementById('target')).display,
       other: getComputedStyle(sr.getElementById('shadow-other')).display,
@@ -956,7 +956,7 @@ await test('shadow DOM: isolating a slotted element hides the component chrome a
   const st = await page.evaluate(() => {
     const sr = document.getElementById('layout').shadowRoot;
     return {
-      picked: document.getElementById('slotted').hasAttribute('data-pagesnap-root'),
+      picked: document.getElementById('slotted').hasAttribute('data-websnap-root'),
       chrome: getComputedStyle(sr.getElementById('chrome')).display,
       outside: getComputedStyle(document.getElementById('outside')).display,
       slotted: document.getElementById('slotted').getBoundingClientRect().height,
@@ -1077,7 +1077,7 @@ await test('preview: picker click opens the modal with a preview of just that el
   await page.keyboard.press('Escape');
   await wait(100);
   const after = await pageState(tabId);
-  const host = await page.evaluate(() => !!document.querySelector('[data-pagesnap-ui]'));
+  const host = await page.evaluate(() => !!document.querySelector('[data-websnap-ui]'));
   check(!after.previewOpen && !host, 'Esc closes the modal');
   await expectRestored(page, before, 'page unchanged after closing the modal');
   check(errors.length === 0, 'no page errors', errors.join(' | '));
@@ -1107,7 +1107,7 @@ await test('preview: Download PNG saves the element at settings.imageScale; JPEG
   check(closed, 'modal closes after a successful download');
 
   // JPEG through the same background export.
-  const res = await sw.evaluate((id) => globalThis.__pagesnap.exportElementImage(id, 'jpeg'), tabId);
+  const res = await sw.evaluate((id) => globalThis.__websnap.exportElementImage(id, 'jpeg'), tabId);
   const jpg = await waitForDownload((i) => /\.jpg$/.test(i.filename));
   const head = fs.readFileSync(jpg.filename).subarray(0, 3);
   check(
@@ -1181,7 +1181,7 @@ await test('capture: tall element (3× viewport) is captured in full', async () 
   for (const imageScale of [1, 2]) {
     await setSettings({ imageScale });
     const res = await sw.evaluate(
-      (id) => globalThis.__pagesnap.exportElementImage(id, 'png', { output: 'return' }),
+      (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
       tabId,
     );
     const png = decodePng(Buffer.from(res.base64, 'base64'));
@@ -1218,7 +1218,7 @@ await test('capture: huge element is capped at 16384 px with a warning', async (
   );
   await send(tabId, { type: 'ps:cancel-preview' });
   const res = await sw.evaluate(
-    (id) => globalThis.__pagesnap.exportElementImage(id, 'png', { output: 'return' }),
+    (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
     tabId,
   );
   const png = decodePng(Buffer.from(res.base64, 'base64'));
@@ -1272,21 +1272,21 @@ await test('markdown: gated by settings.markdownEnabled; article conversion', as
   await setSettings({ markdownEnabled: false });
   const denied = await sw.evaluate(
     (id) =>
-      globalThis.__pagesnap
+      globalThis.__websnap
         .exportMarkdown(id, 'article', { output: 'return' })
         .catch((e) => ({ error: e.message })),
     tabId,
   );
   check(/experimental feature/i.test(denied.error || ''), `rejected while disabled (${denied.error})`);
   const viaMsg = await sw.evaluate(
-    (id) => globalThis.__pagesnap.exportMarkdown(id, 'none').catch((e) => ({ error: e.message })),
+    (id) => globalThis.__websnap.exportMarkdown(id, 'none').catch((e) => ({ error: e.message })),
     tabId,
   );
   check(/experimental feature/i.test(viaMsg.error || ''), 'page export rejected too');
 
   await setSettings({ markdownEnabled: true });
   const res = await sw.evaluate(
-    (id) => globalThis.__pagesnap.exportMarkdown(id, 'article', { output: 'return' }),
+    (id) => globalThis.__websnap.exportMarkdown(id, 'article', { output: 'return' }),
     tabId,
   );
   const md = res.markdown || '';
@@ -1327,7 +1327,7 @@ await test('markdown: gated by settings.markdownEnabled; article conversion', as
     'at most one blank line between blocks (outside code)',
   );
   const all = await sw.evaluate(
-    (id) => globalThis.__pagesnap.exportMarkdown(id, 'none', { output: 'return' }),
+    (id) => globalThis.__websnap.exportMarkdown(id, 'none', { output: 'return' }),
     tabId,
   );
   check(

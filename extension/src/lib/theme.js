@@ -10,7 +10,7 @@
 // calls reveal() once it is ready; a short timeout reveals it anyway.
 
 const THEMES = ['system', 'light', 'dark'];
-const CACHE_KEY = 'pagesnap-theme';
+const CACHE_KEY = 'websnap-theme';
 const REVEAL_TIMEOUT_MS = 400;
 
 export function normalizeTheme(theme) {

@@ -41,13 +41,13 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
 - Registers the five context-menu items (`MENU`: `page`, `article`, `selectElement`,
   `removeElements`, `reset`; contexts `page`, `frame`, `action`) on install and startup, and the
   `save-pdf` / `save-article` commands. Menu titles are hard-coded English.
-- Exposes `globalThis.__pagesnap` (`generate`, `previewElement`, `exportElementImage`,
+- Exposes `globalThis.__websnap` (`generate`, `previewElement`, `exportElementImage`,
   `exportMarkdown`, `PICKER_STRINGS_EN`, `previewJobs`, `isPrintableUrl`, `startPicker`,
   `pageState`, `resetPage`) for the test suites.
 
 ### `src/content.js` (content script, injected on demand, top frame only)
 
-Guarded by `window.__pagesnapContent` so repeated injection is a no-op. Every temporary change goes
+Guarded by `window.__websnapContent` so repeated injection is a no-op. Every temporary change goes
 through `setStyle` / `setAttr`, which push an undo function onto `state.undo`; `restore()` pops them
 in reverse order. Styles are applied with `!important`.
 
@@ -73,7 +73,7 @@ in reverse order. Styles are applied with `!important`.
   One pass over text nodes scores text in `p, li, pre, blockquote, h1-h6, dd, figcaption` minus
   1.5 × link text, stopping at boilerplate containers (comments, nav, …). Best score must be ≥ 150;
   the tightest candidate scoring ≥ 90 % of the best wins unless it drops the headline.
-- Picker: a shadow-DOM overlay (host marked `data-pagesnap-ui`) with a highlight box and a control
+- Picker: a shadow-DOM overlay (host marked `data-websnap-ui`) with a highlight box and a control
   bar built from DOM nodes (Trusted Types safe). Window capture-phase listeners swallow page
   pointer events; ↑/↓ move to parent / first visible child; Esc stops. "print" mode stores
   `state.picked` and calls `requestPreview()`. "remove" mode hides the element with
@@ -240,7 +240,7 @@ Supported: `en`, `es`, `de`, `fr`, `pt_BR`, `hi`, `ja`, `zh_CN` (`SUPPORTED_LANG
 for light / dark and removes it for system, so CSS falls back to `prefers-color-scheme`. To avoid
 a flash of the wrong theme, pages start with `<html data-boot>` and
 `html[data-boot] body { visibility: hidden }`; importing the module applies the last theme
-synchronously from `localStorage['pagesnap-theme']`, then confirms it from `chrome.storage.sync`
+synchronously from `localStorage['websnap-theme']`, then confirms it from `chrome.storage.sync`
 and follows `storage.onChanged`. The page calls `reveal()` when ready (fallback timeout 400 ms).
 The popup header button cycles system → light → dark. The in-page modal receives `theme` from the
 background and resolves `system` with `matchMedia`.
@@ -298,7 +298,7 @@ handler directly inside the worker, without messaging.
 | `chrome.storage.local`                 | `popupExportSettingsOpen` | Whether the popup's Export settings panel is open                        |
 | `chrome.storage.local`                 | `previewFormat`           | Last format used in the preview modal (`pdf`, `png`, `jpeg`, `markdown`) |
 | `chrome.storage.session`               | `job:<uuid>`              | Preview PDF for the viewer tab (15-minute TTL)                           |
-| page `localStorage` (extension origin) | `pagesnap-theme`          | Theme cache for flash-free startup                                       |
+| page `localStorage` (extension origin) | `websnap-theme`           | Theme cache for flash-free startup                                       |
 
 ## Settings schema
 
@@ -342,7 +342,7 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `data-expect="article"`, picker and shadow DOM), the document-relative clip probe, preview modal,
   PNG / JPEG size and pixel checks (including tall elements and the 16 384 px cap) and the Markdown
   converter (`markdown.html`). During `ps:prepare` the chosen root is marked with
-  `data-pagesnap-root`, removed on restore.
+  `data-websnap-root`, removed on restore.
 - `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup, options and viewer pages
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
   errors or missing translation keys.

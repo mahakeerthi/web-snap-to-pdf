@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "PageSnap PDF",
+    "message": "Web Snap PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "PageSnap PDF - save this page as PDF",
+    "message": "Web Snap PDF - save this page as PDF",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -512,7 +512,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "PageSnap PDF settings",
+    "message": "Web Snap PDF settings",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -600,11 +600,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "PageSnap PDF renders pages with Chrome’s built-in print engine, entirely on your device. Nothing is uploaded anywhere.",
+    "message": "Web Snap PDF renders pages with Chrome’s built-in print engine, entirely on your device. Nothing is uploaded anywhere.",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "Chrome shows a “PageSnap PDF started debugging this browser” bar while a PDF is being generated. That is how Chrome exposes its PDF engine to extensions; it disappears as soon as the PDF is ready.",
+    "message": "Chrome shows a “Web Snap PDF started debugging this browser” bar while a PDF is being generated. That is how Chrome exposes its PDF engine to extensions; it disappears as soon as the PDF is ready.",
     "description": "About text"
   },
   "options_reset": {

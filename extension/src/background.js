@@ -1,4 +1,4 @@
-// PageSnap PDF - background service worker.
+// Web Snap PDF - background service worker.
 // Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
 // viewer and the content script (plus context menus and keyboard shortcuts):
 //   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download / preview tab
@@ -73,7 +73,7 @@ async function uiStrings(settings) {
   try {
     messages = await getMessages(settings && settings.language);
   } catch (err) {
-    console.warn('PageSnap: could not load translations', err);
+    console.warn('Web Snap: could not load translations', err);
   }
   const out = { ...PICKER_STRINGS_EN };
   for (const [k, v] of Object.entries(messages || {})) {
@@ -466,7 +466,7 @@ async function captureRatio(target) {
       0;
     return w > 0 ? w / 100 : 1;
   } catch (err) {
-    console.warn('PageSnap: could not measure the capture scale', err);
+    console.warn('Web Snap: could not measure the capture scale', err);
     return 1;
   }
 }
@@ -823,7 +823,7 @@ function installMenus() {
 
 /** Menu and shortcut actions have no caller to report to: log failures instead. */
 function runLogged(promise) {
-  return promise.catch((err) => console.warn('PageSnap:', err.message));
+  return promise.catch((err) => console.warn('Web Snap:', err.message));
 }
 
 chrome.runtime.onInstalled.addListener(installMenus);
@@ -855,11 +855,11 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.debugger.onDetach.addListener((source, reason) => {
-  if (reason === 'canceled_by_user') console.info('PageSnap: debugger detached by user on tab', source.tabId);
+  if (reason === 'canceled_by_user') console.info('Web Snap: debugger detached by user on tab', source.tabId);
 });
 
 // Test hook (used by test/e2e.mjs). Harmless in production.
-globalThis.__pagesnap = {
+globalThis.__websnap = {
   generate,
   previewElement,
   exportElementImage,

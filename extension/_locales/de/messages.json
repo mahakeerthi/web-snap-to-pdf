@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "PageSnap PDF",
+    "message": "Web Snap PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "PageSnap PDF - diese Seite als PDF speichern",
+    "message": "Web Snap PDF - diese Seite als PDF speichern",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -512,7 +512,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "PageSnap PDF – Einstellungen",
+    "message": "Web Snap PDF – Einstellungen",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -600,11 +600,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "PageSnap PDF erstellt Seiten mit der integrierten Druckfunktion von Chrome, vollständig auf Ihrem Gerät. Nichts wird irgendwohin hochgeladen.",
+    "message": "Web Snap PDF erstellt Seiten mit der integrierten Druckfunktion von Chrome, vollständig auf Ihrem Gerät. Nichts wird irgendwohin hochgeladen.",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "Während ein PDF erstellt wird, zeigt Chrome die Leiste „PageSnap PDF hat mit dem Debugging dieses Browsers begonnen“. So stellt Chrome Erweiterungen seine PDF-Engine bereit; die Leiste verschwindet, sobald das PDF fertig ist.",
+    "message": "Während ein PDF erstellt wird, zeigt Chrome die Leiste „Web Snap PDF hat mit dem Debugging dieses Browsers begonnen“. So stellt Chrome Erweiterungen seine PDF-Engine bereit; die Leiste verschwindet, sobald das PDF fertig ist.",
     "description": "About text"
   },
   "options_reset": {

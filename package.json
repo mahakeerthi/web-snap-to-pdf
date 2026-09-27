@@ -1,5 +1,5 @@
 {
-  "name": "pagesnap-pdf",
+  "name": "web-snap-pdf",
   "version": "1.1.0",
   "private": true,
   "description": "Chrome extension that converts the current web page to a PDF locally using Chrome's own print engine.",

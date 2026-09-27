@@ -1,4 +1,4 @@
-// PageSnap PDF - content script.
+// Web Snap PDF - content script.
 // Injected on demand. Provides page preparation (lazy-load, hide fixed/sticky, isolate an
 // element or the article), an element picker for "select element" / "remove elements",
 // the element preview modal (PDF / PNG / JPEG / Markdown export), an HTML -> Markdown converter,
@@ -14,11 +14,11 @@
 //   detection) only look at the light DOM of the document (or of the isolated root's own tree)
 //   and do not descend into shadow roots. Closed shadow roots are opaque.
 (() => {
-  if (window.__pagesnapContent) return;
-  window.__pagesnapContent = true;
+  if (window.__websnapContent) return;
+  window.__websnapContent = true;
 
-  const UI_ATTR = 'data-pagesnap-ui';
-  const ROOT_ATTR = 'data-pagesnap-root'; // marks the isolated element while the page is prepared
+  const UI_ATTR = 'data-websnap-ui';
+  const ROOT_ATTR = 'data-websnap-root'; // marks the isolated element while the page is prepared
   // Upper bound for the page-wide scans. The scans read everything first and write afterwards
   // (no layout thrash), so ~30k elements take tens of milliseconds; the cap only guards against
   // pathological DOMs. (A 25k cap used to skip cookie banners and chat widgets, which are
