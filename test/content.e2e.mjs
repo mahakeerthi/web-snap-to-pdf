@@ -1,7 +1,7 @@
 // Content-script hardening tests: drives extension/src/content.js directly (executeScript +
 // tabs.sendMessage from the service worker) against fixture pages and asserts DOM state after
 // ps:prepare and after ps:restore, the article element chosen, picker behaviour, the element
-// preview modal (PNG / JPEG / PDF / Markdown export) and the Markdown converter.
+// preview overlay (PNG / JPEG / PDF / Markdown export, split parts, theme) and the Markdown converter.
 // Run with: npm run test:content   (or: node test/content.e2e.mjs)
 import { chromium } from 'playwright';
 import http from 'node:http';
@@ -256,57 +256,91 @@ async function waitFor(fn, { timeout = 15000, interval = 100, label = 'condition
   }
   throw new Error(`timed out waiting for ${label}`);
 }
-// State of the preview modal, read from its (open) shadow root.
+// State of the preview overlay, read from its (open) shadow root.
 async function previewInfo(page) {
   return page.evaluate(() => {
     const host = document.querySelector('[data-websnap-ui="preview"]');
     if (!host) return null;
     const sr = host.shadowRoot;
     const q = (s) => sr.querySelector(s);
-    const canvas = q('.stage canvas');
+    const shown = (el) => !!el && el.getClientRects().length > 0;
+    const box = (el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
+    };
+    const canvases = [...sr.querySelectorAll('.stage canvas')];
     const seg = [...sr.querySelectorAll('.seg button')];
     return {
       hostDisplay: getComputedStyle(host).display,
       title: q('h2').textContent,
-      dark: q('.overlay').classList.contains('dark'),
+      theme: q('.overlay').dataset.theme,
+      dark: q('.overlay').dataset.theme === 'dark',
+      dialogCard: !!q('.dialog'),
+      viewport: { width: innerWidth, height: innerHeight },
+      overlay: box(q('.overlay')),
+      toolbar: { ...box(q('.toolbar')), scrollWidth: q('.toolbar').scrollWidth },
+      stage: box(q('.stage')),
       caption: q('.caption').textContent,
+      splitNote: q('.split-note').hidden ? '' : q('.split-note').textContent,
       warning: q('.warning').hidden ? '' : q('.warning').textContent,
       status: q('.status').textContent,
       loading: !!q('.placeholder') && !q('.placeholder.error'),
       error: q('.placeholder.error') ? q('.placeholder.error').textContent : '',
-      ready: !!(canvas && canvas.dataset.ready),
-      canvas: canvas ? { width: canvas.width, height: canvas.height, cssWidth: canvas.style.width } : null,
+      ready: canvases.length > 0 && canvases.every((c) => c.dataset.ready),
+      canvas: canvases[0]
+        ? { width: canvases[0].width, height: canvases[0].height, cssWidth: canvases[0].style.width }
+        : null,
+      canvases: canvases.map((c) => ({ width: c.width, height: c.height, cssWidth: c.style.width })),
+      parts: [...sr.querySelectorAll('.part')].map((p) => ({
+        label: p.querySelector('.part-label') ? p.querySelector('.part-label').textContent : '',
+        copy: shown(p.querySelector('.part-copy')),
+        download: shown(p.querySelector('.part-download')),
+      })),
       formats: seg.map((b) => b.dataset.format),
       labels: seg.map((b) => b.textContent),
       checked: (seg.find((b) => b.getAttribute('aria-checked') === 'true') || {}).dataset?.format || null,
-      copyVisible: !q('.copy').hidden,
+      copyVisible: shown(q('.copy')),
+      copyTitle: q('.copy').title,
+      downloadLabel: q('.download').textContent,
       downloadDisabled: q('.download').disabled,
-      buttons: [...sr.querySelectorAll('footer .btn')].map((b) => b.textContent),
+      // Visible toolbar actions, left to right (icon buttons by their accessible name).
+      buttons: [...sr.querySelectorAll('.toolbar .actions .btn')]
+        .filter(shown)
+        .map((b) => b.getAttribute('aria-label') || b.textContent),
+      actionsRight: Math.max(
+        ...[...sr.querySelectorAll('.toolbar .btn, .seg')]
+          .filter(shown)
+          .map((b) => b.getBoundingClientRect().right),
+      ),
       focused: sr.activeElement ? sr.activeElement.className || sr.activeElement.dataset.format : null,
     };
   });
 }
-// Pixel of the preview canvas at a fraction of its size.
-async function previewPixel(page, fx, fy) {
+// Pixel of preview canvas `index` at a fraction of its size.
+async function previewPixel(page, fx, fy, index = 0) {
   return page.evaluate(
-    ({ fx, fy }) => {
+    ({ fx, fy, index }) => {
       const c = document
         .querySelector('[data-websnap-ui="preview"]')
-        .shadowRoot.querySelector('.stage canvas');
+        .shadowRoot.querySelectorAll('.stage canvas')[index];
       const d = c
         .getContext('2d')
         .getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data;
       return [d[0], d[1], d[2]];
     },
-    { fx, fy },
+    { fx, fy, index },
   );
 }
+// Click a control of the overlay like a user would (scrolling the preview to it if needed).
 async function clickPreview(page, selector) {
   const r = await page.evaluate((s) => {
-    const b = document
-      .querySelector('[data-websnap-ui="preview"]')
-      .shadowRoot.querySelector(s)
-      .getBoundingClientRect();
+    const sr = document.querySelector('[data-websnap-ui="preview"]').shadowRoot;
+    const el = sr.querySelector(s);
+    const stage = sr.querySelector('.stage');
+    if (stage.contains(el)) {
+      stage.scrollTop += el.getBoundingClientRect().top - stage.getBoundingClientRect().top - 40;
+    }
+    const b = el.getBoundingClientRect();
     return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
   }, selector);
   await page.mouse.move(r.x, r.y);
@@ -318,12 +352,12 @@ async function waitForPreview(page) {
       const info = await previewInfo(page);
       return info && (info.ready || info.error) ? info : null;
     },
-    { label: 'preview modal' },
+    { label: 'preview overlay' },
   );
 }
 // Start the select-element picker, hover `selector` (scrolled into view unless `scroll: false`),
 // widen the highlight with ArrowUp until it names `widenTo` (e.g. 'table' when the pointer is over
-// a cell) and click: the real user flow up to the preview modal.
+// a cell) and click: the real user flow up to the preview overlay.
 async function pickElement(page, tabId, selector, { scroll = true, widenTo = null } = {}) {
   if (scroll) {
     await page.evaluate(
@@ -346,6 +380,17 @@ async function pickElement(page, tabId, selector, { scroll = true, widenTo = nul
   await page.mouse.down();
   await page.mouse.up();
   return waitForPreview(page);
+}
+// The `n` most recent completed downloads matching `pred` (oldest first).
+async function waitForDownloads(pred, n, timeoutMs = 30000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const items = await sw.evaluate(() => chrome.downloads.search({ orderBy: ['-startTime'], limit: 30 }));
+    const hits = items.filter((i) => i.state === 'complete' && pred(i));
+    if (hits.length >= n) return hits.slice(0, n).reverse();
+    await wait(200);
+  }
+  throw new Error(`${n} downloads did not complete`);
 }
 async function waitForDownload(pred, timeoutMs = 30000) {
   const start = Date.now();
@@ -416,13 +461,15 @@ function decodePng(buf) {
   };
 }
 const isColor = (c, rgb, tol = 3) => !!c && c.every((v, i) => Math.abs(v - rgb[i]) <= tol);
-// Stripe i of the striped fixture elements is rgb(i*10, 100, 255-i*10); returns the bad stripes.
-function badStripes(png, n) {
+// Stripe i of the striped fixture elements is rgb(k*10, 100, 255-k*10) with k = i % 25. Checks the
+// `n` bands of an image whose first band is stripe `first`; returns the bad stripes.
+function badStripes(png, n, first = 0) {
   const bad = [];
   const band = png.height / n;
-  for (let i = 0; i < n; i++) {
-    const c = png.pixel(Math.floor(png.width / 2), Math.floor(i * band + band / 2));
-    if (!isColor(c, [i * 10, 100, 255 - i * 10])) bad.push(`${i}:${c.join('/')}`);
+  for (let j = 0; j < n; j++) {
+    const k = (first + j) % 25;
+    const c = png.pixel(Math.floor(png.width / 2), Math.floor(j * band + band / 2));
+    if (!isColor(c, [k * 10, 100, 255 - k * 10])) bad.push(`${first + j}:${c.join('/')}`);
   }
   return bad;
 }
@@ -842,7 +889,7 @@ await test('picker: works on pages that enforce Trusted Types', async () => {
     'select-mode toolbar rendered',
     JSON.stringify({ res2, bar: hl2 && hl2.barText }),
   );
-  // The preview modal is built without HTML strings too.
+  // The preview overlay is built without HTML strings too.
   const h1 = await rectOf(page, 'h1');
   await page.mouse.move(h1.left + 10, h1.top + 10);
   await wait(50);
@@ -850,7 +897,7 @@ await test('picker: works on pages that enforce Trusted Types', async () => {
   const info = await waitForPreview(page);
   check(
     info.ready && info.formats.length === 3,
-    'preview modal renders under Trusted Types',
+    'preview overlay renders under Trusted Types',
     JSON.stringify(info),
   );
   check(
@@ -1018,7 +1065,7 @@ await test('capture: Page.captureScreenshot clip is document-relative with captu
   await page.close();
 });
 
-await test('preview: picker click opens the modal with a preview of just that element; Esc closes and restores', async () => {
+await test('preview: picker click opens the full-page overlay with a preview of just that element; Esc closes and restores', async () => {
   await setSettings({ imageScale: 2, theme: 'dark' });
   const { page, tabId } = await openTab('element.html');
   const errors = [];
@@ -1026,14 +1073,31 @@ await test('preview: picker click opens the modal with a preview of just that el
   await page.evaluate(() => window.scrollTo({ top: 4800, behavior: 'instant' }));
   const before = await snapshot(page);
   const info = await pickElement(page, tabId, '#red', { scroll: false });
-  check(info.ready, 'modal shows the captured preview', JSON.stringify(info));
+  check(info.ready, 'overlay shows the captured preview', JSON.stringify(info));
   check(
     info.title === 'Export this element' || /\S/.test(info.title),
-    `modal title from background strings (${info.title})`,
+    `overlay title from background strings (${info.title})`,
   );
   check(
     /div#red · 400×300 px/.test(info.caption),
     `caption names the element and its size (${info.caption})`,
+  );
+  check(
+    !info.dialogCard &&
+      info.overlay.top === 0 &&
+      info.overlay.left === 0 &&
+      info.overlay.width === info.viewport.width &&
+      info.overlay.height === info.viewport.height,
+    `overlay covers the whole viewport, no dialog card (${JSON.stringify(info.overlay)})`,
+  );
+  check(
+    info.toolbar.top === 0 && info.toolbar.width === info.viewport.width,
+    `toolbar fixed at the top of the viewport (${JSON.stringify(info.toolbar)})`,
+  );
+  check(info.stage.top >= info.toolbar.bottom - 1, 'preview below the toolbar');
+  check(
+    near(info.stage.bottom, info.viewport.height, 1),
+    `preview fills the rest of the viewport (stage ${info.stage.top}–${info.stage.bottom})`,
   );
   check(
     info.canvas &&
@@ -1041,6 +1105,10 @@ await test('preview: picker click opens the modal with a preview of just that el
       info.canvas.height === 300 &&
       info.canvas.cssWidth === '400px',
     `preview is the element at screen resolution (${JSON.stringify(info.canvas)})`,
+  );
+  check(
+    info.parts.length === 1 && !info.parts[0].label && !info.splitNote,
+    'small element: one part, no split',
   );
   const centre = await previewPixel(page, 0.5, 0.5);
   const corner = await previewPixel(page, 0.02, 0.98);
@@ -1056,15 +1124,25 @@ await test('preview: picker click opens the modal with a preview of just that el
     info.checked === 'pdf' && !info.copyVisible,
     `PDF selected by default, Copy hidden (${info.checked})`,
   );
-  check(info.dark, 'theme "dark" from settings applied');
-  check(info.buttons.join('|') === 'Reselect|Copy image|Download', `buttons (${info.buttons.join('|')})`);
+  check(info.theme === 'dark', `theme "dark" from settings applied (${info.theme})`);
+  check(
+    info.buttons.join('|') === 'Download|Reselect|Toggle light / dark|Close',
+    `toolbar actions with PDF (${info.buttons.join('|')})`,
+  );
   await clickPreview(page, '.seg [data-format="png"]');
   let now = await previewInfo(page);
   check(now.checked === 'png' && now.copyVisible, 'choosing PNG selects it and shows "Copy image"');
+  check(
+    now.buttons.join('|') === 'Copy image|Download|Reselect|Toggle light / dark|Close',
+    `toolbar actions with PNG (${now.buttons.join('|')})`,
+  );
   await page.keyboard.press('ArrowRight');
   now = await previewInfo(page);
-  check(now.checked === 'jpeg' && !now.copyVisible, `arrow keys move through the formats (${now.checked})`);
-  // The page is already back to normal while the modal is open.
+  check(
+    now.checked === 'jpeg' && now.copyVisible && !now.downloadDisabled,
+    `arrow keys move to JPEG; Copy image stays available for JPEG (${now.checked})`,
+  );
+  // The page is already back to normal while the overlay is open.
   const st = await pageState(tabId);
   check(st.previewOpen && !st.pickerActive, 'picker stopped, preview open');
   await expectRestored(
@@ -1074,15 +1152,145 @@ await test('preview: picker click opens the modal with a preview of just that el
   );
   const header = await page.evaluate(() => getComputedStyle(document.querySelector('header.fixed')).display);
   check(header !== 'none', 'fixed header visible again');
+  // The wheel over the toolbar does not scroll the page underneath.
+  await page.mouse.move(200, Math.round(info.toolbar.height / 2));
+  await page.mouse.wheel(0, 400);
+  await wait(150);
+  check((await page.evaluate(() => scrollY)) === 4800, 'wheel over the toolbar leaves the page alone');
+  await page.mouse.move(100, Math.round(info.toolbar.bottom + 200)); // the preview has nothing to scroll
+  await page.mouse.wheel(0, 400);
+  await wait(150);
+  check((await page.evaluate(() => scrollY)) === 4800, 'wheel over a short preview leaves the page alone');
   await page.keyboard.press('Escape');
   await wait(100);
   const after = await pageState(tabId);
   const host = await page.evaluate(() => !!document.querySelector('[data-websnap-ui]'));
-  check(!after.previewOpen && !host, 'Esc closes the modal');
-  await expectRestored(page, before, 'page unchanged after closing the modal');
+  check(!after.previewOpen && !host, 'Esc closes the overlay');
+  await expectRestored(page, before, 'page unchanged after closing the overlay');
   check(errors.length === 0, 'no page errors', errors.join(' | '));
   await page.close();
   await setSettings({});
+});
+
+await test('preview: Copy image puts a PNG on the clipboard for PNG and JPEG', async () => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+  const { page, tabId } = await openTab('element.html');
+  await pickElement(page, tabId, '#red');
+  const readClipboard = () =>
+    page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      const item = items[0];
+      if (!item || !item.types.includes('image/png')) return { types: item ? item.types : [] };
+      const bmp = await createImageBitmap(await item.getType('image/png'));
+      return { types: item.types, width: bmp.width, height: bmp.height };
+    });
+  for (const format of ['png', 'jpeg']) {
+    await page.evaluate(() => navigator.clipboard.writeText('-')); // clear
+    await clickPreview(page, `.seg [data-format="${format}"]`);
+    await clickPreview(page, '.copy');
+    const clip = await waitFor(
+      async () => {
+        const c = await readClipboard();
+        return c.types.includes('image/png') ? c : null;
+      },
+      { label: 'image on the clipboard' },
+    ).catch(() => ({ types: [] }));
+    const copied = await previewInfo(page);
+    check(
+      clip.types.includes('image/png') && clip.width === 400 && clip.height === 300,
+      `${format.toUpperCase()} selected: clipboard holds a 400×300 PNG (${JSON.stringify(clip)}; ${copied.status})`,
+    );
+  }
+  await send(tabId, { type: 'ps:cancel-preview' });
+  await context.clearPermissions();
+  await page.close();
+});
+
+await test('preview: theme toggle switches the overlay at once and saves settings.theme', async () => {
+  await setSettings({ theme: 'system' });
+  const { page, tabId } = await openTab('element.html');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const info = await pickElement(page, tabId, '#red');
+  check(info.theme === 'dark', `'system' resolved through matchMedia (dark) (${info.theme})`);
+  const stored = () => sw.evaluate(async () => (await chrome.storage.sync.get('settings')).settings?.theme);
+  await clickPreview(page, '.theme');
+  let now = await previewInfo(page);
+  check(now.theme === 'light', `toggle switches the overlay to light immediately (${now.theme})`);
+  const saved = await waitFor(async () => ((await stored()) === 'light' ? 'light' : null), {
+    label: 'theme saved',
+  });
+  check(saved === 'light', 'settings.theme saved as "light" through the worker');
+  await clickPreview(page, '.theme');
+  now = await previewInfo(page);
+  check(now.theme === 'dark', `toggling again gives dark (${now.theme})`);
+  await waitFor(async () => (await stored()) === 'dark', { label: 'theme saved dark' });
+  check(true, 'settings.theme saved as "dark"');
+  // The picker toolbar follows the same theme.
+  await clickPreview(page, '.reselect');
+  await wait(100);
+  const barTheme = await page.evaluate(
+    () => document.querySelector('[data-websnap-ui]').shadowRoot.querySelector('.bar').dataset.theme,
+  );
+  check(barTheme === 'dark', `picker toolbar uses the overlay's theme (${barTheme})`);
+  await send(tabId, { type: 'ps:reset-page' });
+  await setSettings({ theme: 'light' });
+  await startPicker(tabId, 'remove');
+  const bar = await page.evaluate(() => {
+    const b = document.querySelector('[data-websnap-ui]').shadowRoot.querySelector('.bar');
+    return { theme: b.dataset.theme, bg: getComputedStyle(b).backgroundColor };
+  });
+  check(
+    bar.theme === 'light' && bar.bg === 'rgb(255, 255, 255)',
+    `picker toolbar light when settings.theme is light (${JSON.stringify(bar)})`,
+  );
+  await send(tabId, { type: 'ps:reset-page' });
+  await page.close();
+  await setSettings({});
+});
+
+await test('preview: toolbar wraps at 360 px and keeps keyboard focus inside the overlay', async () => {
+  const { page, tabId } = await openTab('element.html');
+  const info = await pickElement(page, tabId, '#red');
+  // Resized once the overlay is open: the capture's debugger session drops Playwright's viewport
+  // emulation (the window itself cannot be narrower than 500 px).
+  await page.setViewportSize({ width: 360, height: 740 });
+  await wait(100);
+  await clickPreview(page, '.seg [data-format="jpeg"]');
+  const now = await previewInfo(page);
+  check(now.viewport.width === 360, `viewport is 360 px wide (${now.viewport.width})`);
+  await page.screenshot({ path: path.join(outDir, 'preview-overlay-360.png') }); // for visual review
+  check(
+    now.toolbar.scrollWidth <= 360 && now.actionsRight <= 360,
+    `every toolbar control fits in 360 px (scrollWidth ${now.toolbar.scrollWidth}, right ${now.actionsRight})`,
+  );
+  check(now.toolbar.height > 60, `toolbar wraps onto several rows (${Math.round(now.toolbar.height)} px)`);
+  check(now.stage.top >= now.toolbar.bottom - 1 && now.stage.height > 200, 'preview still gets the rest');
+  check(info.ready, 'preview rendered at 360 px');
+  // Tab cycles through the overlay's controls and never reaches the page.
+  const seen = new Set();
+  let escaped = false;
+  for (let i = 0; i < 14; i++) {
+    await page.keyboard.press(i % 5 === 4 ? 'Shift+Tab' : 'Tab');
+    const f = await page.evaluate(() => {
+      const host = document.querySelector('[data-websnap-ui="preview"]');
+      if (document.activeElement !== host) return null;
+      const a = host.shadowRoot.activeElement;
+      return a ? a.className || a.dataset.format || a.tagName : null;
+    });
+    if (!f) escaped = true;
+    else seen.add(f);
+  }
+  check(!escaped, 'focus never leaves the overlay');
+  check(
+    ['btn copy', 'btn primary download', 'btn reselect', 'btn icon theme', 'btn icon close'].every((c) =>
+      seen.has(c),
+    ),
+    `every toolbar action reachable with Tab (${[...seen].join(', ')})`,
+  );
+  await page.keyboard.press('Escape');
+  await wait(100);
+  check(!(await previewInfo(page)), 'Esc closes the overlay');
+  await page.close();
 });
 
 await test('preview: Download PNG saves the element at settings.imageScale; JPEG export; format remembered', async () => {
@@ -1097,38 +1305,39 @@ await test('preview: Download PNG saves the element at settings.imageScale; JPEG
       path.dirname(item.filename) === downloadDir,
     `PNG downloaded (${path.basename(item.filename)})`,
   );
+  check(!/-1\.png$/.test(item.filename), 'single-part image has no part suffix');
   const png = decodePng(fs.readFileSync(item.filename));
   check(
     png.width === 800 && png.height === 600,
     `PNG is element size × imageScale 2 (${png.width}×${png.height})`,
   );
   check(isColor(png.pixel(400, 300), RED) && isColor(png.pixel(5, 595), RED), 'PNG shows only the element');
-  const closed = await waitFor(async () => !(await previewInfo(page)), { label: 'modal to close' });
-  check(closed, 'modal closes after a successful download');
+  const closed = await waitFor(async () => !(await previewInfo(page)), { label: 'overlay to close' });
+  check(closed, 'overlay closes after a successful download');
 
   // JPEG through the same background export.
   const res = await sw.evaluate((id) => globalThis.__websnap.exportElementImage(id, 'jpeg'), tabId);
   const jpg = await waitForDownload((i) => /\.jpg$/.test(i.filename));
   const head = fs.readFileSync(jpg.filename).subarray(0, 3);
   check(
-    res.ok && res.width === 800 && res.height === 600,
-    `JPEG export reports 800×600 (${res.width}×${res.height})`,
+    res.ok && res.width === 800 && res.height === 600 && res.count === 1,
+    `JPEG export reports 800×600, one part (${res.width}×${res.height}, ${res.count})`,
   );
   check(
     head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff,
     `JPEG file starts with FF D8 (${path.basename(jpg.filename)})`,
   );
 
-  // The last format chosen in the modal is the default next time.
+  // The last format chosen in the overlay is the default next time.
   const again = await pickElement(page, tabId, '#red');
   check(again.checked === 'png', `last format remembered (${again.checked})`);
   await send(tabId, { type: 'ps:cancel-preview' });
-  check(!(await previewInfo(page)), 'ps:cancel-preview closes the modal');
+  check(!(await previewInfo(page)), 'ps:cancel-preview closes the overlay');
   await page.close();
   await setSettings({});
 });
 
-await test('preview: Download PDF saves a PDF with only the element (modal not printed)', async () => {
+await test('preview: Download PDF saves a PDF with only the element (overlay not printed)', async () => {
   const { page, tabId } = await openTab('element.html');
   await page.evaluate(() => window.scrollTo({ top: 4700, behavior: 'instant' }));
   const before = await snapshot(page);
@@ -1142,8 +1351,8 @@ await test('preview: Download PDF saves a PDF with only the element (modal not p
     !text.includes('BEFORE-MARK') && !text.includes('AFTER-MARK') && !text.includes('ELEMENT-FIXED-HEADER'),
     'PDF contains nothing else',
   );
-  check(!/Export this element|Download|Reselect/.test(text), 'preview modal not printed');
-  await waitFor(async () => !(await previewInfo(page)), { label: 'modal to close' });
+  check(!/Export this element|Download|Reselect/.test(text), 'preview overlay not printed');
+  await waitFor(async () => !(await previewInfo(page)), { label: 'overlay to close' });
   await expectRestored(page, before, 'page restored after the PDF export');
   await page.close();
 });
@@ -1155,7 +1364,7 @@ await test('preview: Reselect restarts the picker in select mode', async () => {
   await wait(100);
   const st = await pageState(tabId);
   const bar = await pickerRect(page);
-  check(st.pickerActive && !st.previewOpen, 'modal closed, picker active again');
+  check(st.pickerActive && !st.previewOpen, 'overlay closed, picker active again');
   check(
     bar && /Select an? element/.test(bar.barText),
     `picker toolbar in select mode (${bar && bar.barText})`,
@@ -1167,16 +1376,137 @@ await test('preview: Reselect restarts the picker in select mode', async () => {
   const info = await waitForPreview(page);
   check(info.ready, 'picking again shows a new preview');
   await send(tabId, { type: 'ps:reset-page' });
-  check(!(await previewInfo(page)), 'reset-page closes the modal');
+  check(!(await previewInfo(page)), 'reset-page closes the overlay');
   await page.close();
 });
 
-await test('capture: tall element (3× viewport) is captured in full', async () => {
+await test('split: a 400×3700 element is shown and saved as 3 parts (1600 / 1600 / 500)', async () => {
+  await setSettings({ imageScale: 1, filenameTemplate: 'split-part' });
+  const { page, tabId } = await openTab('element.html');
+  await page.evaluate(() =>
+    document.querySelector('#split').scrollIntoView({ block: 'center', behavior: 'instant' }),
+  );
+  const before = await snapshot(page);
+  const info = await pickElement(page, tabId, '#split', { scroll: false });
+  check(/div#split\.stripes · 400×3700 px/.test(info.caption), `caption (${info.caption})`);
+  const dims = info.canvases.map((c) => `${c.width}×${c.height}`).join(', ');
+  check(
+    dims === '400×1600, 400×1600, 400×500' && info.canvases.every((c) => c.cssWidth === '400px'),
+    `three preview canvases at scale 1 (${dims})`,
+  );
+  check(
+    info.parts.map((p) => p.label).join('|') === 'Part 1 of 3|Part 2 of 3|Part 3 of 3',
+    `part headers (${info.parts.map((p) => p.label).join('|')})`,
+  );
+  check(info.splitNote === 'Split into 3 parts for easier viewing', `split note (${info.splitNote})`);
+  // Each canvas shows its own slice of the element (stripes 0, 16 and 32 at the top).
+  const tops = [];
+  for (const [i, first] of [
+    [0, 0],
+    [1, 16],
+    [2, 32],
+  ]) {
+    const c = await previewPixel(page, 0.5, 50 / (i === 2 ? 500 : 1600), i);
+    const k = first % 25;
+    tops.push(isColor(c, [k * 10, 100, 255 - k * 10]));
+  }
+  check(tops.every(Boolean), `each part starts at its own stripe (${tops})`);
+  // PDF selected: parts have no per-part actions; the toolbar says Download.
+  await clickPreview(page, '.seg [data-format="pdf"]');
+  let now = await previewInfo(page);
+  check(
+    now.parts.every((p) => !p.copy && !p.download) && now.downloadLabel === 'Download',
+    `PDF: no per-part buttons, "${now.downloadLabel}"`,
+  );
+  await clickPreview(page, '.seg [data-format="png"]');
+  now = await previewInfo(page);
+  check(
+    now.parts.every((p) => p.copy && p.download) && now.downloadLabel === 'Download all parts',
+    `PNG: per-part Copy / Download, toolbar "${now.downloadLabel}"`,
+  );
+  check(/Part 1 of 3/.test(now.copyTitle), `toolbar Copy tooltip names part 1 (${now.copyTitle})`);
+
+  // Per-part Download: only that part, overlay stays open.
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.part[data-part="3"] .part-download');
+  const one = await waitForDownload((i) => /split-part-3\.png$/.test(i.filename) && i.startTime >= t0);
+  const p3 = decodePng(fs.readFileSync(one.filename));
+  check(p3.width === 400 && p3.height === 500, `part 3 saved as 400×500 (${p3.width}×${p3.height})`);
+  check(badStripes(p3, 5, 32).length === 0, 'part 3 holds stripes 32–36', badStripes(p3, 5, 32).join(', '));
+  const kept = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && /Saved/.test(i.status) ? i : null;
+    },
+    { label: 'saved status' },
+  );
+  check(/split-part-3\.png/.test(kept.status), `overlay stays open after a part download (${kept.status})`);
+  const partFiles = (await sw.evaluate(() => chrome.downloads.search({ limit: 50 }))).filter((i) =>
+    /split-part-[12]\.png$/.test(i.filename),
+  );
+  check(partFiles.length === 0, 'the other parts were not downloaded');
+
+  // Download all parts: one file per part, -1 / -2 / -3.
+  await setSettings({ imageScale: 1, filenameTemplate: 'split-all' });
+  const t1 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const files = await waitForDownloads((i) => /split-all-\d\.png$/.test(i.filename) && i.startTime >= t1, 3);
+  const names = files.map((f) => path.basename(f.filename)).sort();
+  check(
+    names.join(',') === 'split-all-1.png,split-all-2.png,split-all-3.png',
+    `three files named -1 / -2 / -3 (${names})`,
+  );
+  const pngs = names.map((n) => decodePng(fs.readFileSync(path.join(path.dirname(files[0].filename), n))));
+  check(
+    pngs.map((p) => `${p.width}×${p.height}`).join(', ') === '400×1600, 400×1600, 400×500',
+    `part sizes (${pngs.map((p) => `${p.width}×${p.height}`).join(', ')})`,
+  );
+  const bad = [...badStripes(pngs[0], 16, 0), ...badStripes(pngs[1], 16, 16), ...badStripes(pngs[2], 5, 32)];
+  check(bad.length === 0, 'the parts line up: every stripe once, in order', bad.slice(0, 5).join(', '));
+  await waitFor(async () => !(await previewInfo(page)), { label: 'overlay to close' });
+  check(true, 'overlay closes after Download all parts');
+  await expectRestored(page, before, 'page restored after the split exports');
+
+  // The background splits at 1600 CSS px and returns every part.
+  const res = await sw.evaluate(
+    (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
+    tabId,
+  );
+  check(
+    res.count === 3 && res.filenames.join(',') === 'split-all-1.png,split-all-2.png,split-all-3.png',
+    `exportElementImage returns 3 parts (${res.filenames})`,
+  );
+  const only2 = await sw.evaluate(
+    (id) => globalThis.__websnap.exportElementImage(id, 'jpeg', { output: 'return', part: 2 }),
+    tabId,
+  );
+  check(
+    only2.parts.length === 1 &&
+      only2.parts[0].filename === 'split-all-2.jpg' &&
+      only2.parts[0].height === 1600,
+    `part: 2 captures only the second part (${JSON.stringify(only2.parts.map(({ base64, ...p }) => p))})`,
+  );
+  const split = await sw.evaluate(() =>
+    globalThis.__websnap.splitRect({ x: 5, y: 7, width: 10, height: 3200 }),
+  );
+  check(
+    split.map((r) => `${r.y}+${r.height}`).join(',') === '7+1600,1607+1600',
+    `an exact multiple gives no empty part (${JSON.stringify(split)})`,
+  );
+  await page.close();
+  await setSettings({});
+});
+
+await test('capture: tall element (3× viewport) is captured in full, split at 1600 px', async () => {
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#tall');
   check(/div#tall\.stripes · 500×2400 px/.test(info.caption), `caption (${info.caption})`);
   const vh = await page.evaluate(() => innerHeight);
   check(2400 >= vh * 3, `element is at least 3× the viewport height (2400 vs ${vh})`);
+  check(
+    info.canvases.map((c) => c.height).join(',') === '1600,800',
+    `preview in two parts (${info.canvases.map((c) => c.height)})`,
+  );
   await send(tabId, { type: 'ps:cancel-preview' });
   for (const imageScale of [1, 2]) {
     await setSettings({ imageScale });
@@ -1184,12 +1514,13 @@ await test('capture: tall element (3× viewport) is captured in full', async () 
       (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
       tabId,
     );
-    const png = decodePng(Buffer.from(res.base64, 'base64'));
+    const pngs = res.parts.map((p) => decodePng(Buffer.from(p.base64, 'base64')));
+    const sizes = pngs.map((p) => `${p.width}×${p.height}`).join(', ');
     check(
-      png.width === 500 * imageScale && png.height === 2400 * imageScale,
-      `scale ${imageScale}: PNG ${png.width}×${png.height} = element × scale`,
+      sizes === `${500 * imageScale}×${1600 * imageScale}, ${500 * imageScale}×${800 * imageScale}`,
+      `scale ${imageScale}: parts ${sizes} = element × scale`,
     );
-    const bad = badStripes(png, 24);
+    const bad = [...badStripes(pngs[0], 16, 0), ...badStripes(pngs[1], 8, 16)];
     check(
       bad.length === 0,
       `scale ${imageScale}: every 100px band captured in place (no repeated viewport)`,
@@ -1201,19 +1532,57 @@ await test('capture: tall element (3× viewport) is captured in full', async () 
   await setSettings({});
 });
 
-await test('capture: huge element is capped at 16384 px with a warning', async () => {
+await test('capture: 20000 px tall element needs no reduction once split (13 parts at 2×)', async () => {
   await setSettings({ imageScale: 2 });
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#huge');
-  check(info.ready && !info.warning, 'preview shown, no warning while PDF is selected');
+  check(info.ready && info.parts.length === 13, `preview in 13 parts (${info.parts.length})`);
+  await clickPreview(page, '.seg [data-format="png"]');
+  const withPng = await previewInfo(page);
+  check(!withPng.warning, `no size warning (${withPng.warning})`);
+  await send(tabId, { type: 'ps:cancel-preview' });
+  const res = await sw.evaluate(
+    (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
+    tabId,
+  );
+  check(
+    res.scale === 2 && !res.warning && res.parts.length === 13,
+    `full 2× scale in 13 parts (scale ${res.scale}, ${res.parts.length} parts)`,
+  );
+  const bad = [];
+  let top = 0; // CSS px of the part's top edge; stripes are 1000 px
+  for (const p of res.parts) {
+    const png = decodePng(Buffer.from(p.base64, 'base64'));
+    if (png.width !== 600) bad.push(`width ${png.width}`);
+    // Sample the middle of every 1000 px stripe that lies fully inside the part.
+    for (let s = Math.ceil(top / 1000); (s + 1) * 1000 <= top + png.height / 2; s++) {
+      const y = Math.round((s * 1000 + 500 - top) * 2);
+      const c = png.pixel(300, y);
+      if (!isColor(c, [s * 10, 100, 255 - s * 10])) bad.push(`${s}:${c.join('/')}`);
+    }
+    top += png.height / 2;
+  }
+  check(top === 20000, `parts add up to the element height (${top})`);
+  check(bad.length === 0, 'every band rendered in place across the parts', bad.slice(0, 5).join(', '));
+  await page.close();
+  await setSettings({});
+});
+
+await test('capture: very wide element is capped at 16384 px with a warning', async () => {
+  await setSettings({ imageScale: 2 });
+  const { page, tabId } = await openTab('element.html');
+  const info = await pickElement(page, tabId, '#wide');
+  await clickPreview(page, '.seg [data-format="pdf"]');
+  const withPdf = await previewInfo(page);
+  check(info.ready && !withPdf.warning, 'preview shown, no warning while PDF is selected');
   await clickPreview(page, '.seg [data-format="png"]');
   const withPng = await previewInfo(page);
   check(
-    /16,384|16384/.test(withPng.warning) && /0\.81/.test(withPng.warning),
+    /16,384|16384/.test(withPng.warning) && /1\.82/.test(withPng.warning),
     `caption warns about the reduced image scale (${withPng.warning})`,
   );
   check(
-    info.canvas.height <= 16384,
+    info.canvas.width <= 16384,
     `preview itself within the limit (${info.canvas.width}×${info.canvas.height})`,
   );
   await send(tabId, { type: 'ps:cancel-preview' });
@@ -1221,32 +1590,30 @@ await test('capture: huge element is capped at 16384 px with a warning', async (
     (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
     tabId,
   );
-  const png = decodePng(Buffer.from(res.base64, 'base64'));
+  const png = decodePng(Buffer.from(res.parts[0].base64, 'base64'));
   check(
-    png.height <= 16384 && png.height >= 16000,
-    `PNG height capped (${png.width}×${png.height}, scale ${res.scale})`,
+    png.width <= 16384 && png.width >= 16000,
+    `PNG width capped (${png.width}×${png.height}, scale ${res.scale})`,
   );
   check(
-    Math.abs(png.width - 300 * res.scale) <= 1 && Math.abs(png.height - 20000 * res.scale) <= 1,
+    Math.abs(png.width - 9000 * res.scale) <= 1 && Math.abs(png.height - 200 * res.scale) <= 1,
     'PNG keeps the aspect ratio at the reduced scale',
   );
-  const bad = badStripes(png, 20);
+  const left = png.pixel(20, png.height >> 1);
+  const right = png.pixel(png.width - 20, png.height >> 1);
   check(
-    bad.length === 0,
-    'every band rendered (no wrap-around past the texture limit)',
-    bad.slice(0, 5).join(', '),
+    left[1] > 120 && left[2] < 40 && right[2] > 150 && right[1] < 40,
+    `both ends of the element rendered (${left} … ${right})`,
   );
   check(/16,384|16384/.test(res.warning || ''), `export returns a warning (${res.warning})`);
-  // Through the modal: a download that comes back with a warning keeps the modal open to show it.
-  await pickElement(page, tabId, '#huge');
+  // Through the overlay: a download that comes back with a warning keeps the overlay open to show it.
+  await pickElement(page, tabId, '#wide');
   await clickPreview(page, '.seg [data-format="png"]');
+  const t0 = new Date().toISOString();
   await clickPreview(page, '.download');
-  const item = await waitForDownload(
-    (i) =>
-      /Element Fixture.*\.png$/.test(i.filename) && i.startTime > new Date(Date.now() - 20000).toISOString(),
-  );
+  const item = await waitForDownload((i) => /Element Fixture.*\.png$/.test(i.filename) && i.startTime >= t0);
   check(
-    decodePng(fs.readFileSync(item.filename)).height <= 16384,
+    decodePng(fs.readFileSync(item.filename)).width <= 16384,
     `downloaded PNG within the limit (${path.basename(item.filename)})`,
   );
   const kept = await waitFor(
@@ -1258,7 +1625,7 @@ await test('capture: huge element is capped at 16384 px with a warning', async (
   );
   check(
     kept.hostDisplay !== 'none' && /16,384|16384/.test(kept.warning),
-    `modal stays visible with the warning after saving (${kept.status})`,
+    `overlay stays visible with the warning after saving (${kept.status})`,
   );
   await send(tabId, { type: 'ps:cancel-preview' });
   await page.close();
@@ -1338,7 +1705,7 @@ await test('markdown: gated by settings.markdownEnabled; article conversion', as
   await setSettings({});
 });
 
-await test('markdown: preview modal offers Markdown only when enabled; download saves a .md file', async () => {
+await test('markdown: preview overlay offers Markdown only when enabled; download saves a .md file', async () => {
   const { page, tabId } = await openTab('markdown.html');
   await setSettings({ markdownEnabled: false });
   let info = await pickElement(page, tabId, 'table', { widenTo: 'table' });

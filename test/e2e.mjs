@@ -286,8 +286,8 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
   const box = await page.locator('#sidebar').boundingBox();
   await page.mouse.move(box.x + 10, box.y + 10);
   await page.mouse.click(box.x + 10, box.y + 10);
-  // The click opens the in-page preview modal (shadow DOM) instead of downloading right away.
-  const modal = () =>
+  // The click opens the in-page preview overlay (shadow DOM) instead of downloading right away.
+  const overlay = () =>
     page.evaluate(() => {
       const host = document.querySelector('[data-websnap-ui="preview"]');
       if (!host) return null;
@@ -297,6 +297,7 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
       const d = sr.querySelector('.download').getBoundingClientRect();
       return {
         ready: !!(canvas && canvas.dataset.ready),
+        toolbarTop: sr.querySelector('.toolbar').getBoundingClientRect().top,
         format: checked && checked.dataset.format,
         download: { x: d.left + d.width / 2, y: d.top + d.height / 2 },
       };
@@ -304,15 +305,16 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
   let m = null;
   for (let i = 0; i < 100 && !(m && m.ready); i++) {
     await page.waitForTimeout(100);
-    m = await modal();
+    m = await overlay();
   }
-  check(m && m.ready, 'preview modal shows the captured element');
+  check(m && m.ready, 'preview overlay shows the captured element');
   const downloads = await sw.evaluate(() => chrome.downloads.search({}));
   check(
     !downloads.some((d) => /Fixture Article/.test(d.filename)),
     'nothing downloaded before "Download" is clicked',
   );
   check(m && m.format === 'pdf', `PDF is the default format (${m && m.format})`);
+  check(m && m.toolbarTop === 0, 'options in a toolbar at the top of the viewport');
   await page.mouse.click(m.download.x, m.download.y);
   const item = await waitForDownload((i) => /Fixture Article.*\.pdf$/.test(i.filename));
   check(fs.existsSync(item.filename), `downloaded to ${item.filename}`);

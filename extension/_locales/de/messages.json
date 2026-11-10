@@ -75,14 +75,6 @@
     "message": "Einen Teil der Seite speichern",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "Ganze Seite in neuem Tab ansehen statt herunterladen",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "Artikel in neuem Tab ansehen statt herunterladen",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "Elemente entfernen",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "Mit Elemente entfernen klicken Sie vor dem Speichern alles weg, was Sie nicht brauchen. Zurücksetzen holt es zurück.",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "Die Augen-Schaltfläche öffnet eine Vorschau statt herunterzuladen.",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "Papier, Ränder und weitere Optionen finden Sie unter Exporteinstellungen. Die Zeile darüber zeigt immer, was verwendet wird.",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "Gespeichert: $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "Vorschau in neuem Tab geöffnet.",
-    "description": "Status line"
   },
   "status_error": {
     "message": "Etwas ist schiefgelaufen.",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "Für jedes PDF fragen, wo es gespeichert werden soll",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "Standardaktion",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "PDF herunterladen",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "Vorschau-Tab öffnen",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "Gilt für Tastenkürzel, das Kontextmenü und die Werkzeuge auf der Seite.",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "Seitenverarbeitung",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "Bild kopieren",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "Alle Teile herunterladen",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "Teil $1 von $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "Kopieren",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "Herunterladen",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "Zur besseren Ansicht in $1 Teile aufgeteilt",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "Hell / Dunkel umschalten",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "Bild in die Zwischenablage kopiert",

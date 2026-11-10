@@ -11,11 +11,16 @@
   #pad { padding-top: 3000px; }
   #red { width: 400px; height: 300px; margin-left: 100px; background: #ff0000; color: #fff; font-size: 11px; }
   .gap { height: 1500px; background: #eee; }
-  /* Stripes: 100 px (tall) / 1000 px (huge) bands of rgb(i*10, 100, 255-i*10), built below.
-     pointer-events: none so the picker hovers the striped element itself, not a band. */
+  /* Stripes: 100 px (tall, split) / 1000 px (huge) bands of rgb(k*10, 100, 255-k*10) with
+     k = i % 25, built below. pointer-events: none so the picker hovers the striped element
+     itself, not a band. */
   .stripes { width: 500px; }
   .stripes > div { pointer-events: none; }
   #huge { width: 300px; }
+  /* 400×3700: split into parts of 1600 / 1600 / 500 CSS px. */
+  #split { width: 400px; }
+  /* Wider than 16384 / 2 px: an image at 2× must be reduced to stay within the capture limit. */
+  #wide { width: 9000px; height: 200px; background: linear-gradient(90deg, #00a000, #0000c0); }
 </style>
 </head>
 <body>
@@ -26,14 +31,19 @@
 <div id="tall" class="stripes" data-n="24" data-h="100"></div>
 <div class="gap"></div>
 <div id="huge" class="stripes" data-n="20" data-h="1000"></div>
+<div class="gap"></div>
+<div id="split" class="stripes" data-n="37" data-h="100"></div>
+<div class="gap"></div>
+<div id="wide"></div>
 <div class="gap">AFTER-MARK</div>
 <script>
   for (const box of document.querySelectorAll('.stripes')) {
     const n = Number(box.dataset.n);
     const h = Number(box.dataset.h);
     for (let i = 0; i < n; i++) {
+      const k = i % 25;
       const d = document.createElement('div');
-      d.style.cssText = `height:${h}px;background:rgb(${i * 10},100,${255 - i * 10})`;
+      d.style.cssText = `height:${h}px;background:rgb(${k * 10},100,${255 - k * 10})`;
       box.appendChild(d);
     }
   }

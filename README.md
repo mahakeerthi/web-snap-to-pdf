@@ -36,9 +36,8 @@ only the features listed below; it is not a full audit of the original.
 | Hide sticky / fixed bars                         | Same                 |                                                                                   |
 | Expand inner scroll areas (chat apps)            | Same                 | Options page toggle                                                               |
 | Article only                                     | Same                 | Heuristic main-content detection                                                  |
-| Select element                                   | Same                 | Opens an on-page preview before anything is saved                                 |
+| Select element                                   | Same                 | Opens a full-page preview overlay with a toolbar at the top before saving         |
 | Remove elements with undo / reset                | Same                 |                                                                                   |
-| Preview tab                                      | Same                 | Eye button on the Full page / Article cards                                       |
 | Filename template                                | Same                 | `{title}` `{domain}` `{date}` `{time}`                                            |
 | Context menu and keyboard shortcuts              | Same                 |                                                                                   |
 | Options page                                     | Same                 |                                                                                   |
@@ -57,7 +56,8 @@ only the features listed below; it is not a full audit of the original.
   raised for the header/footer), so nothing hidden under Export settings changes a PDF silently.
 - Toolbar badge shows `✓` or `!` for 4 seconds after each export.
 - If Chrome rejects the outline option, the PDF is generated again without bookmarks instead of failing.
-- If the direct download fails, the PDF opens in the preview tab and downloads from there.
+- The Full page and Article cards download directly. If Chrome rejects the direct download (very
+  large PDFs), a small fallback page opens with the PDF and a Download button.
 
 ## Screenshots
 
@@ -65,10 +65,10 @@ only the features listed below; it is not a full audit of the original.
 | -------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
 | ![Popup with the three action cards, light theme](docs/images/popup-default-light.png) | ![Popup, dark theme](docs/images/popup-default-dark.png) | ![Popup with Export settings open](docs/images/popup-expanded-light.png) |
 
-Element preview after Select element (light and dark):
+Element preview overlay after Select element (light and dark):
 
-![Element preview modal with PDF, PNG and JPEG formats](docs/images/preview-modal-light.png)
-![Element preview modal, dark theme](docs/images/preview-modal-dark.png)
+![Full-page element preview overlay with the toolbar at the top](docs/images/preview-overlay-light.png)
+![Element preview overlay, dark theme](docs/images/preview-overlay-dark.png)
 
 | Options page                                   | Popup with Markdown enabled                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -95,9 +95,8 @@ convert.
 Click the toolbar button. The header shows the page title, a **theme** button (cycles System →
 Light → Dark) and a **settings** button (options page). Below it:
 
-- **Full page**: save the whole page as a PDF. The **eye** button next to it opens a preview tab
-  instead of downloading.
-- **Article only**: save just the main content (no menus, sidebars, ads). Has its own eye button.
+- **Full page**: save the whole page as a PDF. The file downloads right away.
+- **Article only**: save just the main content (no menus, sidebars, ads). Also downloads right away.
 - **Select element**: the popup closes and a picker appears on the page (see below).
 - **Remove elements**: click things on the page to hide them before saving. **Reset page (n)**
   appears when something has been removed and puts it all back.
@@ -115,31 +114,33 @@ Light → Dark) and a **settings** button (options page). Below it:
 Every setting is saved as you change it. On pages Chrome does not let extensions touch the action
 cards are disabled and a notice is shown (see Limitations).
 
-### Select element and the preview
+### Select element and the preview overlay
 
 Hover to highlight, ↑/↓ to widen or narrow the selection, click to select, Esc to cancel. The page
-then shows a preview of just that element with:
+then shows a full-page preview overlay of just that element, with a toolbar at the top:
 
 - **Format**: PDF, PNG or JPEG (and Markdown when enabled). The last choice is remembered.
-- **Download**: PDF uses your saved settings and the options page's default action (download or
-  preview tab). PNG/JPEG are captured with Chrome's screenshot engine at 2× the element's CSS
-  size (there is no setting for this yet); JPEG quality is 92. File names use the same pattern with `.png` / `.jpg`.
-- **Copy image** (PNG only): copies the preview image (screen resolution) to the clipboard.
-- **Reselect** picks another element; **Esc**, × or a click outside closes the preview.
+- **Download**: PDF uses your saved settings. PNG/JPEG are captured with Chrome's screenshot engine
+  at the options page's image resolution (2× the element's CSS size by default); JPEG quality is 92. File names use the same pattern with `.png` / `.jpg`.
+- **Copy image** (PNG and JPEG): copies the image to the clipboard.
+- **Reselect** picks another element, the **light / dark** button switches the overlay's theme, and
+  **Close** (or Esc) closes the overlay.
 
-Images are limited to 16 384 px on the longest side (Chrome's capture limit). A larger element is
-scaled down automatically and the preview shows a warning with the scale actually used.
+Large elements are split into numbered image parts ("Part 1 of 3") shown one below the other. Each
+part has its own **Copy** and **Download** buttons, and the toolbar's Download saves all parts.
+Images are limited to 16 384 px on the longest side (Chrome's capture limit); an element too large
+even for that is scaled down and the overlay shows a warning with the scale actually used.
 
 ### Remove elements
 
 Click anything (ads, banners, comments) to hide it. The bar offers **Undo** (last removal),
-**Save PDF** (full page with your saved settings and default action) and **Done**. Removals stay
+**Save PDF** (downloads the full page with your saved settings) and **Done**. Removals stay
 until you reset or reload the page, and are also left out of Markdown exports.
 
 ### Markdown export (experimental)
 
 Off by default. Turn it on under **Experimental** on the options page and confirm. The popup then
-shows **Markdown: Full page | Article**, and the element preview offers **Markdown**. The converter
+shows **Markdown: Full page | Article**, and the element preview overlay offers **Markdown**. The converter
 is dependency-free and works on the live page (no preparation step): it outputs CommonMark with
 GFM tables, adds the page title as a heading when the content has no `<h1>`, and ends with a
 `Source: <url>` line. See Limitations for what it does not handle. Turning the option off hides the
@@ -169,25 +170,25 @@ Change them at `chrome://extensions/shortcuts` (Shortcuts in the popup footer or
 - **Appearance**: theme (System, Light, Dark) and language (Auto follows the browser).
 - **Saving**: file name pattern with `{title}`, `{domain}`, `{date}` (YYYY-MM-DD), `{time}`
   (HH-MM) and a live preview (illegal characters replaced, capped at 150 characters); **Ask where
-  to save** (Chrome's Save As dialog, for PDFs, images and Markdown); **Default action** (download
-  or preview tab) for shortcuts, context menu and in-page tools.
+  to save** (Chrome's Save As dialog, for PDFs, images and Markdown); **Image resolution** for PNG
+  / JPEG (1×, 2× or 3×).
 - **Page handling**: expand inner scrollable areas (on by default); let the page's `@page` CSS size
   override the paper size.
 - **Keyboard shortcuts**, **Experimental** (Markdown export), **About**, **Reset all settings**.
 
 ### Languages and theme
 
-The popup, options page, picker bar and element preview are available in English, Spanish,
-German, French, Brazilian Portuguese, Hindi, Japanese and Simplified Chinese (the preview tab and
-the context menu are English only for now). "Auto" follows the
+The popup, options page, picker bar and element preview overlay are available in English, Spanish,
+German, French, Brazilian Portuguese, Hindi, Japanese and Simplified Chinese (the download fallback
+page and the context menu are English only for now). "Auto" follows the
 browser language and falls back to English. The extension's name, description and shortcut labels
 in Chrome always follow Chrome's own UI language. The theme applies to the popup, options page,
-preview tab and the in-page preview.
+download fallback page and the preview overlay (which also has its own light / dark button).
 
 ## How it works
 
 ```
- popup / context menu / shortcut / in-page picker bar / preview modal
+ popup / context menu / shortcut / in-page picker bar / preview overlay
         │  ps:generate · ps:generate-from-content · ps:export-element · ps:export-markdown
         ▼
  service worker (src/background.js)
@@ -202,7 +203,7 @@ preview tab and the in-page preview.
         │    image: wait for the viewport to settle → Page.captureScreenshot (clip, beyond viewport)
         │ 4. finally: clear emulation, detach debugger, ps:restore (page back to normal)
         ▼
- chrome.downloads.download(data:…)   or   viewer tab (src/viewer/) → Blob URL → iframe + Download
+ chrome.downloads.download(data:…)   (if that fails: fallback page src/viewer/ → Blob URL → Download)
 ```
 
 Markdown export skips steps 2-4: the content script converts the live DOM (`ps:to-markdown`) and
@@ -221,8 +222,8 @@ debugger is attached for one export only and detached right after, so the bar go
 
 - **No network requests.** No servers, analytics or remote code. PDFs, images and Markdown are
   produced by Chrome on your device and passed only between the extension's own pages (runtime
-  messages and `chrome.storage.session`, which lives in memory). Preview jobs are discarded after
-  15 minutes or once the viewer has loaded them.
+  messages and `chrome.storage.session`, which lives in memory). A PDF handed to the download
+  fallback page is discarded after 15 minutes or once that page has loaded it.
 - **Settings** are stored in `chrome.storage.sync` (Chrome Sync may sync them like any extension's
   settings). Small UI preferences (Export settings open/closed, last preview format) are in
   `chrome.storage.local`; the theme is cached in the extension pages' `localStorage` to avoid a
@@ -233,9 +234,9 @@ debugger is attached for one export only and detached right after, so the bar go
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `debugger`     | Attach to the current tab to call `Page.printToPDF` / `Page.captureScreenshot` (plus media/viewport emulation). Attached per export, detached immediately after. |
 | `activeTab`    | Temporary access to the tab you clicked the button, menu or shortcut on. Replaces host permissions.                                                              |
-| `scripting`    | Inject the content script that prepares the page, runs the pickers and preview, converts Markdown, and restores the page afterwards.                             |
+| `scripting`    | Inject the content script that prepares the page, runs the pickers and the preview overlay, converts Markdown, and restores the page afterwards.                 |
 | `downloads`    | Save the PDF, image or Markdown file, optionally with the Save As dialog.                                                                                        |
-| `storage`      | Remember your settings and UI preferences, and hand preview PDFs to the viewer tab.                                                                              |
+| `storage`      | Remember your settings and UI preferences, and hand a PDF to the download fallback page when a direct download fails.                                            |
 | `contextMenus` | The right-click menu entries.                                                                                                                                    |
 
 ## Limitations
@@ -269,7 +270,7 @@ test assertions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
 npm install
 npx playwright install chromium
 brew install poppler           # or: apt-get install poppler-utils
-npm test                       # PDF pipeline, pickers, preview download, headless (test/e2e.mjs, 44 checks)
+npm test                       # PDF pipeline, pickers, element-preview download, headless (test/e2e.mjs, 44 checks)
 npm run test:content           # content script, preview, PNG/JPEG capture, Markdown (188 checks)
 npm run test:ui                # popup/options/viewer light+dark → test/out/ui/ (44 screenshots)
 npm run test:all               # the three suites above in sequence
@@ -298,13 +299,13 @@ extension/                 the unpacked extension (this folder is what gets zipp
   _locales/<lang>/         messages.json per language (en is the reference)
   icons/                   icon.svg source + generated PNGs
   src/background.js        service worker: PDF / image / Markdown pipeline, messaging, menus, shortcuts
-  src/content.js           page preparation and restore, pickers, preview modal, HTML → Markdown
+  src/content.js           page preparation and restore, pickers, preview overlay, HTML → Markdown
   src/lib/paper-sizes.js   22 paper formats, 200-inch cap
   src/lib/settings.js      settings schema, defaults, load/save
   src/lib/print-params.js  settings → Page.printToPDF params, header/footer, filenames
   src/lib/i18n.js          runtime translations (language picker)
   src/lib/theme.js         system / light / dark theme without a flash
-  src/popup/  src/options/  src/viewer/
+  src/popup/  src/options/  src/viewer/ (download fallback page)
 scripts/                   screenshot-ui, screenshot-preview, check-locales, build-icons
 test/                      e2e.mjs, content.e2e.mjs, fixtures/
 docs/                      ARCHITECTURE.md, RELEASE.md, store/listing.md, images/
@@ -325,7 +326,7 @@ docs/                      ARCHITECTURE.md, RELEASE.md, store/listing.md, images
 | Warning "…reduced to N× to stay within Chrome's 16,384 px limit"      | Expected for very tall elements; use PDF for full resolution.                       |
 | "Could not copy the image. Download it instead."                      | The page or browser blocked clipboard access; use Download.                         |
 | "Markdown export is an experimental feature…"                         | Enable it under Experimental on the options page.                                   |
-| "This preview has expired."                                           | Preview data is kept for 15 minutes; generate again.                                |
+| "This preview has expired."                                           | The download fallback page keeps a PDF for 15 minutes; generate it again.           |
 | Sticky header still repeats or content is clipped                     | Try screen styles, keep "Expand inner scrollable areas" on, or use Remove elements. |
 | Images missing                                                        | Keep "Scroll page to load lazy images" on; slow images get up to 6 s.               |
 | Page looks like a phone/tablet layout or is tiny                      | Adjust Layout width, or use "Fit to paper width" and Scale.                         |

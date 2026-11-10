@@ -75,14 +75,6 @@
     "message": "选取页面的一部分进行保存",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "在新标签页中预览整个页面，而不下载",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "在新标签页中预览正文，而不下载",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "移除元素",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "“移除元素”可让你在保存前点击移除不需要的内容。“还原页面”可将其恢复。",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "眼睛按钮会打开预览标签页，而不是直接下载。",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "纸张、边距等选项位于“导出设置”中。其上方的一行始终显示将要使用的设置。",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "已保存 $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "已在新标签页中打开预览。",
-    "description": "Status line"
   },
   "status_error": {
     "message": "出了点问题。",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "每次保存 PDF 前询问保存位置",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "默认操作",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "下载 PDF",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "打开预览标签页",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "用于键盘快捷键、右键菜单和页面内工具。",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "页面处理",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "复制图片",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "下载所有部分",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "第 $1 部分，共 $2 部分",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "复制",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "下载",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "已拆分为 $1 个部分，便于查看",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "切换浅色 / 深色",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "图片已复制到剪贴板",

@@ -1,7 +1,7 @@
 // Web Snap PDF - content script.
 // Injected on demand. Provides page preparation (lazy-load, hide fixed/sticky, isolate an
 // element or the article), an element picker for "select element" / "remove elements",
-// the element preview modal (PDF / PNG / JPEG / Markdown export), an HTML -> Markdown converter,
+// the element preview overlay (PDF / PNG / JPEG / Markdown export), an HTML -> Markdown converter,
 // and full restoration of every temporary change.
 //
 // Scope notes:
@@ -32,8 +32,8 @@
     removed: [], // { el, prev, prio } user removals (persist until reset / reload)
     picked: null, // element chosen with the "print element" picker
     picker: null, // active picker instance
-    preview: null, // open element preview modal
-    ignoreNextPreview: false, // the modal was closed while its preview was still being captured
+    preview: null, // open element preview overlay
+    ignoreNextPreview: false, // the overlay was closed while its preview was still being captured
     strings: {}, // UI strings from the background (English fallbacks merged with translations)
     theme: 'system', // light | dark | system
   };
@@ -113,7 +113,7 @@
     // First undo entry => runs last: the scroll position is put back only after every style
     // change has been reverted and the page has its original height again.
     rememberScroll();
-    // The preview modal is a full-viewport fixed overlay outside <body>: it must not end up in
+    // The preview overlay is a full-viewport fixed layer outside <body>: it must not end up in
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
@@ -594,12 +594,26 @@
   // Element picker (select to print / remove)
   // ---------------------------------------------------------------------------
 
+  // Colour tokens shared by the picker toolbar and the preview overlay. `.themed` elements carry
+  // data-theme="light" | "dark" (settings.theme, with 'system' resolved through matchMedia).
+  const THEME_CSS = `
+    .themed { --bg: #ffffff; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --stage: #f3f4f6; --check: #e5e7eb;
+              --seg: #f3f4f6; --seg-on: #ffffff; --ghost: #f3f4f6; --ghost-hover: #e5e7eb; --accent: #2563eb;
+              --accent-hover: #1d4ed8; --danger: #dc2626; --warn: #92400e; --warn-bg: #fef3c7; --error: #b91c1c;
+              --ok: #15803d; --shadow: rgba(15, 23, 42, 0.12); color-scheme: light; }
+    .themed[data-theme="dark"] { --bg: #1f2937; --fg: #f9fafb; --muted: #9ca3af; --border: #374151; --stage: #111827;
+              --check: #1a2332; --seg: #111827; --seg-on: #374151; --ghost: #374151; --ghost-hover: #4b5563;
+              --accent: #3b82f6; --accent-hover: #2563eb; --danger: #ef4444; --warn: #fcd34d; --warn-bg: #422006;
+              --error: #fca5a5; --ok: #86efac; --shadow: rgba(0, 0, 0, 0.45); color-scheme: dark; }
+  `;
+
   // The host is `position: fixed` with `all: initial` inline (inline beats page CSS and the
   // :host rule), so it has no transform/filter/contain and its fixed-position shadow children
   // are positioned against the viewport; highlight coordinates come straight from
   // getBoundingClientRect() and are refreshed on every scroll.
   const PICKER_CSS = `
     :host { all: initial; }
+    ${THEME_CSS}
     .hl { position: fixed; pointer-events: none; z-index: 2147483646; box-sizing: border-box;
           border: 2px solid #2563eb; background: rgba(37, 99, 235, 0.12); border-radius: 3px;
           transition: all 40ms linear; display: none; }
@@ -608,21 +622,23 @@
            padding: 1px 6px; border-radius: 3px 3px 0 0; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
     .hl.remove .tag { background: #dc2626; }
     .bar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647;
-           display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: #111827; color: #f9fafb;
-           font: 13px/1.4 -apple-system, Segoe UI, Roboto, sans-serif; border-radius: 10px;
-           box-shadow: 0 8px 24px rgba(0,0,0,0.35); pointer-events: auto; max-width: calc(100vw - 32px); }
+           display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 10px 8px 14px;
+           background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+           font: 13px/1.4 -apple-system, Segoe UI, Roboto, sans-serif; border-radius: 10px; box-sizing: border-box;
+           box-shadow: 0 8px 24px var(--shadow); pointer-events: auto; width: max-content; max-width: calc(100vw - 32px); }
+    .bar .text { flex: 1 1 auto; min-width: 0; }
     .bar b { font-weight: 600; }
-    .bar .hint { color: #9ca3af; }
-    .bar button { all: initial; cursor: pointer; font: 600 12px/1 -apple-system, Segoe UI, Roboto, sans-serif; color: #f9fafb;
-                  background: #374151; padding: 7px 10px; border-radius: 6px; }
-    .bar button:hover { background: #4b5563; }
-    .bar button.primary { background: #2563eb; }
-    .bar button.primary:hover { background: #1d4ed8; }
-    .bar button.danger { background: #dc2626; }
-    .count { background: #dc2626; color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+    .bar .hint { color: var(--muted); }
+    .bar button { all: initial; cursor: pointer; font: 600 12px/1 -apple-system, Segoe UI, Roboto, sans-serif; color: var(--fg);
+                  background: var(--ghost); padding: 7px 10px; border-radius: 6px; }
+    .bar button:hover { background: var(--ghost-hover); }
+    .bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .bar button.primary { background: var(--accent); color: #fff; }
+    .bar button.primary:hover { background: var(--accent-hover); }
+    .count { background: var(--danger); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
   `;
 
-  // Shadow-DOM container for our in-page UI (picker, preview modal), marked with UI_ATTR so the
+  // Shadow-DOM container for our in-page UI (picker, preview overlay), marked with UI_ATTR so the
   // page scans, isolation and the Markdown converter skip it. Not attached to the document yet.
   function createUiHost(uiAttrValue, css) {
     const host = document.createElement('div');
@@ -653,7 +669,8 @@
     shadow.appendChild(hl);
 
     const bar = document.createElement('div');
-    bar.className = 'bar';
+    bar.className = 'bar themed';
+    bar.dataset.theme = resolvedTheme();
     shadow.appendChild(bar);
 
     const p = { mode, host, hl, tag, bar, current: null };
@@ -799,6 +816,7 @@
     };
     // Built with DOM nodes (no innerHTML): pages that enforce Trusted Types reject HTML strings.
     const text = document.createElement('span');
+    text.className = 'text';
     const title = document.createElement('b');
     const hint = document.createElement('span');
     hint.className = 'hint';
@@ -866,7 +884,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Element preview modal
+  // Element preview overlay
   // ---------------------------------------------------------------------------
 
   function setUi(msg) {
@@ -913,55 +931,73 @@
     };
   }
 
+  // Full-page overlay: a toolbar fixed at the top of the viewport holding every option, and the
+  // preview filling the rest of the viewport (scrollable), one canvas per captured part.
   const PREVIEW_CSS = `
     :host { all: initial; }
-    .overlay { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
-               padding: 16px; box-sizing: border-box; background: rgba(15, 23, 42, 0.55);
-               font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg);
-               --bg: #ffffff; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --stage: #f3f4f6; --check: #e5e7eb;
-               --seg: #f3f4f6; --seg-on: #ffffff; --ghost: #f3f4f6; --ghost-hover: #e5e7eb; --accent: #2563eb;
-               --accent-hover: #1d4ed8; --warn: #92400e; --warn-bg: #fef3c7; --error: #b91c1c; --ok: #15803d; }
-    .overlay.dark { --bg: #1f2937; --fg: #f9fafb; --muted: #9ca3af; --border: #374151; --stage: #111827; --check: #1f2937;
-                    --seg: #111827; --seg-on: #374151; --ghost: #374151; --ghost-hover: #4b5563; --accent: #3b82f6;
-                    --accent-hover: #2563eb; --warn: #fcd34d; --warn-bg: #422006; --error: #fca5a5; --ok: #86efac;
-                    background: rgba(0, 0, 0, 0.65); }
-    .dialog { background: var(--bg); color: var(--fg); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
-              width: min(920px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden;
-              border: 1px solid var(--border); box-sizing: border-box; }
-    header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--border); }
-    h2 { all: unset; flex: 1; font-size: 15px; font-weight: 600; }
-    .stage { flex: 1 1 auto; min-height: 120px; max-height: 70vh; overflow: auto; overscroll-behavior: contain;
-             background-color: var(--stage);
-             background-image: conic-gradient(var(--check) 25%, transparent 0 50%, var(--check) 0 75%, transparent 0);
-             background-size: 16px 16px; display: flex; align-items: flex-start; justify-content: center; padding: 16px;
-             box-sizing: border-box; }
-    .stage .shot { display: block; max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.25); background: #fff; }
-    .placeholder { align-self: center; color: var(--muted); padding: 32px 8px; text-align: center; }
-    .placeholder.error { color: var(--error); }
-    .meta { padding: 10px 18px 0; display: flex; flex-direction: column; gap: 6px; }
+    ${THEME_CSS}
+    .overlay { position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column;
+               background: var(--stage); color: var(--fg); box-sizing: border-box;
+               font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px;
+               background: var(--bg); border-bottom: 1px solid var(--border); box-shadow: 0 1px 4px var(--shadow);
+               position: relative; z-index: 1; }
+    .heading { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; }
+    h2 { all: unset; display: block; font-size: 15px; font-weight: 600; line-height: 1.3; }
     .caption { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-    .warning { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
-    footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px 16px; }
-    .seg { display: inline-flex; margin-right: auto; background: var(--seg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
-    .seg button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
-    .seg button[aria-checked="true"] { background: var(--seg-on); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
-    .status { order: 10; flex: 1 0 100%; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-    .status:empty { display: none; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+    .notes { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; background: var(--bg);
+             border-bottom: 1px solid var(--border); font-size: 12px; }
+    .split-note { color: var(--muted); }
+    .warning { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; }
+    .status { color: var(--muted); overflow-wrap: anywhere; }
     .status.error { color: var(--error); }
     .status.ok { color: var(--ok); }
-    .btn { all: unset; cursor: pointer; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 8px;
-           background: var(--ghost); color: var(--fg); white-space: nowrap; }
+    .stage { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; box-sizing: border-box;
+             padding: 24px 16px 32px; background-color: var(--stage);
+             background-image: conic-gradient(var(--check) 25%, transparent 0 50%, var(--check) 0 75%, transparent 0);
+             background-size: 16px 16px; }
+    .stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .parts { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .part { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; }
+    .part-head { align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; box-sizing: border-box;
+                 padding: 4px 4px 4px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+                 font-size: 12px; font-weight: 600; }
+    .part-label { flex: 1 1 auto; }
+    .shot { display: block; max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.25); background: #fff; }
+    .placeholder { color: var(--muted); padding: 48px 8px; text-align: center; }
+    .placeholder.error { color: var(--error); }
+    .seg { display: inline-flex; flex: none; background: var(--seg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+    .seg button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
+    .seg button[aria-checked="true"] { background: var(--seg-on); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+    .btn { all: unset; box-sizing: border-box; cursor: pointer; font-weight: 600; font-size: 13px; padding: 8px 14px;
+           border-radius: 8px; background: var(--ghost); color: var(--fg); white-space: nowrap; }
     .btn:hover { background: var(--ghost-hover); }
     .btn.primary { background: var(--accent); color: #fff; }
     .btn.primary:hover { background: var(--accent-hover); }
-    .btn.icon { padding: 4px 10px; font-size: 18px; line-height: 1; background: transparent; color: var(--muted); }
+    .btn.small { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+    .btn.icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0;
+                background: transparent; color: var(--muted); font-size: 20px; line-height: 1; }
     .btn.icon:hover { background: var(--ghost); color: var(--fg); }
+    .btn.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;
+                    stroke-linecap: round; stroke-linejoin: round; }
     .btn[disabled], .seg button[disabled] { opacity: 0.5; cursor: default; pointer-events: none; }
     .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [hidden] { display: none !important; }
+    @media (max-width: 520px) {
+      .toolbar { padding: 8px 12px; }
+      .heading { flex-basis: calc(100% - 46px); }
+      .actions { margin-left: 0; gap: 6px; }
+      .btn { padding: 7px 11px; }
+      /* Close stays in the top-right corner instead of wrapping onto a row of its own. */
+      .btn.icon.close { position: absolute; top: 8px; right: 8px; }
+      .notes { padding: 8px 12px; }
+      .stage { padding: 16px 8px 24px; }
+    }
   `;
 
   const PREVIEW_KEY_EVENTS = ['keydown', 'keyup', 'keypress'];
+  const SVG_NS = 'http://www.w3.org/2000/svg';
 
   function make(tag, props = {}, ...children) {
     const node = document.createElement(tag);
@@ -974,67 +1010,114 @@
     return node;
   }
 
-  // Build (or reuse) the modal; a new one shows a loading placeholder until ps:show-preview arrives.
+  // Sun / moon icons for the theme toggle, built with DOM calls (no innerHTML: Trusted Types).
+  function themeIcon(theme) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const add = (tag, attrs) => {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      svg.appendChild(el);
+    };
+    if (theme === 'dark') {
+      // Dark overlay: show the sun (switch to light).
+      add('circle', { cx: 12, cy: 12, r: 4 });
+      for (const [x1, y1, x2, y2] of [
+        [12, 2, 12, 4],
+        [12, 20, 12, 22],
+        [2, 12, 4, 12],
+        [20, 12, 22, 12],
+        [4.9, 4.9, 6.3, 6.3],
+        [17.7, 17.7, 19.1, 19.1],
+        [4.9, 19.1, 6.3, 17.7],
+        [17.7, 6.3, 19.1, 4.9],
+      ])
+        add('line', { x1, y1, x2, y2 });
+    } else {
+      add('path', { d: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z' });
+    }
+    return svg;
+  }
+
+  // Build (or reuse) the overlay; a new one shows a loading placeholder until ps:show-preview arrives.
   function openPreview() {
     if (state.preview) return state.preview;
     const { host, shadow } = createUiHost('preview', PREVIEW_CSS);
 
     const title = make('h2', { id: 'ps-title', text: str('preview_title') });
-    const close = make('button', {
-      className: 'btn icon close',
-      type: 'button',
-      'aria-label': str('preview_close'),
-      title: str('preview_close'),
-      text: '×',
-    });
-    const stage = make('div', { className: 'stage' });
     const caption = make('div', { className: 'caption' });
-    const warning = make('div', { className: 'warning', role: 'note' });
-    warning.hidden = true;
     const seg = make('div', { className: 'seg', role: 'radiogroup', 'aria-label': str('preview_format') });
-    const status = make('div', { className: 'status', role: 'status', 'aria-live': 'polite' });
-    const reselect = make('button', {
-      className: 'btn reselect',
-      type: 'button',
-      text: str('preview_reselect'),
-    });
     const copy = make('button', { className: 'btn copy', type: 'button', text: str('preview_copyImage') });
     const download = make('button', {
       className: 'btn primary download',
       type: 'button',
       text: str('preview_download'),
     });
-    const dialog = make(
-      'div',
-      { className: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ps-title' },
-      make('header', {}, title, close),
-      stage,
-      make('div', { className: 'meta' }, caption, warning),
-      make('footer', {}, seg, status, reselect, copy, download),
+    const reselect = make('button', {
+      className: 'btn reselect',
+      type: 'button',
+      text: str('preview_reselect'),
+    });
+    const theme = make('button', {
+      className: 'btn icon theme',
+      type: 'button',
+      'aria-label': str('preview_themeToggle'),
+      title: str('preview_themeToggle'),
+    });
+    const close = make('button', {
+      className: 'btn icon close',
+      type: 'button',
+      'aria-label': str('preview_close'),
+      title: str('preview_close') + ' (Esc)',
+      text: '×',
+    });
+    const toolbar = make(
+      'header',
+      { className: 'toolbar' },
+      make('div', { className: 'heading' }, title, caption),
+      seg,
+      make('div', { className: 'actions' }, copy, download, reselect, theme, close),
     );
+    const splitNote = make('div', { className: 'split-note' });
+    const warning = make('div', { className: 'warning', role: 'note' });
+    const status = make('div', { className: 'status', role: 'status', 'aria-live': 'polite' });
+    const notes = make('div', { className: 'notes' }, splitNote, warning, status);
+    // Focusable so the preview can be scrolled with the keyboard.
+    const stage = make('div', { className: 'stage', tabindex: '0', 'aria-label': str('preview_imageAlt') });
     const overlay = make(
       'div',
-      { className: 'overlay' + (resolvedTheme() === 'dark' ? ' dark' : '') },
-      dialog,
+      { className: 'overlay themed', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ps-title' },
+      toolbar,
+      notes,
+      stage,
     );
     shadow.append(overlay);
 
     const m = {
       host,
+      shadow,
       overlay,
+      toolbar,
       stage,
       caption,
+      notes,
+      splitNote,
       warning,
       seg,
       status,
       copy,
       download,
       reselect,
+      theme,
       busy: false,
       data: null,
+      parts: [], // { canvas, copy, download } per rendered part
       format: 'pdf',
     };
     state.preview = m;
+    applyPreviewTheme(m);
+    for (const el of [splitNote, warning, status]) el.hidden = true;
 
     close.addEventListener('click', () => closePreview());
     reselect.addEventListener('click', () => {
@@ -1042,21 +1125,31 @@
       startPicker('print');
     });
     download.addEventListener('click', () => previewDownload(m));
-    copy.addEventListener('click', () => previewCopy(m));
-    overlay.addEventListener('click', (ev) => {
-      if (ev.target === overlay && !m.busy) closePreview();
-    });
-    // Escape is caught on window in the capture phase, before any page handler can swallow it.
+    copy.addEventListener('click', () => previewCopy(m, 0));
+    theme.addEventListener('click', () => toggleTheme(m));
+    // Escape and Tab are caught on window in the capture phase, before any page handler can
+    // swallow them; Tab cycles through the overlay's controls only.
     m.onKey = (ev) => {
-      if (ev.key !== 'Escape') return;
-      ev.preventDefault();
-      ev.stopImmediatePropagation();
-      closePreview();
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        closePreview();
+      } else if (ev.key === 'Tab') {
+        trapFocus(m, ev);
+      }
     };
     window.addEventListener('keydown', m.onKey, true);
-    // Other keys typed in the modal (arrows in the format control, Enter/Space on buttons) are not
+    // Other keys typed in the overlay (arrows in the format control, Enter/Space on buttons) are not
     // passed on to the page's own bubbling key handlers.
     for (const type of PREVIEW_KEY_EVENTS) overlay.addEventListener(type, (ev) => ev.stopPropagation());
+    // Only the preview scrolls; the wheel over the toolbar must not scroll the page underneath.
+    overlay.addEventListener(
+      'wheel',
+      (ev) => {
+        if (!ev.composedPath().includes(stage)) ev.preventDefault();
+      },
+      { passive: false },
+    );
     document.documentElement.appendChild(host);
     setPreviewLoading(m);
     return m;
@@ -1071,12 +1164,49 @@
     state.preview = null;
   }
 
-  // Replace the preview image with a message; nothing can be exported meanwhile.
+  function focusables(m) {
+    return Array.from(m.overlay.querySelectorAll('button, [tabindex]')).filter(
+      (el) => el.tabIndex >= 0 && !el.disabled && el.getClientRects().length > 0,
+    );
+  }
+
+  function trapFocus(m, ev) {
+    const list = focusables(m);
+    if (!list.length) return;
+    const i = list.indexOf(m.shadow.activeElement);
+    let next = null;
+    if (i === -1) next = ev.shiftKey ? list[list.length - 1] : list[0];
+    else if (ev.shiftKey && i === 0) next = list[list.length - 1];
+    else if (!ev.shiftKey && i === list.length - 1) next = list[0];
+    if (!next) return; // normal tab order inside the overlay
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    next.focus();
+  }
+
+  function applyPreviewTheme(m) {
+    const theme = resolvedTheme();
+    m.overlay.dataset.theme = theme;
+    m.theme.replaceChildren(themeIcon(theme));
+    m.theme.setAttribute('aria-pressed', String(theme === 'dark'));
+  }
+
+  // Light <-> dark (a 'system' setting is resolved first); applied at once and saved to settings.
+  function toggleTheme(m) {
+    state.theme = resolvedTheme() === 'dark' ? 'light' : 'dark';
+    applyPreviewTheme(m);
+    chrome.runtime.sendMessage({ type: 'ps:set-theme', theme: state.theme }).catch(() => {});
+  }
+
+  // Replace the preview with a message; nothing can be exported meanwhile.
   function showPlaceholder(m, className, text) {
+    m.parts = [];
     m.stage.replaceChildren(make('div', { className, text }));
+    m.splitNote.hidden = true;
     renderFormats(m, { formats: [] });
     m.download.disabled = true;
     m.copy.hidden = true;
+    updateNotes(m);
   }
 
   function setPreviewLoading(m) {
@@ -1093,7 +1223,7 @@
     m.reselect.focus();
   }
 
-  // Click in "select element" mode: open the modal in its loading state and ask the background
+  // Click in "select element" mode: open the overlay in its loading state and ask the background
   // to capture the element (it answers with ps:show-preview).
   function requestPreview() {
     state.ignoreNextPreview = false;
@@ -1109,6 +1239,8 @@
       .catch((err) => fail(errorText(err)));
   }
 
+  // ps:show-preview: { parts: [{ dataUrl, width, height }], width, height, description, format,
+  // imageWarning, markdownEnabled }. More than one part: the element was split for easier viewing.
   function showPreview(msg) {
     if (!state.preview && state.ignoreNextPreview) {
       state.ignoreNextPreview = false;
@@ -1116,16 +1248,76 @@
     }
     const m = openPreview();
     m.loading = false;
-    m.overlay.classList.toggle('dark', resolvedTheme() === 'dark');
-    m.data = msg;
+    applyPreviewTheme(m);
+    const parts =
+      Array.isArray(msg.parts) && msg.parts.length
+        ? msg.parts
+        : [{ dataUrl: msg.dataUrl, width: msg.width, height: msg.height }];
+    m.data = { ...msg, parts };
     m.busy = false;
+    const n = parts.length;
+    const list = make('div', { className: 'parts' });
+    m.parts = parts.map((part, i) => renderPart(m, list, part, i, n));
+    m.stage.replaceChildren(list);
+    m.stage.scrollTop = 0;
+    m.caption.textContent = str('preview_caption', [
+      msg.description || 'element',
+      Math.round(msg.width),
+      Math.round(msg.height),
+    ]);
+    m.splitNote.textContent = n > 1 ? str('preview_splitNote', [n]) : '';
+    m.splitNote.hidden = n < 2;
+    m.copy.title = n > 1 ? `${str('preview_copyImage')} (${str('preview_part', [1, n])})` : '';
+    const formats = ['pdf', 'png', 'jpeg'];
+    if (msg.markdownEnabled) formats.push('markdown');
+    renderFormats(m, { formats, selected: formats.includes(msg.format) ? msg.format : 'pdf' });
+    m.download.disabled = false;
+    setStatus(m, '');
+    m.download.focus();
+  }
+
+  // One part: a header ("Part 2 of 4" + Copy / Download, only when split) and its canvas.
+  function renderPart(m, list, part, i, n) {
     // Drawn on a canvas rather than an <img src="data:...">: the image element would be subject
     // to the page's Content-Security-Policy (img-src), createImageBitmap is not.
-    const canvas = make('canvas', { className: 'shot', role: 'img', 'aria-label': str('preview_imageAlt') });
+    const canvas = make('canvas', {
+      className: 'shot',
+      role: 'img',
+      'aria-label':
+        n > 1 ? `${str('preview_imageAlt')} (${str('preview_part', [i + 1, n])})` : str('preview_imageAlt'),
+    });
     // Displayed at the element's CSS size (the capture is at screen resolution), shrunk to fit.
-    canvas.style.width = Math.max(1, Math.round(msg.width)) + 'px';
-    m.stage.replaceChildren(canvas);
-    createImageBitmap(dataUrlToBlob(msg.dataUrl))
+    const cssWidth = Math.max(1, Math.round(part.width));
+    canvas.style.width = cssWidth + 'px';
+    const section = make('section', { className: 'part', 'data-part': String(i + 1) });
+    const entry = { canvas, copy: null, download: null };
+    if (n > 1) {
+      const labelId = `ps-part-${i + 1}`;
+      const label = make('span', {
+        className: 'part-label',
+        id: labelId,
+        text: str('preview_part', [i + 1, n]),
+      });
+      entry.copy = make('button', {
+        className: 'btn small part-copy',
+        type: 'button',
+        'aria-describedby': labelId,
+        text: str('preview_copyPart'),
+      });
+      entry.download = make('button', {
+        className: 'btn small part-download',
+        type: 'button',
+        'aria-describedby': labelId,
+        text: str('preview_downloadPart'),
+      });
+      entry.copy.addEventListener('click', () => previewCopy(m, i));
+      entry.download.addEventListener('click', () => previewDownload(m, i + 1));
+      section.style.width = `max(${cssWidth}px, 240px)`;
+      section.append(make('div', { className: 'part-head' }, label, entry.copy, entry.download));
+    }
+    section.append(canvas);
+    list.append(section);
+    createImageBitmap(dataUrlToBlob(part.dataUrl))
       .then((bmp) => {
         canvas.width = bmp.width;
         canvas.height = bmp.height;
@@ -1133,19 +1325,8 @@
         bmp.close();
         canvas.dataset.ready = 'true';
       })
-      .catch(() => showPreviewError(str('preview_errorCapture')));
-    m.stage.scrollTop = 0;
-    m.caption.textContent = str('preview_caption', [
-      msg.description || 'element',
-      Math.round(msg.width),
-      Math.round(msg.height),
-    ]);
-    const formats = ['pdf', 'png', 'jpeg'];
-    if (msg.markdownEnabled) formats.push('markdown');
-    renderFormats(m, { formats, selected: formats.includes(msg.format) ? msg.format : 'pdf' });
-    m.download.disabled = false;
-    setStatus(m, '');
-    m.download.focus();
+      .catch(() => state.preview === m && showPreviewError(str('preview_errorCapture')));
+    return entry;
   }
 
   const FORMAT_LABELS = {
@@ -1178,6 +1359,10 @@
     if (formats.length) selectFormat(m, selected);
   }
 
+  function isImageFormat(format) {
+    return format === 'png' || format === 'jpeg';
+  }
+
   function selectFormat(m, format) {
     m.format = format;
     for (const b of m.seg.querySelectorAll('button')) {
@@ -1185,16 +1370,32 @@
       b.setAttribute('aria-checked', String(on));
       b.tabIndex = on ? 0 : -1;
     }
-    const image = format === 'png' || format === 'jpeg';
-    m.copy.hidden = format !== 'png' || !m.data;
-    const warn = image && m.data && m.data.imageWarning;
+    // Copy always puts a PNG on the clipboard (the only image type it accepts), so it is offered
+    // for PNG and JPEG alike; PDF and Markdown are not split and have nothing to copy.
+    const image = isImageFormat(format) && !!m.data;
+    const split = m.parts.length > 1;
+    m.copy.hidden = !image;
+    for (const p of m.parts) {
+      if (p.copy) p.copy.hidden = !image;
+      if (p.download) p.download.hidden = !image;
+    }
+    m.download.textContent = str(image && split ? 'preview_downloadAll' : 'preview_download');
+    const warn = image && m.data.imageWarning;
     m.warning.hidden = !warn;
     m.warning.textContent = warn || '';
+    updateNotes(m);
   }
 
   function setStatus(m, text, kind = '') {
     m.status.textContent = text;
     m.status.className = 'status' + (kind ? ' ' + kind : '');
+    m.status.hidden = !text;
+    updateNotes(m);
+  }
+
+  // The notes strip under the toolbar is shown only while it has something to say.
+  function updateNotes(m) {
+    m.notes.hidden = m.splitNote.hidden && m.warning.hidden && m.status.hidden;
   }
 
   function setBusy(m, busy) {
@@ -1203,11 +1404,19 @@
     m.reselect.disabled = busy;
     m.copy.disabled = busy;
     for (const b of m.seg.querySelectorAll('button')) b.disabled = busy;
+    for (const p of m.parts) {
+      if (p.copy) p.copy.disabled = busy;
+      if (p.download) p.download.disabled = busy;
+    }
   }
 
-  async function previewDownload(m) {
+  // Toolbar Download (`part` null: the whole element, every part of a split image) or a part's
+  // own Download button (`part`: 1-based, images only). The overlay closes after a successful
+  // whole-element export without warnings; a single part keeps it open for the other parts.
+  async function previewDownload(m, part = null) {
     if (m.busy || !m.data) return;
     const format = m.format;
+    if (part != null && !isImageFormat(format)) return;
     setBusy(m, true);
     setStatus(m, str('preview_saving'));
     let res;
@@ -1221,7 +1430,9 @@
       } else if (format === 'markdown') {
         res = await chrome.runtime.sendMessage({ type: 'ps:export-markdown-from-content', prep: 'element' });
       } else {
-        res = await chrome.runtime.sendMessage({ type: 'ps:export-element', format });
+        const msg = { type: 'ps:export-element', format };
+        if (part != null) msg.part = part;
+        res = await chrome.runtime.sendMessage(msg);
       }
     } catch (err) {
       res = { ok: false, error: errorText(err) };
@@ -1229,11 +1440,15 @@
     if (state.preview !== m) return; // closed meanwhile
     setBusy(m, false);
     if (res && res.ok) {
-      if (res.warning) {
-        // Keep the modal open so the warning can be read.
-        setStatus(m, str('preview_saved', [res.filename || '']), 'ok');
-        m.warning.hidden = false;
-        m.warning.textContent = res.warning;
+      if (res.warning || part != null) {
+        // Keep the overlay open so the warning can be read / the other parts saved.
+        const names = res.filenames && res.filenames.length ? res.filenames.join(', ') : res.filename || '';
+        setStatus(m, str('preview_saved', [names]), 'ok');
+        if (res.warning) {
+          m.warning.hidden = false;
+          m.warning.textContent = res.warning;
+          updateNotes(m);
+        }
       } else {
         closePreview();
       }
@@ -1251,16 +1466,18 @@
     return new Blob([bytes], { type: mime });
   }
 
-  // Copies the preview image (screen resolution). Must run synchronously inside the click so the
+  // Copies part `index` of the preview (a PNG at screen resolution, whatever format is selected:
+  // the async clipboard only accepts image/png). Must run synchronously inside the click so the
   // clipboard write keeps the user activation: the PNG bytes are decoded from the data URL in place.
-  function previewCopy(m) {
-    if (!m.data || !m.data.dataUrl) return;
+  function previewCopy(m, index) {
+    const part = m.data && m.data.parts[index];
+    if (!part || !part.dataUrl) return;
     if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
       setStatus(m, str('preview_errorCopy'), 'error');
       return;
     }
     try {
-      const blob = dataUrlToBlob(m.data.dataUrl);
+      const blob = dataUrlToBlob(part.dataUrl);
       navigator.clipboard
         .write([new ClipboardItem({ 'image/png': blob })])
         .then(() => state.preview === m && setStatus(m, str('preview_copied'), 'ok'))

@@ -11,7 +11,10 @@ Run every command from the project root. The exact text to paste into the dashbo
 - [ ] Note user-visible changes for the release notes. 1.1.0: redesigned popup (three action cards,
       Layout + summary line, collapsible Export settings, Help), on-page element preview with PDF /
       PNG / JPEG export and Copy image, light/dark theme, 8 interface languages, experimental
-      Markdown export (opt-in).
+      Markdown export (opt-in). Next release: the popup cards always download directly (the
+      separate preview buttons and the "Default action" option are removed); the element preview
+      becomes a full-page overlay with a toolbar at the top and splits large elements into image
+      parts.
 
 ## 2. Verify
 
@@ -21,23 +24,25 @@ Run every command from the project root. The exact text to paste into the dashbo
 - [ ] `npm run check:locales` reports all 8 locales in sync and every `extDescription` ≤ 132 chars.
 - [ ] Manual smoke test with the unpacked `extension/` folder in a normal Chrome profile
       (the tests use a copy with extra `host_permissions`; this checks real `activeTab` behaviour):
-  - [ ] Popup: Full page and Article only download; both eye buttons open the preview tab.
+  - [ ] Popup: Full page and Article only download directly; the cards have no extra buttons.
   - [ ] Layout toggle and Export settings: the summary line follows every change; the panel's
         open/closed state survives reopening the popup.
-  - [ ] Select element → preview modal: PDF, PNG and JPEG download; Copy image pastes into another
-        app; Reselect; Esc and click-outside close; a very tall element shows the 16 384 px warning.
+  - [ ] Select element → full-page preview overlay with the toolbar at the top: PDF, PNG and JPEG
+        download; Copy image (PNG and JPEG) pastes into another app; Reselect; light / dark toggle;
+        Close and Esc close it. A very tall element is split into numbered parts shown stacked:
+        each part's Copy and Download work, and the toolbar's Download saves all parts.
   - [ ] Remove elements (Undo, Save PDF, Done) and Reset page in the popup.
   - [ ] Context menu: all five entries, including from the toolbar icon's menu.
   - [ ] `Alt+Shift+P` and `Alt+Shift+A`.
-  - [ ] Theme button cycles System → Light → Dark; options page and preview modal follow.
+  - [ ] Theme button cycles System → Light → Dark; options page and preview overlay follow.
   - [ ] Language selector: switch to at least one non-Latin language (ja or hi) and back; picker
-        bar and preview modal are translated.
+        bar and preview overlay are translated.
   - [ ] Markdown: hidden by default; options → Experimental asks for confirmation; after enabling,
-        the popup row and the modal's Markdown format appear and produce `.md` files; disabling
+        the popup row and the overlay's Markdown format appear and produce `.md` files; disabling
         hides them again.
   - [ ] Popup shows the "can't be converted" notice on `chrome://extensions` and the Web Store.
   - [ ] Options page: filename preview updates, Save As toggle (also for images and Markdown),
-        Reset all settings.
+        image resolution, no "Default action" select, Reset all settings.
   - [ ] Service worker console (`chrome://extensions` → Inspect views) has no errors.
 - [ ] If the icon changed: `npm run build:icons`.
 
@@ -79,7 +84,7 @@ Paste from [store/listing.md](store/listing.md):
 
 Requirements: 1280 × 800 (preferred) or 640 × 400, PNG or JPEG without transparency, 1-5 images.
 Our raw captures are narrower (popup 360 px, options 720 px), so the popup shots need composing onto
-a 1280 × 800 canvas; the preview-modal shots are already 1280 × 800.
+a 1280 × 800 canvas; the preview-overlay shots are already 1280 × 800.
 
 Use a neutral demo page with our own content (no third-party sites, logos or trademarks) and the
 light theme unless stated. Plan:
@@ -87,9 +92,9 @@ light theme unless stated. Plan:
 | #   | Shot                                                                    | How to produce                                                                                                                                                                                                                         |
 | --- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Popup over an article page: "Full page / Article only / Select element" | Open a demo article at 1280 × 800, render `popup.html` (as `scripts/screenshot-ui.mjs` does, 360 px wide, device scale 2 for sharpness) and composite it at the top right under a mock toolbar.                                        |
-| 2   | Element preview modal with PDF / PNG / JPEG                             | `node scripts/screenshot-preview.mjs` → `docs/images/preview-modal-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
+| 2   | Element preview overlay with PDF / PNG / JPEG                           | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
 | 3   | Export settings expanded                                                | Composite `popup-expanded-light.png` (crop to the Paper → Content groups) next to a sample PDF page rendered from the demo article.                                                                                                    |
-| 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-modal-dark.png` side by side on a dark background.                                                                                                                                |
+| 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-overlay-dark.png` side by side on a dark background.                                                                                                                                |
 | 5   | Remove elements / options                                               | The remove-mode bar on the demo page with a removed banner, or `options-light.png` framed on the canvas with the language menu open.                                                                                                   |
 
 The source images live in `docs/images/` (copied from `test/out/ui/` after `npm run test:ui`).
@@ -111,9 +116,9 @@ image, or opt-in Markdown), converted locally.
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `debugger`     | Only route to Chrome's `Page.printToPDF` and full-element `Page.captureScreenshot`. Attached to the one tab the user acted on, per export, detached in `finally`. Also uses `Emulation.setEmulatedMedia`, `Emulation.setDeviceMetricsOverride`, `Page.getLayoutMetrics` and `Runtime.evaluate` (viewport height only). Never reads network, cookies or other tabs. |
 | `activeTab`    | Temporary access to the tab where the user clicked the button, menu item or shortcut; replaces host permissions.                                                                                                                                                                                                                                                   |
-| `scripting`    | Injects the packaged content script: page preparation and restore, pickers, on-page preview, opt-in Markdown conversion.                                                                                                                                                                                                                                           |
+| `scripting`    | Injects the packaged content script: page preparation and restore, pickers, on-page preview overlay, opt-in Markdown conversion.                                                                                                                                                                                                                                   |
 | `downloads`    | Saves the PDF / PNG / JPEG / Markdown file, optionally with Save As.                                                                                                                                                                                                                                                                                               |
-| `storage`      | Settings (`sync`), small UI preferences (`local`), preview PDF hand-off to the viewer (`session`).                                                                                                                                                                                                                                                                 |
+| `storage`      | Settings (`sync`), small UI preferences (`local`), PDF hand-off to the download fallback page if a direct download fails (`session`).                                                                                                                                                                                                                              |
 | `contextMenus` | Five right-click entries.                                                                                                                                                                                                                                                                                                                                          |
 
 **Host permissions:** none. **Remote code:** none. **Data usage:** nothing collected; certify the

@@ -75,14 +75,6 @@
     "message": "Elige qué parte de la página guardar",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "Ver la página completa en una pestaña nueva en lugar de descargarla",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "Ver el artículo en una pestaña nueva en lugar de descargarlo",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "Quitar elementos",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "Quitar elementos te permite hacer clic en lo que no quieras antes de guardar. Restaurar página lo recupera.",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "El botón del ojo abre una vista previa en lugar de descargar.",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "El papel, los márgenes y otras opciones están en Opciones de exportación. La línea de encima muestra siempre qué se usará.",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "Guardado: $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "Vista previa abierta en una pestaña nueva.",
-    "description": "Status line"
   },
   "status_error": {
     "message": "Algo ha fallado.",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "Preguntar dónde guardar cada PDF",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "Acción predeterminada",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "Descargar el PDF",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "Abrir una vista previa",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "La usan los atajos de teclado, el menú contextual y las herramientas de la página.",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "Tratamiento de la página",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "Copiar imagen",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "Descargar todas las partes",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "Parte $1 de $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "Copiar",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "Descargar",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "Dividido en $1 partes para verlo mejor",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "Cambiar entre claro y oscuro",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "Imagen copiada al portapapeles",

@@ -55,7 +55,7 @@ extension/                 the unpacked extension (this folder is what gets zipp
   src/lib/                 shared modules: settings, print params, paper sizes, i18n, theme
   src/popup/               toolbar popup
   src/options/             options page
-  src/viewer/              PDF preview tab
+  src/viewer/              fallback download page (only used if a direct download fails)
 scripts/                   icon rasteriser, locale check, UI screenshots, packaging
 test/e2e.mjs               end-to-end tests of the PDF pipeline
 test/content.e2e.mjs       content-script and element-export tests

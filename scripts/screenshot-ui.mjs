@@ -212,6 +212,10 @@ try {
         problems.push(`[${label}] summary is "${await summary(page)}", expected "${DEFAULT_SUMMARY}"`);
       if (await page.isVisible('#act-reset'))
         problems.push(`[${label}] reset link visible with 0 removed elements`);
+      if ((await page.locator('.card-alt, #act-page-preview, #act-article-preview').count()) !== 0)
+        problems.push(`[${label}] popup still has preview (eye) buttons on the cards`);
+      if ((await page.locator('.card').count()) !== 3)
+        problems.push(`[${label}] expected 3 action cards, got ${await page.locator('.card').count()}`);
       const langCount = await page.locator('#language option').count();
       if (langCount < 2) problems.push(`[${label}] language select has ${langCount} options`);
       const version = await page.textContent('#version');
@@ -254,9 +258,7 @@ try {
       }
       await clearSent(page);
       for (const [sel, expect] of [
-        ['#act-page-preview', ['ps:generate', 'none', 'open']],
         ['#act-article', ['ps:generate', 'article', 'download']],
-        ['#act-article-preview', ['ps:generate', 'article', 'open']],
         ['#act-select', ['ps:start-picker', 'print']],
         ['#act-remove', ['ps:start-picker', 'remove']],
       ]) {
@@ -551,7 +553,6 @@ try {
         '#language',
         '#filenameTemplate',
         '#saveAs',
-        '#output',
         '#expandScroll',
         '#preferCssPageSize',
         '#open-shortcuts',
@@ -559,6 +560,8 @@ try {
       ]) {
         if (!(await page.isVisible(sel))) problems.push(`[${label}] ${sel} missing`);
       }
+      if ((await page.locator('#output').count()) !== 0)
+        problems.push(`[${label}] options page still has the Default action select`);
       await shot(page, `options${sfx}`);
       await page.focus('#open-shortcuts');
       await page.keyboard.press('Tab');
@@ -608,6 +611,8 @@ try {
         colorScheme,
         label: `viewer-error${sfx}`,
       });
+      if (/preview/i.test(await page.evaluate(() => `${document.title} ${document.body.innerText}`)))
+        problems.push(`[viewer-error${sfx}] viewer text mentions "preview"`);
       await shot(page, `viewer-error${sfx}`, false);
       await page.close();
     }
@@ -620,6 +625,8 @@ try {
         init: viewerStub,
       });
       await page.waitForFunction(() => !document.getElementById('btn-download').disabled);
+      if (/preview/i.test(await page.evaluate(() => `${document.title} ${document.body.innerText}`)))
+        problems.push(`[viewer${sfx}] viewer text mentions "preview"`);
       await shot(page, `viewer${sfx}`, false);
       await page.setViewportSize({ width: 420, height: 500 });
       await shot(page, `viewer-narrow${sfx}`, false);

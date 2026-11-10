@@ -56,10 +56,8 @@ async function init() {
   updateRemoved(state.removed || 0);
   if (state.busy) setBusy(true, tr('status_generating'));
 
-  $('act-page').addEventListener('click', () => run('none', 'download'));
-  $('act-page-preview').addEventListener('click', () => run('none', 'open'));
-  $('act-article').addEventListener('click', () => run('article', 'download'));
-  $('act-article-preview').addEventListener('click', () => run('article', 'open'));
+  $('act-page').addEventListener('click', () => run('none'));
+  $('act-article').addEventListener('click', () => run('article'));
   $('act-select').addEventListener('click', () => startPicker('print'));
   $('act-remove').addEventListener('click', () => startPicker('remove'));
   $('act-reset').addEventListener('click', async () => {
@@ -294,13 +292,12 @@ async function flushSettings() {
   await saveSettings(settings);
 }
 
-async function run(prep, output) {
+async function run(prep) {
   if (busy || !tab) return;
   setBusy(true, tr('status_preparing')); // synchronously, so a second click/Enter is ignored
   try {
     await flushSettings();
-    const res = await send({ type: 'ps:generate', tabId: tab.id, prep, output, settings });
-    showResult(res, output === 'open' ? tr('status_previewOpened') : null);
+    showResult(await send({ type: 'ps:generate', tabId: tab.id, prep, output: 'download', settings }));
   } catch (err) {
     setStatus(String((err && err.message) || err), 'error');
   } finally {
@@ -309,13 +306,13 @@ async function run(prep, output) {
 }
 
 /** Status line for a ps:generate / ps:export-markdown response ({ok, filename, warning} | {ok:false, error}). */
-function showResult(res, doneText) {
+function showResult(res) {
   setBusy(false);
   if (!res || !res.ok) {
     setStatus((res && res.error) || tr('status_error'), 'error');
     return;
   }
-  const done = doneText || tr('status_saved', [res.filename]);
+  const done = tr('status_saved', [res.filename]);
   setStatus(res.warning ? `${done} ${res.warning}` : done, 'ok');
 }
 
@@ -324,7 +321,7 @@ async function exportMarkdown(prep) {
   setBusy(true, tr('status_exportingMarkdown'));
   try {
     await flushSettings();
-    showResult(await send({ type: 'ps:export-markdown', tabId: tab.id, prep }), null);
+    showResult(await send({ type: 'ps:export-markdown', tabId: tab.id, prep }));
   } catch (err) {
     setStatus(String((err && err.message) || err), 'error');
   } finally {
@@ -355,9 +352,7 @@ function setBusy(on, message) {
   busy = on;
   for (const id of [
     'act-page',
-    'act-page-preview',
     'act-article',
-    'act-article-preview',
     'act-select',
     'act-remove',
     'act-reset',

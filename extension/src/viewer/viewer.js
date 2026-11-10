@@ -9,20 +9,21 @@ initTheme().finally(reveal);
 $('btn-close').addEventListener('click', () => window.close());
 
 async function main() {
-  if (!jobId) return fail('No preview job specified.');
+  if (!jobId) return fail('No PDF specified.');
   const res = await chrome.runtime
     .sendMessage({ type: 'ps:get-job', id: jobId })
     .catch((e) => ({ ok: false, error: String(e) }));
-  if (!res || !res.ok) return fail((res && res.error) || 'Preview unavailable.');
+  if (!res || !res.ok)
+    return fail((res && res.error) || 'This PDF is no longer available. Generate it again.');
   const { base64, filename, autoDownload } = res.job;
   const settings = await loadSettings();
   const bytes = decode(base64);
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
 
-  document.title = `${filename} – Web Snap PDF`;
+  document.title = `Your PDF is ready – ${filename}`;
   $('filename').textContent = filename;
-  $('size').textContent = formatBytes(bytes.length);
+  $('size').textContent = `Your PDF is ready · ${formatBytes(bytes.length)}`;
   $('frame').src = url;
 
   const download = () =>
@@ -51,7 +52,7 @@ function formatBytes(n) {
 }
 
 function fail(text) {
-  $('filename').textContent = 'Preview unavailable';
+  $('filename').textContent = 'PDF unavailable';
   const m = $('message');
   m.textContent = text;
   m.classList.remove('hidden');

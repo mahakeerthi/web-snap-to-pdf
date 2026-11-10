@@ -248,8 +248,7 @@ main {
   cursor: pointer;
   border-radius: var(--radius);
 }
-.card-main:focus-visible,
-.card-alt:focus-visible {
+.card-main:focus-visible {
   outline-offset: -2px;
 }
 .card-icon {
@@ -279,23 +278,6 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.card-alt {
-  flex-shrink: 0;
-  width: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-inline-start: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-.card-alt:hover:not(:disabled) {
-  color: var(--accent);
-  background: var(--surface);
 }
 .card button:disabled {
   cursor: default;

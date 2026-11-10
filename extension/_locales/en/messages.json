@@ -75,14 +75,6 @@
     "message": "Pick one part of the page to save",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "Preview the full page in a new tab instead of downloading",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "Preview the article in a new tab instead of downloading",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "Remove elements",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "Remove elements lets you click anything you don’t want before saving. Reset page brings it back.",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "The eye button opens a preview tab instead of downloading.",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "Paper, margins and other options are under Export settings. The line above it always shows what will be used.",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "Saved $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "Preview opened in a new tab.",
-    "description": "Status line"
   },
   "status_error": {
     "message": "Something went wrong.",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "Ask where to save each PDF",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "Default action",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "Download the PDF",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "Open a preview tab",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "Used by the keyboard shortcuts, the right-click menu and the in-page tools.",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "Page handling",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "Copy image",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "Download all parts",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "Part $1 of $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "Copy",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "Download",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "Split into $1 parts for easier viewing",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "Toggle light / dark",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "Image copied to the clipboard",

@@ -46,7 +46,6 @@ export const DEFAULT_SETTINGS = {
   hfPageNumbers: true,
 
   // Output
-  output: 'download', // download | open
   filenameTemplate: '{title}',
   saveAs: false,
 

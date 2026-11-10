@@ -34,7 +34,6 @@ function render() {
     : 'auto';
   $('filenameTemplate').value = settings.filenameTemplate;
   $('saveAs').checked = !!settings.saveAs;
-  $('output').value = settings.output;
   $('expandScroll').checked = settings.expandScroll !== false;
   $('imageScale').value = String(
     [1, 2, 3].includes(Number(settings.imageScale)) ? Number(settings.imageScale) : 2,
@@ -114,7 +113,6 @@ $('filenameTemplate').addEventListener('input', (e) =>
   }),
 );
 $('saveAs').addEventListener('change', (e) => update({ saveAs: e.target.checked }));
-$('output').addEventListener('change', (e) => update({ output: e.target.value }));
 $('expandScroll').addEventListener('change', (e) => update({ expandScroll: e.target.checked }));
 $('imageScale').addEventListener('change', (e) => update({ imageScale: Number(e.target.value) }));
 $('preferCssPageSize').addEventListener('change', (e) => update({ preferCssPageSize: e.target.checked }));

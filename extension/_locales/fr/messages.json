@@ -75,14 +75,6 @@
     "message": "Enregistrer une partie de la page",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "Aperçu de la page entière dans un nouvel onglet, sans téléchargement",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "Aperçu de l’article dans un nouvel onglet, sans téléchargement",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "Retirer des éléments",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "Retirer des éléments vous permet de cliquer sur ce que vous ne voulez pas avant d’enregistrer. Restaurer le rétablit.",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "Le bouton en forme d’œil ouvre un aperçu au lieu de télécharger.",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "Le papier, les marges et les autres options se trouvent dans Paramètres d’export. La ligne au-dessus indique toujours ce qui sera utilisé.",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "Enregistré : $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "Aperçu ouvert dans un nouvel onglet.",
-    "description": "Status line"
   },
   "status_error": {
     "message": "Une erreur s’est produite.",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "Demander où enregistrer chaque PDF",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "Action par défaut",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "Télécharger le PDF",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "Ouvrir un onglet d’aperçu",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "Utilisée par les raccourcis clavier, le menu contextuel et les outils sur la page.",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "Traitement de la page",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "Copier l’image",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "Télécharger toutes les parties",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "Partie $1 sur $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "Copier",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "Télécharger",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "Divisé en $1 parties pour faciliter la lecture",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "Basculer clair / sombre",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "Image copiée dans le presse-papiers",

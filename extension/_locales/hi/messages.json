@@ -75,14 +75,6 @@
     "message": "पेज का एक हिस्सा चुनकर सेव करें",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "डाउनलोड करने के बजाय पूरे पेज की झलक नए टैब में देखें",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "डाउनलोड करने के बजाय लेख की झलक नए टैब में देखें",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "हिस्से हटाएं",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "“हिस्से हटाएं” से आप सेव करने से पहले अनचाही चीज़ों पर क्लिक करके उन्हें हटा सकते हैं। “पेज रीसेट करें” उन्हें वापस ले आता है।",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "आंख वाला बटन डाउनलोड करने के बजाय झलक का टैब खोलता है।",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "पेपर, मार्जिन और दूसरे विकल्प “एक्सपोर्ट सेटिंग” में हैं। उसके ऊपर की लाइन हमेशा दिखाती है कि क्या इस्तेमाल होगा।",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "$1 सेव हो गया",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "झलक नए टैब में खुल गई।",
-    "description": "Status line"
   },
   "status_error": {
     "message": "कुछ गड़बड़ हो गई।",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "हर PDF के लिए पूछें कि कहां सेव करना है",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "डिफ़ॉल्ट कार्रवाई",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "PDF डाउनलोड करें",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "झलक का टैब खोलें",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "कीबोर्ड शॉर्टकट, राइट-क्लिक मेन्यू और पेज के टूल इसका इस्तेमाल करते हैं।",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "पेज हैंडलिंग",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "इमेज कॉपी करें",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "सभी हिस्से डाउनलोड करें",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "भाग $1 / $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "कॉपी करें",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "डाउनलोड करें",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "आसानी से देखने के लिए $1 हिस्सों में बाँटा गया",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "लाइट / डार्क बदलें",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "इमेज क्लिपबोर्ड पर कॉपी हो गई",

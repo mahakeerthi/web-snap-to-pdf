@@ -75,14 +75,6 @@
     "message": "Escolha uma parte da página para salvar",
     "description": "Action card one-line description"
   },
-  "action_previewFullPage": {
-    "message": "Ver a página inteira em uma nova guia em vez de baixar",
-    "description": "Tooltip of the eye button on the Full page card"
-  },
-  "action_previewArticle": {
-    "message": "Ver o artigo em uma nova guia em vez de baixar",
-    "description": "Tooltip of the eye button on the Article card"
-  },
   "action_remove": {
     "message": "Remover elementos",
     "description": "Secondary button: click parts of the page to delete them before saving"
@@ -355,10 +347,6 @@
     "message": "Remover elementos permite clicar em tudo o que você não quer antes de salvar. Restaurar página traz tudo de volta.",
     "description": "Help panel text"
   },
-  "help_preview": {
-    "message": "O botão de olho abre uma guia de visualização em vez de baixar.",
-    "description": "Help panel text"
-  },
   "help_settings": {
     "message": "Papel, margens e outras opções ficam em Opções de exportação. A linha acima sempre mostra o que será usado.",
     "description": "Help panel text"
@@ -386,10 +374,6 @@
   "status_saved": {
     "message": "Salvo: $1",
     "description": "Status line; $1 is the file name"
-  },
-  "status_previewOpened": {
-    "message": "Visualização aberta em uma nova guia.",
-    "description": "Status line"
   },
   "status_error": {
     "message": "Algo deu errado.",
@@ -550,22 +534,6 @@
   "options_saveAs": {
     "message": "Perguntar onde salvar cada PDF",
     "description": "Checkbox"
-  },
-  "options_defaultAction": {
-    "message": "Ação padrão",
-    "description": "Label"
-  },
-  "options_actionDownload": {
-    "message": "Baixar o PDF",
-    "description": "Default action option"
-  },
-  "options_actionOpen": {
-    "message": "Abrir uma guia de visualização",
-    "description": "Default action option"
-  },
-  "options_defaultActionHint": {
-    "message": "Usada pelos atalhos de teclado, pelo menu do botão direito e pelas ferramentas na página.",
-    "description": "Hint"
   },
   "options_pageHandling": {
     "message": "Tratamento da página",
@@ -758,6 +726,30 @@
   "preview_copyImage": {
     "message": "Copiar imagem",
     "description": "Preview modal button (PNG only)"
+  },
+  "preview_downloadAll": {
+    "message": "Baixar todas as partes",
+    "description": "Preview overlay toolbar button: download every image part of a split element"
+  },
+  "preview_part": {
+    "message": "Parte $1 de $2",
+    "description": "Preview overlay: label above one image part; $1 is the part number, $2 the number of parts"
+  },
+  "preview_copyPart": {
+    "message": "Copiar",
+    "description": "Preview overlay: button that copies one image part to the clipboard"
+  },
+  "preview_downloadPart": {
+    "message": "Baixar",
+    "description": "Preview overlay: button that downloads one image part"
+  },
+  "preview_splitNote": {
+    "message": "Dividido em $1 partes para facilitar a visualização",
+    "description": "Preview overlay: note shown when a large element is split; $1 is the number of parts"
+  },
+  "preview_themeToggle": {
+    "message": "Alternar claro / escuro",
+    "description": "Preview overlay toolbar button: switch between light and dark"
   },
   "preview_copied": {
     "message": "Imagem copiada para a área de transferência",

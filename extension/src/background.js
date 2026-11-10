@@ -1,11 +1,11 @@
 // Web Snap PDF - background service worker.
 // Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
 // viewer and the content script (plus context menus and keyboard shortcuts):
-//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download / preview tab
-//   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot (preview, PNG, JPEG)
+//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download
+//   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot per part (preview, PNG, JPEG)
 //   exportMarkdown()  ps:to-markdown in the content script (no debugger)
 // Every page change made by ps:prepare is undone with ps:restore, whatever the outcome.
-import { loadSettings, normalizeSettings } from './lib/settings.js';
+import { loadSettings, saveSettings, normalizeSettings } from './lib/settings.js';
 import { buildPrintParams, layoutWidthPx, buildFilename } from './lib/print-params.js';
 import { MAX_PAGE_INCHES, CSS_PX_PER_INCH } from './lib/paper-sizes.js';
 import { getMessages, t } from './lib/i18n.js';
@@ -21,15 +21,18 @@ const MAX_CAPTURE_PX = 16384;
 const JPEG_QUALITY = 92;
 // The preview is captured at screen resolution; keep its data URL (sent to the page) reasonably small.
 const PREVIEW_MAX_PIXELS = 32e6;
-const LAST_FORMAT_KEY = 'previewFormat'; // chrome.storage.local: last format chosen in the preview modal
+const LAST_FORMAT_KEY = 'previewFormat'; // chrome.storage.local: last format chosen in the preview overlay
 const PREVIEW_FORMATS = ['pdf', 'png', 'jpeg', 'markdown'];
+// Tall elements are captured (and shown / saved) as parts of at most this many CSS pixels each, so
+// every image stays readable and far below the capture limit.
+export const SEGMENT_PX = 1600;
 
 const activeJobs = new Set(); // tabIds currently generating
-const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt }
+const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt } (viewer fallback)
 
 class UserError extends Error {}
 
-// English fallbacks for the in-page UI (picker toolbar + element preview modal). Translations from
+// English fallbacks for the in-page UI (picker toolbar + element preview overlay). Translations from
 // _locales/<lang>/messages.json override them key by key (see uiStrings()).
 export const PICKER_STRINGS_EN = {
   picker_titleSelect: 'Select an element',
@@ -63,6 +66,12 @@ export const PICKER_STRINGS_EN = {
   preview_errorCapture: 'Could not capture this element.',
   preview_errorCopy: 'Could not copy the image. Download it instead.',
   preview_errorGeneric: 'Something went wrong. Try again or reselect the element.',
+  preview_downloadAll: 'Download all parts',
+  preview_part: 'Part $1 of $2',
+  preview_copyPart: 'Copy',
+  preview_downloadPart: 'Download',
+  preview_splitNote: 'Split into $1 parts for easier viewing',
+  preview_themeToggle: 'Toggle light / dark',
   error_markdownDisabled: 'Markdown export is an experimental feature. Enable it in the extension settings.',
 };
 const UI_STRING_PREFIX = /^(picker|preview)_/;
@@ -92,11 +101,11 @@ async function uiStrings(settings) {
  * @param {number} opts.tabId
  * @param {object} [opts.settings]  Overrides; defaults to saved settings.
  * @param {'none'|'article'|'element'} [opts.prep]
- * @param {'download'|'open'|'return'} [opts.output]
+ * @param {'download'|'return'} [opts.output]  Missing (or anything else) means download; 'return'
+ *   hands the base64 PDF back to the caller (tests).
  */
 export async function generate({ tabId, settings, prep = 'none', output }) {
   settings = normalizeSettings(settings || (await loadSettings()));
-  output = output || settings.output || 'download';
   claimTab(tabId, 'A PDF is already being generated for this tab.');
   try {
     progress(tabId, 'prepare', 'Preparing page…');
@@ -111,8 +120,8 @@ export async function generate({ tabId, settings, prep = 'none', output }) {
     const filename = buildFilename(settings.filenameTemplate, { title, domain: hostnameOf(tab.url) });
     if (output === 'return') return { ok: true, base64: data, filename, warning };
 
-    progress(tabId, 'save', output === 'open' ? 'Opening preview…' : 'Saving…');
-    await savePdf(data, filename, tab.title, { preview: output === 'open', saveAs: settings.saveAs });
+    progress(tabId, 'save', 'Saving…');
+    await savePdf(data, filename, tab.title, settings.saveAs);
     succeeded(tabId);
     return { ok: true, filename, bytes: base64ByteLength(data), warning };
   } catch (err) {
@@ -169,18 +178,14 @@ function fitSinglePage(params, contentHeightPx, { paper, margins, scale }) {
   return `The page is longer than PDF viewers allow for a single page (${MAX_PAGE_INCHES} in), so it was split into ${Math.ceil(heightIn / MAX_PAGE_INCHES)} tall pages.`;
 }
 
-/** Downloads the PDF, or opens it in the viewer tab (also the fallback when the download fails). */
-async function savePdf(base64, filename, title, { preview, saveAs }) {
-  if (preview) {
-    await openPreview({ base64, filename, title, autoDownload: false });
-    return;
-  }
+/** Downloads the PDF; if the data: URL download throws, the viewer page downloads it instead. */
+async function savePdf(base64, filename, title, saveAs) {
   try {
     await download(base64, filename, saveAs);
   } catch (err) {
     // Fallback: let the viewer page create a Blob URL and download from there.
     console.warn('Direct download failed, falling back to viewer', err);
-    await openPreview({ base64, filename, title, autoDownload: true });
+    await openFallbackDownload({ base64, filename, title, autoDownload: true });
   }
 }
 
@@ -189,14 +194,32 @@ async function savePdf(base64, filename, title, { preview, saveAs }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Capture the element picked in the page (content script `state.picked`) as an image.
- * Uses the same isolation as the element PDF, so the preview matches the export.
+ * Splits a document-relative rect into vertical parts of at most `segment` CSS pixels each (the
+ * last part is shorter). An element no taller than `segment` is a single part.
+ */
+export function splitRect(rect, segment = SEGMENT_PX) {
+  const parts = [];
+  for (let top = 0; top < rect.height; top += segment) {
+    parts.push({
+      x: rect.x,
+      y: rect.y + top,
+      width: rect.width,
+      height: Math.min(segment, rect.height - top),
+    });
+  }
+  return parts;
+}
+
+/**
+ * Capture the element picked in the page (content script `state.picked`) as one image per part
+ * (see splitRect). Uses the same isolation as the element PDF, so the preview matches the export.
  * `scale` is output pixels per CSS pixel; `null` means "screen resolution" (device pixels).
- * The debugger is attached only for the duration of the capture.
+ * `part` (1-based) captures only that part; omitted, every part is captured. The debugger is
+ * attached, and the page prepared, once for all parts.
  */
 async function captureElement(
   tabId,
-  { settings, format = 'png', scale = null, quality, maxPixels = Infinity },
+  { settings, format = 'png', scale = null, quality, maxPixels = Infinity, part = null },
 ) {
   claimTab(tabId, 'An export is already running for this tab.');
   try {
@@ -215,8 +238,38 @@ async function captureElement(
         );
         if (rect.width < 1 || rect.height < 1)
           throw new UserError('The selected element has no visible size.');
-        const shot = await screenshotRect(target, rect, { format, scale, quality, maxPixels });
-        return { ...shot, rect, title: pageTitle(prepResult, tab), tab };
+        const clips = splitRect(rect);
+        if (part != null && !clips[part - 1]) throw new UserError('This part of the image no longer exists.');
+        // Output pixels per clip.scale unit: devicePixelRatio (incl. page zoom) on real displays,
+        // but not under DevTools device emulation, so measure it instead of trusting
+        // window.devicePixelRatio. One scale for every part, so the parts line up.
+        const ratio = await captureRatio(target);
+        const wanted = Math.min(
+          scale == null ? ratio : scale,
+          Math.sqrt(maxPixels / (rect.width * rect.height)),
+        );
+        const outScale = capScale(rect, wanted);
+        const indexes = part == null ? clips.map((_, i) => i) : [part - 1];
+        const parts = [];
+        for (const i of indexes) {
+          const data = await screenshotClip(target, clips[i], { format, scale: outScale, ratio, quality });
+          parts.push({
+            part: i + 1,
+            data,
+            cssHeight: clips[i].height,
+            imageWidth: Math.round(clips[i].width * outScale),
+            imageHeight: Math.round(clips[i].height * outScale),
+          });
+        }
+        return {
+          parts,
+          count: clips.length,
+          scale: outScale,
+          scaledDown: outScale < wanted,
+          rect,
+          title: pageTitle(prepResult, tab),
+          tab,
+        };
       });
     });
   } finally {
@@ -224,33 +277,25 @@ async function captureElement(
   }
 }
 
-/** Page.captureScreenshot of a document-relative rect at `scale` (null = device pixels). */
-async function screenshotRect(target, rect, { format, scale, quality, maxPixels }) {
-  // Output pixels per clip.scale unit: devicePixelRatio (incl. page zoom) on real displays, but
-  // not under DevTools device emulation, so measure it instead of trusting window.devicePixelRatio.
-  const ratio = await captureRatio(target);
-  const wanted = Math.min(scale == null ? ratio : scale, Math.sqrt(maxPixels / (rect.width * rect.height)));
-  const outScale = capScale(rect, wanted);
+/** Page.captureScreenshot of a document-relative clip at output `scale`; returns base64 data. */
+async function screenshotClip(target, clip, { format, scale, ratio, quality }) {
   const params = {
     format,
-    clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: outScale / ratio },
+    clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: scale / ratio },
     // Clip coordinates are document-relative with captureBeyondViewport (verified by the tests).
     captureBeyondViewport: true,
   };
   if (format === 'jpeg') params.quality = quality ?? JPEG_QUALITY;
   const { data } = await cdp(target, 'Page.captureScreenshot', params);
-  return {
-    data,
-    scale: outScale,
-    scaledDown: outScale < wanted,
-    imageWidth: Math.round(rect.width * outScale),
-    imageHeight: Math.round(rect.height * outScale),
-  };
+  return data;
 }
 
-/** Largest output scale for an element that stays within the capture limit. */
+/**
+ * Largest output scale for an element that keeps every part within the capture limit. Parts are
+ * at most SEGMENT_PX tall, so in practice only very wide elements are reduced.
+ */
 function capScale(rect, scale) {
-  const limit = MAX_CAPTURE_PX / Math.max(rect.width, rect.height);
+  const limit = MAX_CAPTURE_PX / Math.max(rect.width, Math.min(rect.height, SEGMENT_PX));
   return scale > limit ? Math.floor(limit * 1000) / 1000 : scale;
 }
 
@@ -263,9 +308,16 @@ function scaledWarning(strings, scale) {
   return t(strings, 'preview_warningScaled', [String(Math.floor(scale * 100) / 100)]);
 }
 
+/** `name.png` -> `name-2.png` (files of a split element). */
+export function partFilename(filename, part) {
+  const dot = filename.lastIndexOf('.');
+  return dot > 0 ? `${filename.slice(0, dot)}-${part}${filename.slice(dot)}` : `${filename}-${part}`;
+}
+
 /**
- * Show the in-page preview modal for the element picked with the "select element" picker.
- * Returns { ok, width, height, warning } (CSS pixels of the element).
+ * Show the in-page preview overlay for the element picked with the "select element" picker.
+ * ps:show-preview carries one PNG data URL per part (screen resolution, whole element within
+ * PREVIEW_MAX_PIXELS). Returns { ok, width, height, parts, warning } (CSS pixels of the element).
  */
 export async function previewElement(tabId) {
   const settings = await loadSettings();
@@ -290,7 +342,11 @@ export async function previewElement(tabId) {
   if (format === 'markdown' && !markdownEnabled) format = 'pdf';
   const res = await sendContent(tabId, {
     type: 'ps:show-preview',
-    dataUrl: 'data:image/png;base64,' + cap.data,
+    parts: cap.parts.map((p) => ({
+      dataUrl: 'data:image/png;base64,' + p.data,
+      width: cap.rect.width,
+      height: p.cssHeight,
+    })),
     width: cap.rect.width,
     height: cap.rect.height,
     description: cap.rect.description || '',
@@ -301,37 +357,68 @@ export async function previewElement(tabId) {
     theme: settings.theme || 'system',
   });
   requireOk(res, 'Could not show the preview.');
-  return { ok: true, width: cap.rect.width, height: cap.rect.height, warning: imageWarning };
+  return {
+    ok: true,
+    width: cap.rect.width,
+    height: cap.rect.height,
+    parts: cap.count,
+    warning: imageWarning,
+  };
 }
 
 /**
  * Export the picked element as PNG or JPEG at settings.imageScale and download it (filename
- * template + .png / .jpg). `output: 'return'` returns the base64 data instead (tests).
+ * template + .png / .jpg). A split element is saved as one file per part, `<name>-1.png`,
+ * `<name>-2.png`, … (one chrome.downloads call each; with settings.saveAs Chrome asks for every
+ * file, the downloads API cannot reuse a chosen directory). `part` (1-based) saves only that part.
+ * `output: 'return'` returns the base64 data of each part instead (tests).
  */
-export async function exportElementImage(tabId, format = 'png', { output } = {}) {
+export async function exportElementImage(tabId, format = 'png', { output, part = null } = {}) {
   format = format === 'jpeg' || format === 'jpg' ? 'jpeg' : 'png';
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
   const scale = clampImageScale(settings.imageScale);
+  const mime = 'image/' + format;
   try {
-    const cap = await captureElement(tabId, { settings, format, scale, quality: JPEG_QUALITY });
+    const cap = await captureElement(tabId, { settings, format, scale, quality: JPEG_QUALITY, part });
     const filename = buildFilename(
       settings.filenameTemplate,
       { title: cap.title, domain: hostnameOf(cap.tab.url) },
       format === 'jpeg' ? 'jpg' : 'png',
     );
+    const parts = cap.parts.map((p) => ({
+      part: p.part,
+      filename: cap.count > 1 ? partFilename(filename, p.part) : filename,
+      width: p.imageWidth,
+      height: p.imageHeight,
+      data: p.data,
+    }));
     const result = {
       ok: true,
-      filename,
-      width: cap.imageWidth,
-      height: cap.imageHeight,
+      filename: parts[0].filename,
+      filenames: parts.map((p) => p.filename),
+      count: cap.count,
+      width: Math.round(cap.rect.width * cap.scale),
+      height: Math.round(cap.rect.height * cap.scale),
       scale: cap.scale,
       warning: cap.scaledDown ? scaledWarning(strings, cap.scale) : null,
     };
-    if (output === 'return') return { ...result, base64: cap.data, mime: 'image/' + format };
-    await download(cap.data, filename, settings.saveAs, 'image/' + format);
+    if (output === 'return') {
+      return { ...result, mime, parts: parts.map(({ data, ...p }) => ({ ...p, base64: data })) };
+    }
+    let bytes = 0;
+    for (const p of parts) {
+      await download(p.data, p.filename, settings.saveAs, mime);
+      bytes += base64ByteLength(p.data);
+    }
     succeeded(tabId);
-    return { ...result, bytes: base64ByteLength(cap.data) };
+    const saved = parts.map((p) => ({
+      part: p.part,
+      filename: p.filename,
+      width: p.width,
+      height: p.height,
+    }));
+    return { ...result, parts: saved, bytes };
   } catch (err) {
     throw failed(tabId, err);
   }
@@ -587,7 +674,9 @@ async function download(base64, filename, saveAs, mime = 'application/pdf') {
   return id;
 }
 
-async function openPreview(job) {
+// Hands a PDF to the viewer page, which downloads it from a Blob URL (fallback for downloads of
+// data: URLs that Chrome refuses, e.g. very large ones).
+async function openFallbackDownload(job) {
   const id = crypto.randomUUID();
   const record = { ...job, createdAt: Date.now() };
   previewJobs.set(id, record);
@@ -742,7 +831,7 @@ async function handleMessage(msg, sender) {
       return generate({ tabId, settings: msg.settings, prep: msg.prep || 'none', output: msg.output });
     }
     case 'ps:generate-from-content': {
-      // Sent by the in-page picker toolbar / preview modal; uses saved settings.
+      // Sent by the in-page picker toolbar / preview overlay; uses saved settings.
       const tabId = senderTabId(sender);
       if (msg.format) rememberPreviewFormat(msg.format);
       return generate({ tabId, prep: msg.prep || 'none', output: msg.output });
@@ -751,11 +840,20 @@ async function handleMessage(msg, sender) {
       // Sent by the picker after a click in "select element" mode.
       return previewElement(msg.tabId ?? senderTabId(sender));
     case 'ps:export-element': {
-      // Sent by the preview modal: PNG / JPEG download of the picked element.
+      // Sent by the preview overlay: PNG / JPEG download of the picked element, every part or
+      // only `part` (1-based) of a split element.
       const tabId = msg.tabId ?? senderTabId(sender);
       const format = msg.format === 'jpeg' ? 'jpeg' : 'png';
+      const part = Number.isInteger(msg.part) && msg.part >= 1 ? msg.part : null;
       rememberPreviewFormat(format);
-      return exportElementImage(tabId, format);
+      return exportElementImage(tabId, format, { part });
+    }
+    case 'ps:set-theme': {
+      // Sent by the preview overlay's light / dark toggle; the popup and options read it on open.
+      if (!['light', 'dark', 'system'].includes(msg.theme)) throw new UserError('Unknown theme.');
+      const settings = await loadSettings();
+      await saveSettings({ ...settings, theme: msg.theme });
+      return { ok: true, theme: msg.theme };
     }
     case 'ps:export-markdown': {
       const tabId = await targetTabId(msg);
@@ -871,4 +969,6 @@ globalThis.__websnap = {
   startPicker: (tabId, mode) => handleMessage({ type: 'ps:start-picker', tabId, mode }, {}),
   pageState: (tabId) => handleMessage({ type: 'ps:page-state', tabId }, {}),
   resetPage: (tabId) => handleMessage({ type: 'ps:reset-page', tabId }, {}),
+  setTheme: (theme) => handleMessage({ type: 'ps:set-theme', theme }, {}),
+  splitRect,
 };

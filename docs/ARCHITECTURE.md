@@ -13,7 +13,7 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
   defaults (or loads saved settings when none are passed), rejects a second run on the same tab,
   checks the URL with `isPrintableUrl`, injects `src/content.js` if a `ps:ping` gets no answer, sends
   `ps:prepare`, attaches the debugger (protocol `1.3`), applies media / viewport emulation, calls
-  `Page.printToPDF`, then downloads or opens the viewer. A `finally` block always clears
+  `Page.printToPDF`, then downloads the file. A `finally` block always clears
   emulation, detaches the debugger and sends `ps:restore`.
 - Single-page mode: emulate print media, set a device-metrics override at the computed layout
   width, wait 200 ms, measure the height via `Page.getLayoutMetrics` (`cssContentSize`, falling back
@@ -29,14 +29,14 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
   the opt-in.
 - Output: `download(base64, filename, saveAs, mime)` uses `chrome.downloads.download` with a
   `data:<mime>;base64,…` URL (`conflictAction: 'uniquify'`, `saveAs` from settings for every
-  format). If a PDF download throws, the PDF opens in the viewer with `autoDownload: true`. `open`
-  stores a preview job (in a `Map` and best-effort in `chrome.storage.session` under `job:<uuid>`,
-  expiring after 15 minutes) and opens `src/viewer/viewer.html?job=<uuid>`. `return` (test hook
-  only) returns the data instead.
+  format). Every export downloads. Only if a PDF download throws does the
+  worker store a job (in a `Map` and best-effort in `chrome.storage.session` under `job:<uuid>`,
+  expiring after 15 minutes) and open the fallback page `src/viewer/viewer.html?job=<uuid>` with
+  `autoDownload: true`. `output: 'return'` (test hook only) returns the data instead.
 - `uiStrings(settings)`: English fallbacks `PICKER_STRINGS_EN` merged with the user's language for
   every `picker_*` / `preview_*` key; sent to the content script, which has no access to the
   dictionaries itself.
-- Errors are wrapped in `UserError` so the popup / modal can show the message directly. The toolbar
+- Errors are wrapped in `UserError` so the popup / overlay can show the message directly. The toolbar
   badge flashes `✓` or `!` for 4 seconds.
 - Registers the five context-menu items (`MENU`: `page`, `article`, `selectElement`,
   `removeElements`, `reset`; contexts `page`, `frame`, `action`) on install and startup, and the
@@ -52,7 +52,7 @@ through `setStyle` / `setAttr`, which push an undo function onto `state.undo`; `
 in reverse order. Styles are applied with `!important`.
 
 - `prepare` order: stop picker → restore → find root (article or picked element) → remember scroll
-  → hide the preview modal host if open → load lazy content → isolate root → neutralise
+  → hide the preview overlay host if open → load lazy content → isolate root → neutralise
   fixed/sticky → expand scroll containers → unlock `<html>`/`<body>` → scroll to top → wait two
   animation frames.
 - Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
@@ -79,7 +79,7 @@ in reverse order. Styles are applied with `!important`.
   `state.picked` and calls `requestPreview()`. "remove" mode hides the element with
   `display: none !important`, recorded in `state.removed` (not in `state.undo`, so removals survive
   `restore()`); the bar offers Undo, Save PDF (`prep: 'none'`) and Done.
-- Preview modal and Markdown converter: see the sections below.
+- Preview overlay and Markdown converter: see the sections below.
 
 ### `src/lib/paper-sizes.js`
 
@@ -118,8 +118,8 @@ See [Localisation](#localisation) and [Theme](#theme).
 
 ### `src/popup/`
 
-Home screen with three action cards (`act-page`, `act-article`, `act-select`), eye buttons
-(`act-page-preview`, `act-article-preview`) that run the same prep with `output: 'open'`, Remove
+Home screen with three action cards (`act-page`, `act-article`, `act-select`; the first two send
+`ps:generate` with `output: 'download'`, there is no preview button), Remove
 elements, a Reset page link (shown when `removed > 0`), the experimental Markdown row (`md-row`,
 shown only when `settings.markdownEnabled`), the Layout segmented control, a summary line of the
 effective settings and the collapsible "Export settings" panel (open state in
@@ -132,7 +132,7 @@ Listens for `ps:progress` to show status, and for `storage.onChanged` to pick up
 
 ### `src/options/`
 
-Appearance (theme, language), Saving (`filenameTemplate` with live preview, `saveAs`, `output`),
+Appearance (theme, language), Saving (`filenameTemplate` with live preview, `saveAs`, `imageScale`),
 Page handling (`expandScroll`, `preferCssPageSize`), Keyboard shortcuts (link to
 `chrome://extensions/shortcuts`), Experimental (`markdownEnabled`, turned on only after an inline
 confirmation box; turning it off needs no confirmation), About, "Reset all settings" (writes
@@ -140,22 +140,31 @@ confirmation box; turning it off needs no confirmation), About, "Reset all setti
 
 ### `src/viewer/`
 
-Reads `?job=<id>`, fetches the job with `ps:get-job`, decodes base64 into a Blob URL, shows it in an
+Internal download fallback only (never opened by a user action): used when `chrome.downloads`
+rejects a PDF `data:` URL, e.g. for very large files. Titled "Your PDF is ready". Reads `?job=<id>`, fetches the job with `ps:get-job`, decodes base64 into a Blob URL, shows it in an
 `<iframe>` (Chrome's PDF viewer) and downloads it via `chrome.downloads.download` on click (or
 immediately if `autoDownload`). Sends `ps:discard-job` once loaded. Themed; not translated.
 
 ## Preview and image capture
 
+The element preview is a full-page preview overlay with a toolbar at the top (being rebuilt in R3,
+see `TASKS.md`; the flow below describes the capture pipeline it uses). The toolbar holds the
+format (PDF / PNG / JPEG, plus Markdown when enabled), Download, Copy image (PNG and JPEG),
+Reselect, a light / dark toggle and Close. Large elements are split into numbered image parts
+(`preview_part`: "Part 1 of 3", `preview_splitNote`) shown stacked, each with its own Copy
+(`preview_copyPart`) and Download (`preview_downloadPart`); the toolbar's Download saves all parts
+(`preview_downloadAll`). The toggle's label is `preview_themeToggle`.
+
 Flow for Select element:
 
 1. Popup / context menu → `startPicker(tabId, 'print')` injects the content script and sends
    `ps:start-picker` with `strings` and `theme`.
-2. A click stores `state.picked`, stops the picker, opens the modal in its loading state
+2. A click stores `state.picked`, stops the picker, opens the overlay in its loading state
    (`requestPreview`) and sends `ps:preview-element`.
 3. `previewElement` runs `captureElement` at screen resolution (`scale: null`, at most
    `PREVIEW_MAX_PIXELS` = 32 MP), then sends `ps:show-preview` with a PNG data URL, the element's
    CSS size, a description (`div#red`), the last-used format, the scale-down warning an image export
-   would get, `markdownEnabled`, `strings` and `theme`. The modal draws the image on a `<canvas>`
+   would get, `markdownEnabled`, `strings` and `theme`. The overlay draws the image on a `<canvas>`
    (an `<img src="data:">` would be subject to the page's CSP `img-src`).
 4. Download sends `ps:generate-from-content` (`prep: 'element'`, PDF),
    `ps:export-element {format}` (PNG / JPEG) or `ps:export-markdown-from-content`. Each re-runs the
@@ -181,7 +190,7 @@ Flow for Select element:
 - **16 384 px cap.** `MAX_CAPTURE_PX = 16384` (GPU texture limit; beyond it the capture wraps and
   repeats the top). `capScale` limits the scale to `16384 / max(width, height)`, floored to 3
   decimals. When that is below the wanted scale the reply carries `scaledDown` and a
-  `preview_warningScaled` warning; the modal stays open to show it.
+  `preview_warningScaled` warning; the overlay stays open to show it.
 - Image export uses `settings.imageScale` clamped to 1-3 (default 2), JPEG quality 92, filename
   `buildFilename(template, meta, 'png' | 'jpg')`.
 - `finally`: `ps:restore`, detach, release the per-tab lock (`activeJobs`, shared with PDFs).
@@ -229,7 +238,7 @@ characters):
   substitutes `$1…$n`.
 - **Content script**: the background sends the `picker_*` / `preview_*` strings (English fallback
   `PICKER_STRINGS_EN` + translation) with `ps:start-picker` and `ps:show-preview`.
-- Not translated: context-menu titles, the viewer page, and error messages generated in the
+- Not translated: context-menu titles, the download fallback page, and error messages generated in the
   background (except `error_markdownDisabled` and the preview strings).
 
 Supported: `en`, `es`, `de`, `fr`, `pt_BR`, `hi`, `ja`, `zh_CN` (`SUPPORTED_LANGUAGES`).
@@ -242,7 +251,7 @@ a flash of the wrong theme, pages start with `<html data-boot>` and
 `html[data-boot] body { visibility: hidden }`; importing the module applies the last theme
 synchronously from `localStorage['websnap-theme']`, then confirms it from `chrome.storage.sync`
 and follows `storage.onChanged`. The page calls `reveal()` when ready (fallback timeout 400 ms).
-The popup header button cycles system → light → dark. The in-page modal receives `theme` from the
+The popup header button cycles system → light → dark. The in-page overlay receives `theme` from the
 background and resolves `system` with `matchMedia`.
 
 ## Message protocol
@@ -253,19 +262,19 @@ start with `ps:`. Handlers reply asynchronously; on any thrown error the reply i
 
 ### To the service worker (`chrome.runtime.sendMessage`)
 
-| Type                              | Sender                              | Payload                                                                                                                                                                         | Reply                                                                                                                                     |
-| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `ps:generate`                     | popup                               | `tabId?` (default: active tab), `prep: 'none' \| 'article' \| 'element'`, `output?: 'download' \| 'open' \| 'return'` (default `settings.output`), `settings?` (default: saved) | `{ ok, filename, bytes, warning }`; with `output: 'return'`: `{ ok, base64, filename, warning }`                                          |
-| `ps:generate-from-content`        | content (remove bar, preview modal) | `prep: 'none' \| 'element'`, `output?`, `format?` (`'pdf'`, remembered as preview format). Tab is `sender.tab.id`; saved settings.                                              | as `ps:generate`                                                                                                                          |
-| `ps:preview-element`              | content (picker click)              | `tabId?` (default `sender.tab.id`)                                                                                                                                              | `{ ok, width, height, warning }`; the preview itself arrives as `ps:show-preview`                                                         |
-| `ps:export-element`               | content (preview modal)             | `format: 'png' \| 'jpeg'`, `tabId?`                                                                                                                                             | `{ ok, filename, width, height, scale, warning, bytes }`                                                                                  |
-| `ps:export-markdown`              | popup                               | `tabId?`, `prep: 'none' \| 'article'`                                                                                                                                           | `{ ok, filename, bytes }`; `{ ok: false }` while `markdownEnabled` is off                                                                 |
-| `ps:export-markdown-from-content` | content (preview modal)             | `prep` (default `'element'`)                                                                                                                                                    | as `ps:export-markdown`                                                                                                                   |
-| `ps:start-picker`                 | popup                               | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                           | content script's reply `{ ok }`                                                                                                           |
-| `ps:page-state`                   | popup                               | `tabId?`                                                                                                                                                                        | `{ ok, printable, busy, title, url, removed, hasPicked, pickerActive?, previewOpen? }` (last two only when the content script is present) |
-| `ps:reset-page`                   | popup                               | `tabId?`                                                                                                                                                                        | `{ ok }`                                                                                                                                  |
-| `ps:get-job`                      | viewer                              | `id`                                                                                                                                                                            | `{ ok, job: { base64, filename, title, autoDownload, createdAt } }` or `{ ok: false, error }` if expired                                  |
-| `ps:discard-job`                  | viewer                              | `id`                                                                                                                                                                            | `{ ok }`                                                                                                                                  |
+| Type                              | Sender                                | Payload                                                                                                                                                                                       | Reply                                                                                                                                     |
+| --------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `ps:generate`                     | popup                                 | `tabId?` (default: active tab), `prep: 'none' \| 'article' \| 'element'`, `output?: 'download' \| 'return'` (default `'download'`; `'return'` is the test hook), `settings?` (default: saved) | `{ ok, filename, bytes, warning }`; with `output: 'return'`: `{ ok, base64, filename, warning }`                                          |
+| `ps:generate-from-content`        | content (remove bar, preview overlay) | `prep: 'none' \| 'element'`, `format?` (`'pdf'`, remembered as preview format). Always downloads. Tab is `sender.tab.id`; saved settings.                                                     | as `ps:generate`                                                                                                                          |
+| `ps:preview-element`              | content (picker click)                | `tabId?` (default `sender.tab.id`)                                                                                                                                                            | `{ ok, width, height, warning }`; the preview itself arrives as `ps:show-preview`                                                         |
+| `ps:export-element`               | content (preview overlay)             | `format: 'png' \| 'jpeg'`, `tabId?`                                                                                                                                                           | `{ ok, filename, width, height, scale, warning, bytes }`                                                                                  |
+| `ps:export-markdown`              | popup                                 | `tabId?`, `prep: 'none' \| 'article'`                                                                                                                                                         | `{ ok, filename, bytes }`; `{ ok: false }` while `markdownEnabled` is off                                                                 |
+| `ps:export-markdown-from-content` | content (preview overlay)             | `prep` (default `'element'`)                                                                                                                                                                  | as `ps:export-markdown`                                                                                                                   |
+| `ps:start-picker`                 | popup                                 | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                                         | content script's reply `{ ok }`                                                                                                           |
+| `ps:page-state`                   | popup                                 | `tabId?`                                                                                                                                                                                      | `{ ok, printable, busy, title, url, removed, hasPicked, pickerActive?, previewOpen? }` (last two only when the content script is present) |
+| `ps:reset-page`                   | popup                                 | `tabId?`                                                                                                                                                                                      | `{ ok }`                                                                                                                                  |
+| `ps:get-job`                      | viewer (download fallback)            | `id`                                                                                                                                                                                          | `{ ok, job: { base64, filename, title, autoDownload, createdAt } }` or `{ ok: false, error }` if expired                                  |
+| `ps:discard-job`                  | viewer (download fallback)            | `id`                                                                                                                                                                                          | `{ ok }`                                                                                                                                  |
 
 Context-menu clicks and keyboard commands call `generate` / `startPicker` / the `ps:reset-page`
 handler directly inside the worker, without messaging.
@@ -283,7 +292,7 @@ handler directly inside the worker, without messaging.
 | `ps:start-picker`   | content                                              | `mode` (anything other than `'remove'` means `'print'`), `strings`, `theme`                                  | `{ ok: true }` (also closes an open preview)                                                                      |
 | `ps:picked-rect`    | content                                              | none                                                                                                         | `{ ok, x, y, width, height, devicePixelRatio, description }` (document CSS px) or `{ ok: false, error }`          |
 | `ps:show-preview`   | content                                              | `dataUrl`, `width`, `height`, `description`, `format`, `imageWarning`, `markdownEnabled`, `strings`, `theme` | `{ ok: true }`                                                                                                    |
-| `ps:cancel-preview` | content                                              | none                                                                                                         | `{ ok: true }` (closes the modal)                                                                                 |
+| `ps:cancel-preview` | content                                              | none                                                                                                         | `{ ok: true }` (closes the overlay)                                                                               |
 | `ps:to-markdown`    | content                                              | `prep: 'none' \| 'article' \| 'element'`                                                                     | `{ ok, markdown, title }` or `{ ok: false, error }`                                                               |
 | `ps:reset-page`     | content                                              | none                                                                                                         | `{ ok: true }` (stops picker, closes preview, runs `restore()`, un-hides all removals, clears the picked element) |
 
@@ -292,54 +301,53 @@ handler directly inside the worker, without messaging.
 
 ## Storage
 
-| Area                                   | Key                       | Content                                                                  |
-| -------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
-| `chrome.storage.sync`                  | `settings`                | Settings object (schema below)                                           |
-| `chrome.storage.local`                 | `popupExportSettingsOpen` | Whether the popup's Export settings panel is open                        |
-| `chrome.storage.local`                 | `previewFormat`           | Last format used in the preview modal (`pdf`, `png`, `jpeg`, `markdown`) |
-| `chrome.storage.session`               | `job:<uuid>`              | Preview PDF for the viewer tab (15-minute TTL)                           |
-| page `localStorage` (extension origin) | `websnap-theme`           | Theme cache for flash-free startup                                       |
+| Area                                   | Key                       | Content                                                                    |
+| -------------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `chrome.storage.sync`                  | `settings`                | Settings object (schema below)                                             |
+| `chrome.storage.local`                 | `popupExportSettingsOpen` | Whether the popup's Export settings panel is open                          |
+| `chrome.storage.local`                 | `previewFormat`           | Last format used in the preview overlay (`pdf`, `png`, `jpeg`, `markdown`) |
+| `chrome.storage.session`               | `job:<uuid>`              | PDF for the download fallback page (15-minute TTL)                         |
+| page `localStorage` (extension origin) | `websnap-theme`           | Theme cache for flash-free startup                                         |
 
 ## Settings schema
 
 Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT_SETTINGS` in
 `src/lib/settings.js`.
 
-| Key                                              | Type / values                                                        | Default      | Set in                      | Notes                                                                              |
-| ------------------------------------------------ | -------------------------------------------------------------------- | ------------ | --------------------------- | ---------------------------------------------------------------------------------- |
-| `format`                                         | paper id from `PAPER_SIZES`                                          | `'A4'`       | popup                       | Unknown ids fall back to A4                                                        |
-| `orientation`                                    | `'portrait' \| 'landscape'`                                          | `'portrait'` | popup                       |                                                                                    |
-| `marginPreset`                                   | `'none' \| 'minimal' \| 'default' \| 'wide' \| 'custom'`             | `'default'`  | popup                       | 0 / 5 / 10 / 20 mm                                                                 |
-| `margins`                                        | `{ top, right, bottom, left }` in mm                                 | `10` each    | popup                       | Used only when `marginPreset === 'custom'`; popup clamps 0-100                     |
-| `scale`                                          | number 0.1-2                                                         | `1`          | popup                       | Ignored when `layoutWidth` is not `auto`                                           |
-| `layoutWidth`                                    | `'auto' \| '1440' \| '1280' \| '1024' \| '768' \| '375'` (string px) | `'auto'`     | popup                       | Overrides `scale`                                                                  |
-| `layout`                                         | `'paged' \| 'single'`                                                | `'paged'`    | popup                       |                                                                                    |
-| `pageRanges`                                     | string, e.g. `'1-3, 5'`                                              | `''`         | popup                       | Paged layout only                                                                  |
-| `preferCssPageSize`                              | boolean                                                              | `false`      | options                     | Forced off in single-page layout                                                   |
-| `printBackground`                                | boolean                                                              | `true`       | popup                       |                                                                                    |
-| `mediaView`                                      | `'print' \| 'screen'`                                                | `'print'`    | popup                       |                                                                                    |
-| `hideFixed`                                      | boolean                                                              | `true`       | popup                       |                                                                                    |
-| `loadLazy`                                       | boolean                                                              | `true`       | popup                       | Not used for image capture                                                         |
-| `expandScroll`                                   | boolean                                                              | `true`       | options                     | Read as `settings.expandScroll !== false`                                          |
-| `outline`                                        | boolean                                                              | `true`       | popup                       | `generateDocumentOutline`                                                          |
-| `headerFooter`                                   | boolean                                                              | `false`      | popup                       | Forces top/bottom margins ≥ 0.5 in                                                 |
-| `hfTitle` / `hfUrl` / `hfDate` / `hfPageNumbers` | boolean                                                              | `true`       | popup                       |                                                                                    |
-| `output`                                         | `'download' \| 'open'`                                               | `'download'` | options                     | Default action for shortcuts, context menu, picker bar and the preview modal's PDF |
-| `filenameTemplate`                               | string with `{title}` `{domain}` `{date}` `{time}`                   | `'{title}'`  | options                     | Also used for `.png`, `.jpg`, `.md`                                                |
-| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format; also used by the viewer's Download                        |
-| `imageScale`                                     | number 1-3                                                           | `2`          | options                     | Output px per CSS px for PNG / JPEG export; clamped 1-3                            |
-| `markdownEnabled`                                | boolean                                                              | `false`      | options (with confirmation) | Gates the popup row, the modal format and the background handler                   |
-| `theme`                                          | `'system' \| 'light' \| 'dark'`                                      | `'system'`   | popup header, options       |                                                                                    |
-| `language`                                       | `'auto'` or a code from `SUPPORTED_LANGUAGES`                        | `'auto'`     | popup footer, options       |                                                                                    |
+| Key                                              | Type / values                                                        | Default      | Set in                      | Notes                                                              |
+| ------------------------------------------------ | -------------------------------------------------------------------- | ------------ | --------------------------- | ------------------------------------------------------------------ |
+| `format`                                         | paper id from `PAPER_SIZES`                                          | `'A4'`       | popup                       | Unknown ids fall back to A4                                        |
+| `orientation`                                    | `'portrait' \| 'landscape'`                                          | `'portrait'` | popup                       |                                                                    |
+| `marginPreset`                                   | `'none' \| 'minimal' \| 'default' \| 'wide' \| 'custom'`             | `'default'`  | popup                       | 0 / 5 / 10 / 20 mm                                                 |
+| `margins`                                        | `{ top, right, bottom, left }` in mm                                 | `10` each    | popup                       | Used only when `marginPreset === 'custom'`; popup clamps 0-100     |
+| `scale`                                          | number 0.1-2                                                         | `1`          | popup                       | Ignored when `layoutWidth` is not `auto`                           |
+| `layoutWidth`                                    | `'auto' \| '1440' \| '1280' \| '1024' \| '768' \| '375'` (string px) | `'auto'`     | popup                       | Overrides `scale`                                                  |
+| `layout`                                         | `'paged' \| 'single'`                                                | `'paged'`    | popup                       |                                                                    |
+| `pageRanges`                                     | string, e.g. `'1-3, 5'`                                              | `''`         | popup                       | Paged layout only                                                  |
+| `preferCssPageSize`                              | boolean                                                              | `false`      | options                     | Forced off in single-page layout                                   |
+| `printBackground`                                | boolean                                                              | `true`       | popup                       |                                                                    |
+| `mediaView`                                      | `'print' \| 'screen'`                                                | `'print'`    | popup                       |                                                                    |
+| `hideFixed`                                      | boolean                                                              | `true`       | popup                       |                                                                    |
+| `loadLazy`                                       | boolean                                                              | `true`       | popup                       | Not used for image capture                                         |
+| `expandScroll`                                   | boolean                                                              | `true`       | options                     | Read as `settings.expandScroll !== false`                          |
+| `outline`                                        | boolean                                                              | `true`       | popup                       | `generateDocumentOutline`                                          |
+| `headerFooter`                                   | boolean                                                              | `false`      | popup                       | Forces top/bottom margins ≥ 0.5 in                                 |
+| `hfTitle` / `hfUrl` / `hfDate` / `hfPageNumbers` | boolean                                                              | `true`       | popup                       |                                                                    |
+| `filenameTemplate`                               | string with `{title}` `{domain}` `{date}` `{time}`                   | `'{title}'`  | options                     | Also used for `.png`, `.jpg`, `.md`                                |
+| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format; also used by the fallback page's Download |
+| `imageScale`                                     | number 1-3                                                           | `2`          | options                     | Output px per CSS px for PNG / JPEG export; clamped 1-3            |
+| `markdownEnabled`                                | boolean                                                              | `false`      | options (with confirmation) | Gates the popup row, the overlay format and the background handler |
+| `theme`                                          | `'system' \| 'light' \| 'dark'`                                      | `'system'`   | popup header, options       |                                                                    |
+| `language`                                       | `'auto'` or a code from `SUPPORTED_LANGUAGES`                        | `'auto'`     | popup footer, options       |                                                                    |
 
 ## Test suites
 
 - `test/e2e.mjs` (`npm test`) — PDF pipeline through `Page.printToPDF` (paper sizes, single page,
-  header/footer, screen view, ranges, article, pickers, preview-modal PDF download, large
+  header/footer, screen view, ranges, article, pickers, preview-overlay PDF download, large
   downloads, restricted pages, extension pages load).
 - `test/content.e2e.mjs` (`npm run test:content`) — content-script checks against
   `test/fixtures/` (restore correctness, scroll containers, fixed elements, article detection with
-  `data-expect="article"`, picker and shadow DOM), the document-relative clip probe, preview modal,
+  `data-expect="article"`, picker and shadow DOM), the document-relative clip probe, preview overlay,
   PNG / JPEG size and pixel checks (including tall elements and the 16 384 px cap) and the Markdown
   converter (`markdown.html`). During `ps:prepare` the chosen root is marked with
   `data-websnap-root`, removed on restore.
@@ -347,4 +355,4 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
   errors or missing translation keys.
 - `scripts/check-locales.mjs` (`npm run check:locales`) — locale key / placeholder parity.
-- `scripts/screenshot-preview.mjs` — preview-modal screenshots for the docs and the store.
+- `scripts/screenshot-preview.mjs` — preview-overlay screenshots for the docs and the store.
