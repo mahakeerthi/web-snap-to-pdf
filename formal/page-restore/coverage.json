@@ -33,7 +33,7 @@
       "handleMessage"
     ]
   },
-  "syncCommit": "16310ed+working-tree",
+  "syncCommit": "7faaa6f",
   "hashes": {
     "extension/src/content.js#handle": "b54032da6451a06a",
     "extension/src/content.js#prepare": "22a2f5d90b645006",
@@ -55,7 +55,7 @@
     "extension/src/background.js#generate": "c8f4fda702a3d10a",
     "extension/src/background.js#captureElement": "c499f7b093ac8a3f",
     "extension/src/background.js#withPreparedPage": "eb8411e0f13ff0b3",
-    "extension/src/background.js#startPicker": "b2b73d7221bd3cf7",
+    "extension/src/background.js#startPicker": "b59f51e368887592",
     "extension/src/background.js#handleMessage": "e4f8c6684a625c92"
   }
 }
