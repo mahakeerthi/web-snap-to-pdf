@@ -691,10 +691,6 @@
     "message": "कुछ नहीं चुना गया। पहले पेज के किसी हिस्से पर क्लिक करें।",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "इस पेज पर पिकर शुरू नहीं हो सका।",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "यह हिस्सा एक्सपोर्ट करें",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "यह हिस्सा कैप्चर नहीं हो सका।",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "यह हिस्सा इमेज के रूप में कैप्चर करने के लिए बहुत बड़ा है। इसके बजाय PDF आज़माएं।",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "इमेज कॉपी नहीं हो सकी। इसके बजाय इसे डाउनलोड करें।",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "डाउनलोड नहीं हो सका: $1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें या हिस्सा दोबारा चुनें।",

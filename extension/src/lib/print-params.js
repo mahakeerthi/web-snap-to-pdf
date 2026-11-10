@@ -4,7 +4,7 @@ import { MARGIN_PRESETS, clamp } from './settings.js';
 
 const HF_MIN_MARGIN_IN = 0.5;
 
-export function marginsInches(settings) {
+function marginsInches(settings) {
   if (settings.marginPreset === 'custom') {
     const m = settings.margins;
     return {
@@ -23,13 +23,13 @@ function mm(v) {
 }
 
 // Oriented paper size in inches, i.e. already swapped for landscape.
-export function orientedPaper(settings) {
+function orientedPaper(settings) {
   const size = getPaperSize(settings.format);
   const landscape = settings.orientation === 'landscape';
   return landscape ? { width: size.height, height: size.width } : { width: size.width, height: size.height };
 }
 
-export function effectiveScale(settings, paper, margins) {
+function effectiveScale(settings, paper, margins) {
   let scale = clamp(Number(settings.scale) || 1, 0.1, 2);
   if (settings.layoutWidth && settings.layoutWidth !== 'auto') {
     const targetPx = Number(settings.layoutWidth);
@@ -47,7 +47,7 @@ export function layoutWidthPx(paper, margins, scale) {
   return Math.max(200, Math.round((printableIn * CSS_PX_PER_INCH) / scale));
 }
 
-export function buildHeaderFooter(settings) {
+function buildHeaderFooter(settings) {
   if (!settings.headerFooter) return {};
   const base =
     'font-family: Helvetica, Arial, sans-serif; font-size: 8px; color: #666; width: 100%;' +
@@ -123,7 +123,7 @@ export function buildFilename(template, meta, ext = 'pdf') {
   return `${name}.${suffix}`;
 }
 
-export function sanitizeFilename(name) {
+function sanitizeFilename(name) {
   return (
     String(name)
       // eslint-disable-next-line no-control-regex -- strip C0 control characters from filenames

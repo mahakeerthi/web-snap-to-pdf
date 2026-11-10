@@ -691,10 +691,6 @@
     "message": "何も選択されていません。先にページ上の要素をクリックしてください。",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "このページでは選択ツールを起動できませんでした。",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "この要素をエクスポート",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "この要素をキャプチャできませんでした。",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "この要素は大きすぎて画像にできません。PDF をお試しください。",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "画像をコピーできませんでした。代わりにダウンロードしてください。",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "ダウンロードに失敗しました: $1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "エラーが発生しました。もう一度試すか、要素を選び直してください。",

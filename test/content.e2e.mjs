@@ -3,112 +3,33 @@
 // ps:prepare and after ps:restore, the article element chosen, picker behaviour, the element
 // preview overlay (PNG / JPEG / PDF / Markdown export, split parts, theme) and the Markdown converter.
 // Run with: npm run test:content   (or: node test/content.e2e.mjs)
-import { chromium } from 'playwright';
-import http from 'node:http';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchExtension, createReporter, tabIdForUrl } from './harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// EXT_DIR lets you run the suite against another build (e.g. an older content.js) for comparison.
-const extDir = process.env.EXT_DIR ? path.resolve(process.env.EXT_DIR) : path.join(root, 'extension');
-const fixturesDir = path.join(root, 'test/fixtures');
 const outDir = path.join(root, 'test/out');
 fs.mkdirSync(outDir, { recursive: true });
-const headless = !process.env.HEADED;
-const only = process.env.ONLY ? new RegExp(process.env.ONLY, 'i') : null;
-
-// --- tiny static server for fixtures -------------------------------------------------
-const server = http.createServer((req, res) => {
-  const file = path.join(fixturesDir, path.normalize(req.url.split('?')[0]).replace(/^\/+/, ''));
-  if (!file.startsWith(fixturesDir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-    res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
-    return res.end('<!doctype html><title>not found</title>not found');
-  }
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}`;
-
-// --- browser with extension (same setup as test/e2e.mjs) -------------------------------
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-ext-'));
-fs.cpSync(extDir, testExtDir, { recursive: true });
-const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
-manifest.host_permissions = [`${base}/*`];
-fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-'));
-// Downloads go to a fresh temp dir via Chrome's own profile prefs (never ~/Downloads).
-const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-dl-'));
-fs.mkdirSync(path.join(userDataDir, 'Default'), { recursive: true });
-fs.writeFileSync(
-  path.join(userDataDir, 'Default', 'Preferences'),
-  JSON.stringify({
-    download: { default_directory: downloadDir, prompt_for_download: false, directory_upgrade: true },
-  }),
-);
-const context = await chromium.launchPersistentContext(userDataDir, {
-  headless,
-  channel: 'chromium',
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [`--disable-extensions-except=${testExtDir}`, `--load-extension=${testExtDir}`],
+const { context, sw, base, downloadDir, close } = await launchExtension({
+  // EXT_DIR lets you run the suite against another build (e.g. an older content.js) for comparison.
+  extDir: process.env.EXT_DIR ? path.resolve(process.env.EXT_DIR) : undefined,
   viewport: { width: 1200, height: 800 },
 });
-// Hand downloads back to Chrome's own delegate so chrome.downloads keeps the extension's filename
-// (Playwright would save them as GUIDs). Keep the CDP session open for the whole run.
-const browserCdp = await context.newCDPSession(context.pages()[0] || (await context.newPage()));
-await browserCdp.send('Browser.setDownloadBehavior', { behavior: 'default' });
-let sw = context.serviceWorkers()[0];
-if (!sw) sw = await context.waitForEvent('serviceworker');
-await sw.evaluate(() => new Promise((r) => setTimeout(r, 200)));
 sw.on('console', (m) => {
   if (m.type() === 'error') console.log('  [sw]', m.text());
 });
 
 // --- helpers ----------------------------------------------------------------------------
-let failures = 0;
-let passes = 0;
-const failed = [];
-function check(cond, label, extra = '') {
-  if (cond) {
-    passes++;
-    console.log(`  ✓ ${label}`);
-  } else {
-    failures++;
-    failed.push(label);
-    console.log(`  ✗ ${label}${extra ? ' — ' + extra : ''}`);
-  }
-}
-async function test(name, fn) {
-  if (only && !only.test(name)) return;
-  console.log(`\n▶ ${name}`);
-  try {
-    await fn();
-  } catch (err) {
-    failures++;
-    failed.push(name + ' (threw)');
-    console.log(`  ✗ threw: ${err && err.stack ? err.stack : err}`);
-  }
-}
+const { check, test, summary } = createReporter();
 async function openTab(file) {
   const url = `${base}/${file}`;
   const page = await context.newPage();
   page.on('pageerror', (e) => console.log('  [page error]', String(e)));
   await page.goto(url, { waitUntil: 'load' });
-  const tabId = await sw.evaluate(async (u) => {
-    for (let i = 0; i < 40; i++) {
-      const tabs = await chrome.tabs.query({});
-      const t = tabs.find((x) => x.url === u);
-      if (t) return t.id;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return null;
-  }, url);
-  if (tabId == null) throw new Error('tab not found for ' + url);
+  const tabId = await tabIdForUrl(sw, url);
   await page.bringToFront();
   return { page, tabId };
 }
@@ -345,6 +266,10 @@ async function clickPreview(page, selector) {
   }, selector);
   await page.mouse.move(r.x, r.y);
   await page.mouse.click(r.x, r.y);
+}
+async function closePreviewOverlay(page) {
+  await clickPreview(page, '.close');
+  await waitFor(async () => !(await previewInfo(page)), { label: 'preview overlay closed' });
 }
 async function waitForPreview(page) {
   return waitFor(
@@ -1201,7 +1126,7 @@ await test('preview: Copy image puts a PNG on the clipboard for PNG and JPEG', a
       `${format.toUpperCase()} selected: clipboard holds a 400×300 PNG (${JSON.stringify(clip)}; ${copied.status})`,
     );
   }
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   await context.clearPermissions();
   await page.close();
 });
@@ -1331,8 +1256,11 @@ await test('preview: Download PNG saves the element at settings.imageScale; JPEG
   // The last format chosen in the overlay is the default next time.
   const again = await pickElement(page, tabId, '#red');
   check(again.checked === 'png', `last format remembered (${again.checked})`);
-  await send(tabId, { type: 'ps:cancel-preview' });
-  check(!(await previewInfo(page)), 'ps:cancel-preview closes the overlay');
+  await clickPreview(page, '.close');
+  const overlayGone = await waitFor(async () => !(await previewInfo(page)), {
+    label: 'preview overlay closed',
+  }).catch(() => false);
+  check(overlayGone, 'Close button closes the overlay');
   await page.close();
   await setSettings({});
 });
@@ -1507,7 +1435,7 @@ await test('capture: tall element (3× viewport) is captured in full, split at 1
     info.canvases.map((c) => c.height).join(',') === '1600,800',
     `preview in two parts (${info.canvases.map((c) => c.height)})`,
   );
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   for (const imageScale of [1, 2]) {
     await setSettings({ imageScale });
     const res = await sw.evaluate(
@@ -1540,7 +1468,7 @@ await test('capture: 20000 px tall element needs no reduction once split (13 par
   await clickPreview(page, '.seg [data-format="png"]');
   const withPng = await previewInfo(page);
   check(!withPng.warning, `no size warning (${withPng.warning})`);
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   const res = await sw.evaluate(
     (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
     tabId,
@@ -1585,7 +1513,7 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
     info.canvas.width <= 16384,
     `preview itself within the limit (${info.canvas.width}×${info.canvas.height})`,
   );
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   const res = await sw.evaluate(
     (id) => globalThis.__websnap.exportElementImage(id, 'png', { output: 'return' }),
     tabId,
@@ -1627,7 +1555,7 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
     kept.hostDisplay !== 'none' && /16,384|16384/.test(kept.warning),
     `overlay stays visible with the warning after saving (${kept.status})`,
   );
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   await page.close();
   await setSettings({});
 });
@@ -1710,7 +1638,7 @@ await test('markdown: preview overlay offers Markdown only when enabled; downloa
   await setSettings({ markdownEnabled: false });
   let info = await pickElement(page, tabId, 'table', { widenTo: 'table' });
   check(!info.formats.includes('markdown'), `no Markdown option while disabled (${info.formats})`);
-  await send(tabId, { type: 'ps:cancel-preview' });
+  await closePreviewOverlay(page);
   await setSettings({ markdownEnabled: true });
   info = await pickElement(page, tabId, 'table', { widenTo: 'table' });
   check(
@@ -1731,10 +1659,6 @@ await test('markdown: preview overlay offers Markdown only when enabled; downloa
   await setSettings({});
 });
 
-console.log(`\n${passes} passed, ${failures} failed`);
-if (failed.length) console.log('Failed:\n  - ' + failed.join('\n  - '));
-await context.close();
-server.close();
-fs.rmSync(testExtDir, { recursive: true, force: true });
-fs.rmSync(downloadDir, { recursive: true, force: true });
+const failures = summary();
+await close();
 process.exit(failures ? 1 : 0);

@@ -1,0 +1,62 @@
+{
+  "tlaVersion": "v1.7.4",
+  "tlaJarUrl": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+  "tlaJarSha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+  "expect": {
+    "PageRestore.cfg": "violation:IdlePageMatchesRemovals",
+    "PageRestoreGuarded.cfg": "pass"
+  },
+  "functions": {
+    "extension/src/content.js": [
+      "handle",
+      "prepare",
+      "restore",
+      "setStyle",
+      "isolate",
+      "neutralizeFixed",
+      "pick",
+      "undoRemoval",
+      "restoreRemoval",
+      "resetRemovals",
+      "stopPicker",
+      "startPicker",
+      "pickable",
+      "elementAt",
+      "setCurrent",
+      "renderBar"
+    ],
+    "extension/src/background.js": [
+      "claimTab",
+      "generate",
+      "captureElement",
+      "withPreparedPage",
+      "startPicker",
+      "handleMessage"
+    ]
+  },
+  "syncCommit": "16310ed+working-tree",
+  "hashes": {
+    "extension/src/content.js#handle": "b54032da6451a06a",
+    "extension/src/content.js#prepare": "22a2f5d90b645006",
+    "extension/src/content.js#restore": "3269c38786eae6b4",
+    "extension/src/content.js#setStyle": "086cd427e5e3a363",
+    "extension/src/content.js#isolate": "76a7a0afad633084",
+    "extension/src/content.js#neutralizeFixed": "ece3bfa57dba21b7",
+    "extension/src/content.js#pick": "830eda6da6f65795",
+    "extension/src/content.js#undoRemoval": "c4e3961cc6a5091c",
+    "extension/src/content.js#restoreRemoval": "9e4f889cd3bce4af",
+    "extension/src/content.js#resetRemovals": "c2563bcae5e4e1d0",
+    "extension/src/content.js#stopPicker": "076b8f6164b6101e",
+    "extension/src/content.js#startPicker": "d7e312561e6548b9",
+    "extension/src/content.js#pickable": "3240cf5c4e9b44bf",
+    "extension/src/content.js#elementAt": "2efc3aa8058e1324",
+    "extension/src/content.js#setCurrent": "62ba77a7a3fba28f",
+    "extension/src/content.js#renderBar": "f4906702f72780f9",
+    "extension/src/background.js#claimTab": "136633d75875929b",
+    "extension/src/background.js#generate": "c8f4fda702a3d10a",
+    "extension/src/background.js#captureElement": "c499f7b093ac8a3f",
+    "extension/src/background.js#withPreparedPage": "eb8411e0f13ff0b3",
+    "extension/src/background.js#startPicker": "b2b73d7221bd3cf7",
+    "extension/src/background.js#handleMessage": "e4f8c6684a625c92"
+  }
+}

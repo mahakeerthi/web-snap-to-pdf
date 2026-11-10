@@ -691,10 +691,6 @@
     "message": "Nada selecionado. Clique primeiro em um elemento da página.",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "Não foi possível iniciar o seletor nesta página.",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "Exportar este elemento",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "Não foi possível capturar este elemento.",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "Este elemento é grande demais para ser capturado como imagem. Tente em PDF.",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "Não foi possível copiar a imagem. Baixe-a em vez disso.",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "Falha no download: $1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "Algo deu errado. Tente de novo ou escolha o elemento outra vez.",

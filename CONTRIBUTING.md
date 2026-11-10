@@ -14,6 +14,9 @@ npx playwright install chromium
 brew install poppler                  # macOS; on Debian/Ubuntu: sudo apt-get install poppler-utils
 ```
 
+Only the formal page-restore check (`node formal/page-restore/check.mjs`) needs Java and
+`tools/tla2tools.jar` (gitignored); the script prints how to get both.
+
 To try the extension, open `chrome://extensions`, enable Developer mode, click **Load unpacked**
 and pick the `extension/` folder. Reload it there after changing any file.
 
@@ -39,7 +42,7 @@ pull request. The tests exercise real behaviour in Chromium, so a green run is t
 
 The shipped extension has no host permissions: it relies on `activeTab`, which Chrome grants only
 when a real user clicks the toolbar button, a context-menu entry or a shortcut. Automation cannot
-trigger that grant, so the test harnesses copy `extension/` to a temporary folder and add a
+trigger that grant, so `test/harness.mjs` copies `extension/` to a temporary folder and adds a
 `host_permissions` entry for the local fixture server only. The manifest in the repository is
 never changed; do not add host permissions to it to make a test pass.
 
@@ -51,15 +54,19 @@ extension/                 the unpacked extension (this folder is what gets zipp
   _locales/<lang>/         translations (English is the reference)
   icons/                   icon.svg source + generated PNGs (npm run build:icons)
   src/background.js        service worker: PDF / image / Markdown pipelines, messaging, menus
-  src/content.js           page preparation and restore, pickers, preview modal (injected on demand)
+  src/content.js           page preparation and restore, pickers, preview overlay (injected on demand)
   src/lib/                 shared modules: settings, print params, paper sizes, i18n, theme
   src/popup/               toolbar popup
   src/options/             options page
   src/viewer/              fallback download page (only used if a direct download fails)
 scripts/                   icon rasteriser, locale check, UI screenshots, packaging
+scripts/verify-popup.mjs   drives the real popup and checks the downloaded file
 test/e2e.mjs               end-to-end tests of the PDF pipeline
 test/content.e2e.mjs       content-script and element-export tests
+test/harness.mjs           shared browser launch, tab and download helpers, check reporter
 test/fixtures/             pages served to the tests
+formal/page-restore/       TLA+ model of the page-restore promise and its replay script
+.claude/skills/            verification skills: verify-web-snap-pdf, verify-page-restore
 docs/                      architecture notes and the release checklist
 ```
 

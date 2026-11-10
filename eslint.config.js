@@ -43,7 +43,7 @@ export default [
   // Node tooling and tests. Callbacks passed to page.evaluate() / sw.evaluate() run in the
   // browser, so browser and extension globals are allowed too.
   {
-    files: ['scripts/**/*.mjs', 'test/**/*.mjs', 'eslint.config.js'],
+    files: ['scripts/**/*.mjs', 'test/**/*.mjs', 'formal/**/*.mjs', 'eslint.config.js'],
     languageOptions: {
       sourceType: 'module',
       globals: { ...globals.node, ...globals.browser, ...globals.webextensions },

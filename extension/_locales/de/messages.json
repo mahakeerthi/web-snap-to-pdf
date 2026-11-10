@@ -691,10 +691,6 @@
     "message": "Nichts ausgewählt. Klicken Sie zuerst auf ein Element der Seite.",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "Das Auswahlwerkzeug konnte auf dieser Seite nicht gestartet werden.",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "Dieses Element exportieren",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "Dieses Element konnte nicht erfasst werden.",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "Dieses Element ist zu groß für ein Bild. Versuchen Sie es mit PDF.",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "Das Bild konnte nicht kopiert werden. Laden Sie es stattdessen herunter.",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "Download fehlgeschlagen: $1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "Etwas ist schiefgelaufen. Versuchen Sie es erneut oder wählen Sie das Element neu aus.",

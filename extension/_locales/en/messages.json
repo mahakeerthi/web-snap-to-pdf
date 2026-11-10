@@ -691,10 +691,6 @@
     "message": "Nothing selected. Click an element on the page first.",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "Could not start the picker on this page.",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "Export this element",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "Could not capture this element.",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "This element is too large to capture as an image. Try PDF instead.",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "Could not copy the image. Download it instead.",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "Download failed: $1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "Something went wrong. Try again or reselect the element.",

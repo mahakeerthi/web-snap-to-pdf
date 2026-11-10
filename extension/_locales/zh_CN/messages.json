@@ -691,10 +691,6 @@
     "message": "未选择任何内容。请先点击页面上的元素。",
     "description": "In-page picker error"
   },
-  "picker_errorStart": {
-    "message": "无法在此页面上启动元素选择器。",
-    "description": "In-page picker error"
-  },
   "preview_title": {
     "message": "导出此元素",
     "description": "In-page preview modal title"
@@ -783,17 +779,9 @@
     "message": "无法截取此元素。",
     "description": "Preview modal error"
   },
-  "preview_errorTooLarge": {
-    "message": "此元素太大，无法截取为图片。请改用 PDF。",
-    "description": "Preview modal error"
-  },
   "preview_errorCopy": {
     "message": "无法复制图片，请改为下载。",
     "description": "Preview modal error"
-  },
-  "preview_errorDownload": {
-    "message": "下载失败：$1",
-    "description": "Preview modal error; $1 is the reason"
   },
   "preview_errorGeneric": {
     "message": "出了点问题。请重试或重新选择元素。",

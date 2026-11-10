@@ -7,16 +7,12 @@
 //   preview-overlay-split-light.png                        #split (400×3700) in 3 parts, scrolled to
 //                                                          the "Part 2 of 3" header
 // Run with: node scripts/screenshot-preview.mjs
-import { chromium } from 'playwright';
-import http from 'node:http';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launchExtension, tabIdForUrl } from '../test/harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extDir = path.join(root, 'extension');
-const fixturesDir = path.join(root, 'test/fixtures');
 const outDir = path.join(root, 'docs/images');
 const VIEWPORT = { width: 1280, height: 800 }; // Chrome Web Store screenshot size
 const FIXTURE = 'element.html';
@@ -26,46 +22,11 @@ const SHOTS = [
   { name: 'preview-overlay-split-light', theme: 'light', target: '#split', part: 2 },
 ];
 fs.mkdirSync(outDir, { recursive: true });
-// Superseded by the overlay shots.
-for (const old of ['preview-modal-light.png', 'preview-modal-dark.png']) {
-  fs.rmSync(path.join(outDir, old), { force: true });
-}
 
-// --- static server for the fixtures (same as test/e2e.mjs) ------------------------------------
-const server = http.createServer((req, res) => {
-  const file = path.join(fixturesDir, path.normalize(req.url.split('?')[0]).replace(/^\/+/, ''));
-  if (!file.startsWith(fixturesDir) || !fs.existsSync(file)) {
-    res.writeHead(404);
-    return res.end('not found');
-  }
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}`;
-
-// Automation cannot grant activeTab, so use a copy of the extension with host permission for the
-// local fixture server only (the shipped manifest is unchanged).
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-shot-ext-'));
-fs.cpSync(extDir, testExtDir, { recursive: true });
-const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
-manifest.host_permissions = [`${base}/*`];
-fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-shot-'));
-const context = await chromium.launchPersistentContext(userDataDir, {
-  headless: true,
-  channel: 'chromium',
-  viewport: VIEWPORT,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [`--disable-extensions-except=${testExtDir}`, `--load-extension=${testExtDir}`],
-});
+const { sw, context, base, close } = await launchExtension({ viewport: VIEWPORT, headless: true });
 
 let failed = false;
 try {
-  const sw = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
-  await sw.evaluate(() => new Promise((r) => setTimeout(r, 200)));
-
   for (const shot of SHOTS) {
     const { theme, target } = shot;
     // The background passes settings.theme to the overlay; also emulate the OS scheme to match.
@@ -79,15 +40,7 @@ try {
     const url = `${base}/${FIXTURE}`;
     await page.goto(url, { waitUntil: 'load' });
 
-    const tabId = await sw.evaluate(async (u) => {
-      for (let i = 0; i < 40; i++) {
-        const t = (await chrome.tabs.query({})).find((x) => x.url === u);
-        if (t) return t.id;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      return null;
-    }, url);
-    if (tabId == null) throw new Error('tab not found for ' + url);
+    const tabId = await tabIdForUrl(sw, url);
 
     await page.evaluate(
       (s) => document.querySelector(s).scrollIntoView({ block: 'center', behavior: 'instant' }),
@@ -146,9 +99,6 @@ try {
   failed = true;
   console.error('  ✗', err && err.stack ? err.stack : err);
 } finally {
-  await context.close();
-  server.close();
-  fs.rmSync(testExtDir, { recursive: true, force: true });
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  await close();
 }
 process.exit(failed ? 1 : 0);

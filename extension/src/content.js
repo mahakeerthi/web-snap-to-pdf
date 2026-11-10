@@ -82,9 +82,6 @@
         setUi(msg);
         showPreview(msg);
         return { ok: true };
-      case 'ps:cancel-preview':
-        closePreview();
-        return { ok: true };
       case 'ps:to-markdown':
         return toMarkdown(msg.prep);
       case 'ps:reset-page':

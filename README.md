@@ -270,8 +270,8 @@ test assertions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
 npm install
 npx playwright install chromium
 brew install poppler           # or: apt-get install poppler-utils
-npm test                       # PDF pipeline, pickers, element-preview download, headless (test/e2e.mjs, 44 checks)
-npm run test:content           # content script, preview, PNG/JPEG capture, Markdown (188 checks)
+npm test                       # PDF pipeline, pickers, element-preview download, headless (test/e2e.mjs, 45 checks)
+npm run test:content           # content script, preview, PNG/JPEG capture, Markdown (240 checks)
 npm run test:ui                # popup/options/viewer light+dark → test/out/ui/ (44 screenshots)
 npm run test:all               # the three suites above in sequence
 npm run check:locales          # every locale has the English keys and placeholders
@@ -281,12 +281,12 @@ npm run check                  # lint + format:check + check:locales (what CI ru
 npm run package                # dist/web-snap-pdf-<version>.zip for the Web Store
 HEADED=1 npm test              # watch it in a real window
 npm run build:icons            # rasterise extension/icons/icon.svg to 16/32/48/128 px PNGs
-node scripts/screenshot-preview.mjs   # docs/images/preview-modal-{light,dark}.png
+node scripts/screenshot-preview.mjs   # docs/images/preview-overlay-{light,dark,split-light}.png
 ```
 
 The e2e suites serve `test/fixtures/` on a local port, load the extension into Chromium and call
 the service worker's test hook (`globalThis.__websnap`), then check the output (poppler for PDFs,
-a small PNG decoder for images). Automation cannot grant `activeTab`, so the harness copies
+a small PNG decoder for images). Automation cannot grant `activeTab`, so `test/harness.mjs` copies
 `extension/` to a temp dir and adds a `host_permissions` entry for the local fixture server only;
 the shipped manifest is unchanged. CI (`.github/workflows/ci.yml`, Ubuntu) runs `npm run check` and
 the three test suites.
@@ -306,8 +306,9 @@ extension/                 the unpacked extension (this folder is what gets zipp
   src/lib/i18n.js          runtime translations (language picker)
   src/lib/theme.js         system / light / dark theme without a flash
   src/popup/  src/options/  src/viewer/ (download fallback page)
-scripts/                   screenshot-ui, screenshot-preview, check-locales, build-icons
-test/                      e2e.mjs, content.e2e.mjs, fixtures/
+scripts/                   screenshot-ui, screenshot-preview, verify-popup, check-locales, build-icons
+test/                      e2e.mjs, content.e2e.mjs, harness.mjs, fixtures/
+formal/page-restore/       TLA+ model of the page-restore promise (check.mjs, replay-finding.mjs)
 docs/                      ARCHITECTURE.md, RELEASE.md, store/listing.md, images/
 ```
 

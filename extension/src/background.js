@@ -25,7 +25,7 @@ const LAST_FORMAT_KEY = 'previewFormat'; // chrome.storage.local: last format ch
 const PREVIEW_FORMATS = ['pdf', 'png', 'jpeg', 'markdown'];
 // Tall elements are captured (and shown / saved) as parts of at most this many CSS pixels each, so
 // every image stays readable and far below the capture limit.
-export const SEGMENT_PX = 1600;
+const SEGMENT_PX = 1600;
 
 const activeJobs = new Set(); // tabIds currently generating
 const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt } (viewer fallback)
@@ -34,7 +34,7 @@ class UserError extends Error {}
 
 // English fallbacks for the in-page UI (picker toolbar + element preview overlay). Translations from
 // _locales/<lang>/messages.json override them key by key (see uiStrings()).
-export const PICKER_STRINGS_EN = {
+const PICKER_STRINGS_EN = {
   picker_titleSelect: 'Select an element',
   picker_hintSelect: 'Hover to highlight, click to select. ↑/↓ widen or narrow. Esc to cancel.',
   picker_titleRemove: 'Remove elements',
@@ -104,7 +104,7 @@ async function uiStrings(settings) {
  * @param {'download'|'return'} [opts.output]  Missing (or anything else) means download; 'return'
  *   hands the base64 PDF back to the caller (tests).
  */
-export async function generate({ tabId, settings, prep = 'none', output }) {
+async function generate({ tabId, settings, prep = 'none', output }) {
   settings = normalizeSettings(settings || (await loadSettings()));
   claimTab(tabId, 'A PDF is already being generated for this tab.');
   try {
@@ -197,7 +197,7 @@ async function savePdf(base64, filename, title, saveAs) {
  * Splits a document-relative rect into vertical parts of at most `segment` CSS pixels each (the
  * last part is shorter). An element no taller than `segment` is a single part.
  */
-export function splitRect(rect, segment = SEGMENT_PX) {
+function splitRect(rect, segment = SEGMENT_PX) {
   const parts = [];
   for (let top = 0; top < rect.height; top += segment) {
     parts.push({
@@ -309,7 +309,7 @@ function scaledWarning(strings, scale) {
 }
 
 /** `name.png` -> `name-2.png` (files of a split element). */
-export function partFilename(filename, part) {
+function partFilename(filename, part) {
   const dot = filename.lastIndexOf('.');
   return dot > 0 ? `${filename.slice(0, dot)}-${part}${filename.slice(dot)}` : `${filename}-${part}`;
 }
@@ -319,7 +319,7 @@ export function partFilename(filename, part) {
  * ps:show-preview carries one PNG data URL per part (screen resolution, whole element within
  * PREVIEW_MAX_PIXELS). Returns { ok, width, height, parts, warning } (CSS pixels of the element).
  */
-export async function previewElement(tabId) {
+async function previewElement(tabId) {
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
   let cap;
@@ -373,7 +373,7 @@ export async function previewElement(tabId) {
  * file, the downloads API cannot reuse a chosen directory). `part` (1-based) saves only that part.
  * `output: 'return'` returns the base64 data of each part instead (tests).
  */
-export async function exportElementImage(tabId, format = 'png', { output, part = null } = {}) {
+async function exportElementImage(tabId, format = 'png', { output, part = null } = {}) {
   format = format === 'jpeg' || format === 'jpg' ? 'jpeg' : 'png';
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
@@ -428,7 +428,7 @@ export async function exportElementImage(tabId, format = 'png', { output, part =
  * Experimental: convert the page, its article or the picked element to Markdown and download it
  * as <filename>.md. Gated by settings.markdownEnabled here, so no caller can bypass the opt-in.
  */
-export async function exportMarkdown(tabId, prep = 'none', { output } = {}) {
+async function exportMarkdown(tabId, prep = 'none', { output } = {}) {
   const settings = await loadSettings();
   if (!settings.markdownEnabled) {
     const strings = await uiStrings(settings);
@@ -729,7 +729,7 @@ const RESTRICTED_URLS = [
   /^https?:\/\/chrome\.google\.com\/webstore/i,
 ];
 
-export function isPrintableUrl(url) {
+function isPrintableUrl(url) {
   return !!url && !RESTRICTED_URLS.some((re) => re.test(url));
 }
 
@@ -956,19 +956,14 @@ chrome.debugger.onDetach.addListener((source, reason) => {
   if (reason === 'canceled_by_user') console.info('Web Snap: debugger detached by user on tab', source.tabId);
 });
 
-// Test hook (used by test/e2e.mjs). Harmless in production.
+// Test hook for test/ and scripts/. Harmless in production.
 globalThis.__websnap = {
   generate,
-  previewElement,
   exportElementImage,
   exportMarkdown,
-  PICKER_STRINGS_EN,
-  previewJobs,
-  isPrintableUrl,
   // Same code paths as the runtime messages the popup / context menu use (a worker can't message itself).
   startPicker: (tabId, mode) => handleMessage({ type: 'ps:start-picker', tabId, mode }, {}),
   pageState: (tabId) => handleMessage({ type: 'ps:page-state', tabId }, {}),
   resetPage: (tabId) => handleMessage({ type: 'ps:reset-page', tabId }, {}),
-  setTheme: (theme) => handleMessage({ type: 'ps:set-theme', theme }, {}),
   splitRect,
 };

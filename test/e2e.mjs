@@ -1,108 +1,26 @@
 // End-to-end test: loads the unpacked extension into Chromium and exercises the PDF pipeline.
 // Run with: npm test
-import { chromium } from 'playwright';
-import http from 'node:http';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchExtension, createReporter, tabIdForUrl, waitForDownload } from './harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extDir = path.join(root, 'extension');
 const outDir = path.join(root, 'test/out');
 fs.mkdirSync(outDir, { recursive: true });
-const headless = !process.env.HEADED;
 
-// --- tiny static server for fixtures -------------------------------------------------
-const server = http.createServer((req, res) => {
-  const file = path.join(root, 'test/fixtures', path.normalize(req.url.split('?')[0]).replace(/^\/+/, ''));
-  if (!file.startsWith(path.join(root, 'test/fixtures')) || !fs.existsSync(file)) {
-    res.writeHead(404);
-    return res.end('not found');
-  }
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  fs.createReadStream(file).pipe(res);
-});
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}`;
-
-// --- browser with extension ------------------------------------------------------------
-// The shipped extension relies on activeTab (granted by a real user click), which automation
-// cannot trigger. Test against a copy whose manifest additionally has host permission for the
-// local fixture server only.
-const testExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-ext-'));
-fs.cpSync(extDir, testExtDir, { recursive: true });
-const manifest = JSON.parse(fs.readFileSync(path.join(testExtDir, 'manifest.json'), 'utf8'));
-manifest.host_permissions = [`${base}/*`];
-fs.writeFileSync(path.join(testExtDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-'));
-// Downloads go to a fresh temp dir via Chrome's own profile prefs (never ~/Downloads).
-const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-dl-'));
-fs.mkdirSync(path.join(userDataDir, 'Default'), { recursive: true });
-fs.writeFileSync(
-  path.join(userDataDir, 'Default', 'Preferences'),
-  JSON.stringify({
-    download: { default_directory: downloadDir, prompt_for_download: false, directory_upgrade: true },
-  }),
-);
-const context = await chromium.launchPersistentContext(userDataDir, {
-  headless,
-  channel: 'chromium',
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [`--disable-extensions-except=${testExtDir}`, `--load-extension=${testExtDir}`],
-});
-// Playwright intercepts downloads (Browser.setDownloadBehavior 'allowAndName'), saving every file as
-// <playwright-artifacts>/<GUID> and discarding the filename the extension asked for. Hand downloads
-// back to Chrome's own download delegate so chrome.downloads applies the extension's filename, as in
-// production. Keep the CDP session open for the whole run.
-const cdpPage = context.pages()[0] || (await context.newPage());
-const browserCdp = await context.newCDPSession(cdpPage);
-await browserCdp.send('Browser.setDownloadBehavior', { behavior: 'default' });
-let sw = context.serviceWorkers()[0];
-if (!sw) sw = await context.waitForEvent('serviceworker');
-await sw.evaluate(() => new Promise((r) => setTimeout(r, 200)));
-const extensionId = new URL(sw.url()).host;
+const { context, sw, extensionId, base, downloadDir, close } = await launchExtension();
 sw.on('console', (m) => {
   if (m.type() === 'error' || m.type() === 'warning') console.log('  [sw]', m.text());
 });
 
 // --- helpers ----------------------------------------------------------------------------
-let failures = 0;
-let passes = 0;
-function check(cond, label, extra = '') {
-  if (cond) {
-    passes++;
-    console.log(`  ✓ ${label}`);
-  } else {
-    failures++;
-    console.log(`  ✗ ${label}${extra ? ' — ' + extra : ''}`);
-  }
-}
-async function test(name, fn) {
-  console.log(`\n▶ ${name}`);
-  try {
-    await fn();
-  } catch (err) {
-    failures++;
-    console.log(`  ✗ threw: ${err && err.stack ? err.stack : err}`);
-  }
-}
+const { check, test, summary } = createReporter();
 async function openTab(url) {
   const page = await context.newPage();
   await page.goto(url, { waitUntil: 'load' });
-  const tabId = await sw.evaluate(async (u) => {
-    for (let i = 0; i < 40; i++) {
-      const tabs = await chrome.tabs.query({});
-      const t = tabs.find((x) => x.url === u);
-      if (t) return t.id;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return null;
-  }, url);
-  if (tabId == null) throw new Error('tab not found for ' + url);
-  return { page, tabId };
+  return { page, tabId: await tabIdForUrl(sw, url) };
 }
 async function generate(opts) {
   const res = await sw.evaluate((o) => globalThis.__websnap.generate(o), { output: 'return', ...opts });
@@ -122,28 +40,6 @@ function pdfInfo(file) {
 }
 function pdfText(file) {
   return execFileSync('pdftotext', ['-layout', file, '-'], { encoding: 'utf8' });
-}
-async function waitForDownload(pred, timeoutMs = 30000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const items = await sw.evaluate(() => chrome.downloads.search({ orderBy: ['-startTime'], limit: 5 }));
-    const hit = items.find((i) => i.state === 'complete' && pred(i));
-    if (hit) return hit;
-    const failed = items.find((i) => i.state === 'interrupted');
-    if (failed) throw new Error('download interrupted: ' + failed.error);
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  const all = await sw.evaluate(() => chrome.downloads.search({}));
-  const summary = all.map((i) => ({
-    id: i.id,
-    state: i.state,
-    error: i.error,
-    filename: i.filename,
-    bytesReceived: i.bytesReceived,
-    totalBytes: i.totalBytes,
-    url: String(i.url).slice(0, 60),
-  }));
-  throw new Error('download did not complete; downloads.search: ' + JSON.stringify(summary));
 }
 
 const articleUrl = `${base}/article.html`;
@@ -316,7 +212,7 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
   check(m && m.format === 'pdf', `PDF is the default format (${m && m.format})`);
   check(m && m.toolbarTop === 0, 'options in a toolbar at the top of the viewport');
   await page.mouse.click(m.download.x, m.download.y);
-  const item = await waitForDownload((i) => /Fixture Article.*\.pdf$/.test(i.filename));
+  const item = await waitForDownload(sw, (i) => /Fixture Article.*\.pdf$/.test(i.filename));
   check(fs.existsSync(item.filename), `downloaded to ${item.filename}`);
   check(
     path.dirname(item.filename) === fs.realpathSync(downloadDir) ||
@@ -339,7 +235,7 @@ await test('large PDF downloads through the data URL path', async () => {
     settings: { filenameTemplate: '{title}-{date}', loadLazy: false },
   });
   check(res.ok, 'generate reported ok');
-  const item = await waitForDownload((i) => /Big Fixture/.test(i.filename), 60000);
+  const item = await waitForDownload(sw, (i) => /Big Fixture/.test(i.filename), 60000);
   const size = fs.statSync(item.filename).size;
   check(size > 3 * 1024 * 1024, `downloaded file is large (${(size / 1048576).toFixed(1)} MB)`);
   check(fs.readFileSync(item.filename).subarray(0, 5).toString() === '%PDF-', 'downloaded file is a PDF');
@@ -379,9 +275,6 @@ await test('extension pages load without errors (popup, options, viewer)', async
   }
 });
 
-console.log(`\n${passes} passed, ${failures} failed`);
-await context.close();
-server.close();
-fs.rmSync(testExtDir, { recursive: true, force: true });
-fs.rmSync(downloadDir, { recursive: true, force: true });
+const failures = summary();
+await close();
 process.exit(failures ? 1 : 0);
