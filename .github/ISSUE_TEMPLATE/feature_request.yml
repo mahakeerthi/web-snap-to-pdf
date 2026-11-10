@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a new feature or a change to an existing one.
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the open issues and the open tasks in the [README](https://github.com/mahakeerthi/web-snap-to-pdf#contributing) first. Your idea may already be on the list.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should Web Snap PDF do? Describe what you would click and what file you would get.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways to solve the problem, including any workaround you use now.
+  - type: dropdown
+    id: permission
+    attributes:
+      label: Does this need a new permission?
+      description: Chrome shows every permission to users, and the Chrome Web Store reviews each one, so a new permission needs a strong reason.
+      options:
+        - 'No'
+        - 'Yes'
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to build this myself.

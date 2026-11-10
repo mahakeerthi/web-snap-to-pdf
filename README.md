@@ -1,334 +1,251 @@
 # Web Snap PDF
 
-A Chrome extension (Manifest V3) that saves the current web page as a PDF in one click. It uses
-Chrome's own print engine (`Page.printToPDF` through `chrome.debugger`), so styles and clickable
-links are kept and nothing ever leaves your machine. A single element can also be saved as a PNG or
-JPEG image, and pages can optionally be exported as Markdown (experimental).
+[![CI](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml)
 
-Web Snap PDF is an independent, from-scratch implementation of the feature set of the "Web to PDF"
-extension. It shares no code or branding with it, and everything is free: there is no account,
-licence key or paid tier. MIT licensed (see [LICENSE](LICENSE)).
+Web Snap PDF is a Chrome extension that saves the page you are reading as a PDF. It prints with
+Chrome's own engine (`Page.printToPDF` through `chrome.debugger`), so the PDF keeps the page's
+styles, the text stays selectable, and links stay clickable. You can save the whole page, only the
+article, or one element you pick, and you can save that element as a PNG or JPEG image too. The
+extension makes no network requests and needs no account.
 
-Requires Chrome 128 or newer (`minimum_chrome_version` in the manifest). Current version: 1.1.0.
+Web Snap PDF is not on the Chrome Web Store. To use it, [install it from source](#install-from-source).
+It needs Chrome 128 or newer.
 
-## Features
+| Popup                                                                                                       | Popup, dark theme                                                       |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| ![The popup with the Full page, Article only and Select element cards](docs/images/popup-default-light.png) | ![The same popup in the dark theme](docs/images/popup-default-dark.png) |
 
-### Compared with the original
+After **Select element**, the page shows a preview of the element with export buttons at the top:
 
-"Same" means the feature exists here too; the implementation is our own. The comparison covers
-only the features listed below; it is not a full audit of the original.
+![The element preview with PDF, PNG and JPEG formats, Copy image, Download and Reselect](docs/images/preview-overlay-light.png)
 
-| Feature                                          | Status               | Notes                                                                             |
-| ------------------------------------------------ | -------------------- | --------------------------------------------------------------------------------- |
-| One-click save of the current page               | Same                 | Popup card, context menu, `Alt+Shift+P`                                           |
-| Chrome's native PDF engine, runs locally         | Same                 | `chrome.debugger` + `Page.printToPDF`                                             |
-| Keeps styles and clickable links                 | Same                 | Links become PDF link annotations                                                 |
-| Paged or single-page layout                      | Same                 | Single page is one tall page, capped at 200 in                                    |
-| 22 paper formats                                 | Same                 | A0-A9, B0-B5, Letter, Legal, Tabloid, Ledger, Folio, Executive                    |
-| Portrait / landscape                             | Same                 |                                                                                   |
-| Margin presets and custom margins                | Same                 | None 0, Minimal 5, Default 10, Wide 20 mm, or per-side mm                         |
-| Scale or layout-width fitting                    | Same                 | Scale 10-200 %, or lay out at 1440/1280/1024/768/375 px                           |
-| Header / footer (title, date, URL, page numbers) | Same                 |                                                                                   |
-| Print vs screen CSS                              | Same                 |                                                                                   |
-| Page ranges                                      | Same                 | Paged layout only                                                                 |
-| PDF bookmarks from headings                      | Same                 | Chrome's document outline                                                         |
-| Auto-scroll to load lazy images                  | Same                 |                                                                                   |
-| Hide sticky / fixed bars                         | Same                 |                                                                                   |
-| Expand inner scroll areas (chat apps)            | Same                 | Options page toggle                                                               |
-| Article only                                     | Same                 | Heuristic main-content detection                                                  |
-| Select element                                   | Same                 | Opens a full-page preview overlay with a toolbar at the top before saving         |
-| Remove elements with undo / reset                | Same                 |                                                                                   |
-| Filename template                                | Same                 | `{title}` `{domain}` `{date}` `{time}`                                            |
-| Context menu and keyboard shortcuts              | Same                 |                                                                                   |
-| Options page                                     | Same                 |                                                                                   |
-| Element as PNG / JPEG image                      | Added                | 2× (high-DPI) resolution, Copy image to clipboard                                 |
-| Markdown export                                  | Added (experimental) | Off by default; enable on the options page                                        |
-| Interface languages                              | Added                | English, Español, Deutsch, Français, Português (Brasil), हिन्दी, 日本語, 简体中文 |
-| Light / dark theme                               | Added                | System (default), light or dark; toggle in the popup header                       |
-| Everything free                                  | Different            | No licensing or paywall, by design                                                |
-| Online converter (website)                       | Not included         | Extension only                                                                    |
-| HTML file to PDF                                 | Not included         | Converts open tabs only (see Limitations for `file://`)                           |
-| Paid tier                                        | Not included         |                                                                                   |
+## What it does
 
-### Web Snap-specific details
+- Saves the whole page, the main article, or one element you pick.
+- Turns a picked element into a PDF, PNG, or JPEG. Images are 2× the element's size by default, and
+  the options page offers 1×, 2×, or 3×. **Copy image** copies the preview, at screen resolution, and
+  always puts a PNG on the clipboard, even when you choose JPEG.
+- Lays out the PDF as normal pages or as one tall page. A single page stops at 200 inches, and
+  longer content continues on another 200-inch page.
+- Offers 22 paper sizes (A0 to A9, B0 to B5, Letter, Legal, Tabloid, Ledger, Folio, and Executive)
+  in portrait or landscape, with margin presets of 0, 5, 10, or 20 mm or custom margins per side.
+- Scales the page from 10 to 200 percent, or lays it out at a fixed width (1440, 1280, 1024, 768,
+  or 375 px) and computes the scale from that.
+- Adds a header and footer with the title, date, URL, and page numbers.
+- Prints with the page's print or screen CSS, with or without backgrounds, and can limit the PDF to
+  page ranges such as `1-3, 5`. Headings become PDF bookmarks.
+- Prepares the page before printing. It scrolls to load lazy images, hides small fixed bars,
+  un-sticks sticky headers, and expands inner scroll areas such as chat panes.
+- Lets you click elements to remove them before saving, with undo and a reset that brings them back.
+- Names files from a pattern with `{title}`, `{domain}`, `{date}`, and `{time}`.
+- Has a right-click menu, two keyboard shortcuts, light and dark themes, and an interface in eight
+  languages: English, Spanish, German, French, Brazilian Portuguese, Hindi, Japanese, and
+  Simplified Chinese.
+- Exports Markdown as an experimental option. It is off until you turn it on.
 
-- The popup's summary line always shows the settings that will actually be used (including margins
-  raised for the header/footer), so nothing hidden under Export settings changes a PDF silently.
-- Toolbar badge shows `✓` or `!` for 4 seconds after each export.
-- If Chrome rejects the outline option, the PDF is generated again without bookmarks instead of failing.
-- The Full page and Article cards download directly. If Chrome rejects the direct download (very
-  large PDFs), a small fallback page opens with the PDF and a Download button.
+## Privacy and permissions
 
-## Screenshots
+Chrome renders every PDF and image on your device, and the file goes to your downloads folder. The
+extension has no server, no analytics, and no remote code. A PDF moves only between the extension's
+own pages, through runtime messages and `chrome.storage.session`, which Chrome keeps in memory.
 
-| Popup (light)                                                                          | Popup (dark)                                             | Export settings expanded                                                 |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
-| ![Popup with the three action cards, light theme](docs/images/popup-default-light.png) | ![Popup, dark theme](docs/images/popup-default-dark.png) | ![Popup with Export settings open](docs/images/popup-expanded-light.png) |
+The extension stores your settings in `chrome.storage.sync`, so Chrome Sync copies them to your
+other devices when sync is on. A few interface preferences, such as whether **Export settings** is
+open, go to `chrome.storage.local`. The popup, options, and fallback pages also cache your theme in
+the extension's own `localStorage`, so they can apply it before your settings load. The extension
+never stores page content.
 
-Element preview overlay after Select element (light and dark):
+The manifest asks for no host permissions. The extension reaches a tab only after you use the
+toolbar button, a menu entry, or a shortcut on that tab.
 
-![Full-page element preview overlay with the toolbar at the top](docs/images/preview-overlay-light.png)
-![Element preview overlay, dark theme](docs/images/preview-overlay-dark.png)
+| Permission     | Why the extension needs it                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debugger`     | Calls Chrome's `Page.printToPDF` and full-element `Page.captureScreenshot`, which no other extension API reaches. The extension attaches to one tab for one export and detaches when the file is ready. |
+| `activeTab`    | Gives temporary access to the tab you acted on, in place of host permissions.                                                                                                                           |
+| `scripting`    | Injects the content script that prepares the page, runs the element picker and the preview, converts Markdown, and restores the page afterwards.                                                        |
+| `downloads`    | Saves the file, through Chrome's Save As dialog if you turn on **Ask where to save each PDF**.                                                                                                          |
+| `storage`      | Keeps your settings, and hands a PDF to a fallback download page if a direct download fails.                                                                                                            |
+| `contextMenus` | Adds the right-click menu entries.                                                                                                                                                                      |
 
-| Options page                                   | Popup with Markdown enabled                                                       |
-| ---------------------------------------------- | --------------------------------------------------------------------------------- |
-| ![Options page](docs/images/options-light.png) | ![Popup with the experimental Markdown row](docs/images/popup-markdown-light.png) |
+### Why Chrome says "started debugging this browser"
 
-Popup and options shots come from `npm run test:ui` (`test/out/ui/`); the preview shots from
-`node scripts/screenshot-preview.mjs`.
+While the extension prints a PDF or captures an element, Chrome shows a bar that says _Web Snap PDF
+started debugging this browser_. Chrome shows this bar for every extension that attaches
+`chrome.debugger`, and no extension can hide it. The bar goes away when the export finishes. If you
+click **Cancel** on the bar, the export stops. Markdown export does not use the debugger and shows
+no bar.
 
-## Install (unpacked)
+## Install from source
 
-1. Download or clone this repository.
-2. Open `chrome://extensions` and switch on **Developer mode** (top right).
-3. Click **Load unpacked** and pick the `extension/` folder (the one that contains `manifest.json`),
-   not the repository root.
-4. Pin Web Snap PDF from the puzzle-piece menu so the toolbar button is visible.
+1. Clone this repository, or download it as a ZIP file and unzip it.
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Click **Load unpacked** and select the `extension/` folder, the one that contains
+   `manifest.json`. Do not select the repository root.
+4. Pin Web Snap PDF from the extensions menu so its toolbar button stays visible.
 
-After pulling changes, click the reload icon on the extension's card and reload any tab you want to
-convert.
+After you pull new changes, click the reload button on the extension's card in
+`chrome://extensions`, then reload the tabs you want to save.
 
-## Usage
+## Use it
 
-### Popup
+### The popup
 
-Click the toolbar button. The header shows the page title, a **theme** button (cycles System →
-Light → Dark) and a **settings** button (options page). Below it:
+Click the toolbar button. The popup has three cards:
 
-- **Full page**: save the whole page as a PDF. The file downloads right away.
-- **Article only**: save just the main content (no menus, sidebars, ads). Also downloads right away.
-- **Select element**: the popup closes and a picker appears on the page (see below).
-- **Remove elements**: click things on the page to hide them before saving. **Reset page (n)**
-  appears when something has been removed and puts it all back.
-- **Markdown: Full page | Article**: only shown after enabling Markdown export (experimental).
-- **Layout**: Page breaks or Single page, always visible. The line under it summarises the
-  effective settings, e.g. `A4 · Portrait · 10 mm margins · Backgrounds on`.
-- **Export settings** (collapsible, remembered): paper size and orientation; margins (presets or
-  custom mm per side); layout width ("Fit to paper width" uses the Scale slider, a fixed width
-  computes the scale); print backgrounds, screen styles, hide sticky/fixed bars, load lazy images,
-  PDF bookmarks; header and footer (title, date, URL, page numbers); pages to include (e.g.
-  `1-3, 5`, paged layout only).
-- Footer: **Help** (short how-to dialog), **Shortcuts** (opens `chrome://extensions/shortcuts`),
-  **language** selector, version.
+- **Full page** downloads the whole page as a PDF.
+- **Article only** downloads the main content as a PDF, without menus, sidebars, or ads.
+- **Select element** closes the popup and starts the element picker on the page.
 
-Every setting is saved as you change it. On pages Chrome does not let extensions touch the action
-cards are disabled and a notice is shown (see Limitations).
+Under the cards, **Remove elements** starts remove mode. Once you have removed something, **Reset
+page** appears and brings it all back. **Layout** switches between page breaks and a single page,
+and the line under it shows the settings the next PDF will use, for example
+`A4 · Portrait · 10 mm margins · Backgrounds on`. **Export settings** holds the paper, margin,
+scale, content, header and footer, and page range options. The popup saves each change as you make it.
 
-### Select element and the preview overlay
+### Select an element
 
-Hover to highlight, ↑/↓ to widen or narrow the selection, click to select, Esc to cancel. The page
-then shows a full-page preview overlay of just that element, with a toolbar at the top:
+Hover over the page to highlight an element. The up arrow key widens the selection to the parent
+element, and the down arrow key narrows it. Click to select, or press Esc to cancel.
 
-- **Format**: PDF, PNG or JPEG (and Markdown when enabled). The last choice is remembered.
-- **Download**: PDF uses your saved settings. PNG/JPEG are captured with Chrome's screenshot engine
-  at the options page's image resolution (2× the element's CSS size by default); JPEG quality is 92. File names use the same pattern with `.png` / `.jpg`.
-- **Copy image** (PNG and JPEG): copies the image to the clipboard.
-- **Reselect** picks another element, the **light / dark** button switches the overlay's theme, and
-  **Close** (or Esc) closes the overlay.
+The page then shows a full-page preview of the element with a toolbar at the top. Choose PDF, PNG,
+or JPEG and click **Download**, or click **Copy image** for PNG and JPEG. A PDF uses your saved
+settings. **Reselect** picks another element, and **Close** or Esc closes the preview.
 
-Large elements are split into numbered image parts ("Part 1 of 3") shown one below the other. Each
-part has its own **Copy** and **Download** buttons, and the toolbar's Download saves all parts.
-Images are limited to 16 384 px on the longest side (Chrome's capture limit); an element too large
-even for that is scaled down and the overlay shows a warning with the scale actually used.
+A tall element appears as numbered parts, one below the other. Each part has its own **Copy** and
+**Download** buttons, and **Download all parts** in the toolbar saves every part. Chrome cannot
+capture an image larger than 16,384 px on its longest side, so the extension scales down an element
+that is too large for that limit, and the preview shows the scale it used.
 
 ### Remove elements
 
-Click anything (ads, banners, comments) to hide it. The bar offers **Undo** (last removal),
-**Save PDF** (downloads the full page with your saved settings) and **Done**. Removals stay
-until you reset or reload the page, and are also left out of Markdown exports.
+Click **Remove elements**, then click anything on the page, such as an ad or a cookie banner, to
+hide it. The bar on the page has **Undo**, **Save PDF**, and **Done**. Removed elements stay hidden
+until you reset or reload the page, and Markdown exports leave them out too.
 
-### Markdown export (experimental)
+### Export Markdown (experimental)
 
-Off by default. Turn it on under **Experimental** on the options page and confirm. The popup then
-shows **Markdown: Full page | Article**, and the element preview overlay offers **Markdown**. The converter
-is dependency-free and works on the live page (no preparation step): it outputs CommonMark with
-GFM tables, adds the page title as a heading when the content has no `<h1>`, and ends with a
-`Source: <url>` line. See Limitations for what it does not handle. Turning the option off hides the
-buttons again, and the service worker rejects Markdown requests while it is off.
+Turn on Markdown under **Experimental** on the options page. The popup then shows a **Markdown**
+row with **Full page** and **Article**, and the element preview offers Markdown as a format. The
+converter reads the live page and writes CommonMark with GFM tables. The file ends with a
+`Source: <url>` line.
 
-### Context menu
+![The popup with a Markdown row of Full page and Article buttons under Remove elements](docs/images/popup-markdown-light.png)
 
-Right-click the page, a frame, or the toolbar icon (these entries are English only for now):
+### Right-click menu and keyboard shortcuts
 
-- Save page as PDF
-- Save article only as PDF
-- Select an element to preview and save
-- Remove elements before saving
-- Restore all removed elements
-
-### Keyboard shortcuts
+Right-click the page, a frame, or the toolbar icon to save the page or the article, pick an
+element, remove elements, or restore removed ones. The menu entries are in English only.
 
 | Shortcut      | Action                                 |
 | ------------- | -------------------------------------- |
 | `Alt+Shift+P` | Save the page with your saved settings |
 | `Alt+Shift+A` | Save only the main article             |
 
-Change them at `chrome://extensions/shortcuts` (Shortcuts in the popup footer or the options page).
+To change the shortcuts, open `chrome://extensions/shortcuts`. The **Shortcuts** link in the popup
+footer opens that page.
 
 ### Options page
 
-- **Appearance**: theme (System, Light, Dark) and language (Auto follows the browser).
-- **Saving**: file name pattern with `{title}`, `{domain}`, `{date}` (YYYY-MM-DD), `{time}`
-  (HH-MM) and a live preview (illegal characters replaced, capped at 150 characters); **Ask where
-  to save** (Chrome's Save As dialog, for PDFs, images and Markdown); **Image resolution** for PNG
-  / JPEG (1×, 2× or 3×).
-- **Page handling**: expand inner scrollable areas (on by default); let the page's `@page` CSS size
-  override the paper size.
-- **Keyboard shortcuts**, **Experimental** (Markdown export), **About**, **Reset all settings**.
+The options page sets the theme and the interface language. It also sets the file name pattern,
+with a live preview of the name the pattern produces. **Ask where to save each PDF** opens Chrome's
+Save As dialog for every download, including images and Markdown files. **Image resolution** sets
+PNG and JPEG exports to 1×, 2×, or 3× the element's size.
 
-### Languages and theme
-
-The popup, options page, picker bar and element preview overlay are available in English, Spanish,
-German, French, Brazilian Portuguese, Hindi, Japanese and Simplified Chinese (the download fallback
-page and the context menu are English only for now). "Auto" follows the
-browser language and falls back to English. The extension's name, description and shortcut labels
-in Chrome always follow Chrome's own UI language. The theme applies to the popup, options page,
-download fallback page and the preview overlay (which also has its own light / dark button).
-
-## How it works
-
-```
- popup / context menu / shortcut / in-page picker bar / preview overlay
-        │  ps:generate · ps:generate-from-content · ps:export-element · ps:export-markdown
-        ▼
- service worker (src/background.js)
-        │ 1. inject src/content.js if not present (chrome.scripting, activeTab)
-        │ 2. ps:prepare ───────────────► content script
-        │                                 · auto-scroll, force lazy images to load
-        │                                 · isolate article / picked element
-        │                                 · hide small fixed bars, un-stick sticky ones
-        │                                 · expand inner scroll areas, unlock <html>/<body>
-        │ 3. chrome.debugger.attach(tab)
-        │    PDF:   Emulation.* (screen view / single page) → Page.printToPDF → base64 PDF
-        │    image: wait for the viewport to settle → Page.captureScreenshot (clip, beyond viewport)
-        │ 4. finally: clear emulation, detach debugger, ps:restore (page back to normal)
-        ▼
- chrome.downloads.download(data:…)   (if that fails: fallback page src/viewer/ → Blob URL → Download)
-```
-
-Markdown export skips steps 2-4: the content script converts the live DOM (`ps:to-markdown`) and
-the service worker downloads the text. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-### The "started debugging this browser" bar
-
-While a PDF is generated, and while an element is captured for the preview or as an image, Chrome
-shows a bar saying _Web Snap PDF started debugging this browser_. Chrome shows it whenever any
-extension attaches `chrome.debugger`, and an extension cannot hide it. `chrome.debugger` is the
-only extension API that reaches Chrome's `Page.printToPDF` and full-element screenshots. The
-debugger is attached for one export only and detached right after, so the bar goes away. Clicking
-**Cancel** on the bar aborts the export. Markdown export does not use the debugger.
-
-## Privacy
-
-- **No network requests.** No servers, analytics or remote code. PDFs, images and Markdown are
-  produced by Chrome on your device and passed only between the extension's own pages (runtime
-  messages and `chrome.storage.session`, which lives in memory). A PDF handed to the download
-  fallback page is discarded after 15 minutes or once that page has loaded it.
-- **Settings** are stored in `chrome.storage.sync` (Chrome Sync may sync them like any extension's
-  settings). Small UI preferences (Export settings open/closed, last preview format) are in
-  `chrome.storage.local`; the theme is cached in the extension pages' `localStorage` to avoid a
-  flash of the wrong theme. Page content is never stored.
-- **No `host_permissions`.** The extension only touches a tab after you invoke it there.
-
-| Permission     | Why it is needed                                                                                                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `debugger`     | Attach to the current tab to call `Page.printToPDF` / `Page.captureScreenshot` (plus media/viewport emulation). Attached per export, detached immediately after. |
-| `activeTab`    | Temporary access to the tab you clicked the button, menu or shortcut on. Replaces host permissions.                                                              |
-| `scripting`    | Inject the content script that prepares the page, runs the pickers and the preview overlay, converts Markdown, and restores the page afterwards.                 |
-| `downloads`    | Save the PDF, image or Markdown file, optionally with the Save As dialog.                                                                                        |
-| `storage`      | Remember your settings and UI preferences, and hand a PDF to the download fallback page when a direct download fails.                                            |
-| `contextMenus` | The right-click menu entries.                                                                                                                                    |
+Under **Page handling**, the options page turns inner scroll area expansion on or off. It is on by
+default. Another setting lets a page's `@page` CSS size override the paper size you chose. The page
+also turns on Markdown export and resets all settings.
 
 ## Limitations
 
-- **Blocked pages.** Chrome does not allow extensions on `chrome://`, `edge://`, `about:`,
-  `view-source:`, DevTools and other extensions' pages, or the Chrome Web Store.
-- **`file://` pages** work only if "Allow access to file URLs" is enabled for the extension.
-- **DevTools open on the tab.** Only one debugger client can attach; close DevTools and retry.
-- **Single page is capped at 200 inches** (14 400 pt). Taller content continues on further
-  200-inch pages.
-- **Images are capped at 16 384 px** on the longest side; larger elements are scaled down.
-- **Iframes are not prepared or converted.** The content script runs in the top frame only; the
-  picker can select an `<iframe>` element but not its contents, and Markdown skips iframes.
-- **Very long pages.** Page-wide scans stop after 200 000 elements, auto-scroll after 250 steps,
-  and image loading waits at most 6 seconds.
-- **Article detection is a heuristic.** If it picks the wrong block or none, use Select element.
-- **Canvas / WebGL / video** print as whatever Chrome's print engine renders for them.
-- **Markdown (experimental)**: `data:` images over 2 KB are dropped (alt text kept); Markdown
-  punctuation is escaped everywhere (`snake_case` → `snake\_case`); `visibility: hidden` elements
-  are still exported; tables have no rowspan, colspan becomes empty cells, the first row is always
-  the header and line breaks become `<br>`; `sup`/`sub`/`mark`/`u`, task lists and reversed lists
-  are not handled; multi-paragraph list items are merged; closed shadow roots and iframes are
-  skipped; lazy images that never loaded and fixed bars are not treated specially.
-
-## Development
-
-Requirements: Node.js 18+, Playwright's Chromium, and poppler (`pdfinfo`, `pdftotext`) for the
-test assertions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
-
-```sh
-npm install
-npx playwright install chromium
-brew install poppler           # or: apt-get install poppler-utils
-npm test                       # PDF pipeline, pickers, element-preview download, headless (test/e2e.mjs, 45 checks)
-npm run test:content           # content script, preview, PNG/JPEG capture, Markdown (240 checks)
-npm run test:ui                # popup/options/viewer light+dark → test/out/ui/ (44 screenshots)
-npm run test:all               # the three suites above in sequence
-npm run check:locales          # every locale has the English keys and placeholders
-npm run lint                   # ESLint
-npm run format                 # Prettier (--write); format:check only checks
-npm run check                  # lint + format:check + check:locales (what CI runs first)
-npm run package                # dist/web-snap-pdf-<version>.zip for the Web Store
-HEADED=1 npm test              # watch it in a real window
-npm run build:icons            # rasterise extension/icons/icon.svg to 16/32/48/128 px PNGs
-node scripts/screenshot-preview.mjs   # docs/images/preview-overlay-{light,dark,split-light}.png
-```
-
-The e2e suites serve `test/fixtures/` on a local port, load the extension into Chromium and call
-the service worker's test hook (`globalThis.__websnap`), then check the output (poppler for PDFs,
-a small PNG decoder for images). Automation cannot grant `activeTab`, so `test/harness.mjs` copies
-`extension/` to a temp dir and adds a `host_permissions` entry for the local fixture server only;
-the shipped manifest is unchanged. CI (`.github/workflows/ci.yml`, Ubuntu) runs `npm run check` and
-the three test suites.
-
-### Project layout
-
-```
-extension/                 the unpacked extension (this folder is what gets zipped)
-  manifest.json
-  _locales/<lang>/         messages.json per language (en is the reference)
-  icons/                   icon.svg source + generated PNGs
-  src/background.js        service worker: PDF / image / Markdown pipeline, messaging, menus, shortcuts
-  src/content.js           page preparation and restore, pickers, preview overlay, HTML → Markdown
-  src/lib/paper-sizes.js   22 paper formats, 200-inch cap
-  src/lib/settings.js      settings schema, defaults, load/save
-  src/lib/print-params.js  settings → Page.printToPDF params, header/footer, filenames
-  src/lib/i18n.js          runtime translations (language picker)
-  src/lib/theme.js         system / light / dark theme without a flash
-  src/popup/  src/options/  src/viewer/ (download fallback page)
-scripts/                   screenshot-ui, screenshot-preview, verify-popup, check-locales, build-icons
-test/                      e2e.mjs, content.e2e.mjs, harness.mjs, fixtures/
-formal/page-restore/       TLA+ model of the page-restore promise (check.mjs, replay-finding.mjs)
-docs/                      ARCHITECTURE.md, RELEASE.md, store/listing.md, images/
-```
+- Chrome does not let extensions run on `chrome://` pages, other extensions' pages, or the Chrome
+  Web Store. The popup disables its cards on those pages.
+- `file://` pages work only after you turn on **Allow access to file URLs** for the extension in
+  `chrome://extensions`.
+- Only one debugger can attach to a tab. If DevTools is open on the tab, close it and try again.
+- The content script runs in the top frame only, so the extension does not prepare or convert the
+  content of iframes.
+- Article detection is a heuristic. If it picks the wrong block or finds none, use **Select
+  element**.
+- Canvas, WebGL, and video content prints as Chrome's print engine renders it.
+- On very long pages, page scans stop after 200,000 elements, auto-scroll stops after 250 steps, and
+  the wait for slow images ends after 6 seconds.
+- Markdown export drops `data:` images larger than 2 KB, escapes Markdown punctuation everywhere
+  (`snake_case` becomes `snake\_case`), and exports elements hidden with `visibility: hidden`. It
+  has no support for rowspan, `sup`, `sub`, `mark`, `u`, task lists, or reversed lists. It merges
+  list items that have several paragraphs into one.
+- In Markdown tables, the first row is always the header row, a cell with `colspan` adds empty cells
+  after it, and line breaks inside a cell become `<br>`. Markdown export skips closed shadow roots,
+  because the content script cannot read them.
 
 ## Troubleshooting
 
-| Symptom                                                               | Fix                                                                                 |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| "This page cannot be converted…"                                      | Browser page, Web Store or another extension. Nothing to do.                        |
-| "Another tool (usually DevTools) is attached to this tab"             | Close DevTools on that tab and try again.                                           |
-| "Could not reach the page content. Reload the page and try again."    | The tab was open before the extension was installed or reloaded. Reload the tab.    |
-| "Chrome does not allow extensions to access this page." on `file://`  | Enable "Allow access to file URLs" for Web Snap PDF in `chrome://extensions`.       |
-| "PDF generation was cancelled."                                       | The debugger bar's Cancel was clicked, or the tab navigated/closed mid-run.         |
-| "A PDF is already being generated…" / "An export is already running…" | Wait for the current export to finish.                                              |
-| "Could not detect an article on this page."                           | Use Select element instead.                                                         |
-| "Nothing selected. Click an element on the page first."               | The page changed after you picked it; click Reselect.                               |
-| Warning "…reduced to N× to stay within Chrome's 16,384 px limit"      | Expected for very tall elements; use PDF for full resolution.                       |
-| "Could not copy the image. Download it instead."                      | The page or browser blocked clipboard access; use Download.                         |
-| "Markdown export is an experimental feature…"                         | Enable it under Experimental on the options page.                                   |
-| "This preview has expired."                                           | The download fallback page keeps a PDF for 15 minutes; generate it again.           |
-| Sticky header still repeats or content is clipped                     | Try screen styles, keep "Expand inner scrollable areas" on, or use Remove elements. |
-| Images missing                                                        | Keep "Scroll page to load lazy images" on; slow images get up to 6 s.               |
-| Page looks like a phone/tablet layout or is tiny                      | Adjust Layout width, or use "Fit to paper width" and Scale.                         |
-| Page is left in an odd state after a failed run                       | Popup → Reset page, right-click → Restore all removed elements, or reload the tab.  |
+| Message or symptom                                                                                                  | Fix                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Another tool (usually DevTools) is attached to this tab"                                                           | Close DevTools on that tab and try again.                                                                                                                                                                                                               |
+| "Could not reach the page content. Reload the page and try again."                                                  | The tab was open before you installed or reloaded the extension. Reload the tab.                                                                                                                                                                        |
+| "PDF generation was cancelled."                                                                                     | Someone clicked **Cancel** on the debugging bar, or the tab navigated or closed.                                                                                                                                                                        |
+| "Could not detect an article on this page."                                                                         | Use **Select element** instead.                                                                                                                                                                                                                         |
+| **Select an element to preview and save** or **Remove elements before saving** in the right-click menu does nothing | An export is still running on this tab. The extension refuses the entry and writes the reason only to the service worker console. While the export runs, the popup disables its cards and shows "Generating PDF…". Try again after the export finishes. |
+| Images are missing from the PDF                                                                                     | Keep **Scroll page to load lazy images** on. Slow images get up to 6 seconds.                                                                                                                                                                           |
+| The page looks like a phone layout, or very small                                                                   | Change the layout width, or choose **Fit to paper width** and set the scale.                                                                                                                                                                            |
+| The page looks wrong after a failed export                                                                          | Right-click the page and choose **Restore all removed elements**, or reload the tab. If you removed elements, **Reset page** in the popup does the same.                                                                                                |
+
+## How it works
+
+The service worker, `extension/src/background.js`, runs every export. It injects the content script,
+`extension/src/content.js`, into the tab if the script is not there yet, and asks it to prepare the
+page. The content script loads lazy images, isolates the article or the picked element, hides small
+fixed bars, and un-sticks sticky ones. For a PDF, the service worker then attaches `chrome.debugger`,
+calls `Page.printToPDF`, and downloads the result.
+
+For an image, the service worker attaches the debugger before it prepares the page. Chrome's
+debugging bar shrinks the viewport when it appears, and a `Page.captureScreenshot` taken while the
+viewport changes size repeats the first viewport height of the element instead of the rest. The
+service worker waits until the viewport stops changing size, then prepares the page and captures the
+element.
+
+In both cases, a `finally` block always detaches the debugger and tells the content script to
+restore the page. If a direct download fails, the service worker opens a small fallback page with a
+**Download** button.
+
+Markdown export does not use the debugger. The content script converts the live page, and the
+service worker downloads the text.
+
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes each module, the `ps:*` messages between
+them, storage, and the settings schema.
+
+## Development
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, every test suite, and the verification skills. These
+are the commands you use most:
+
+| Command                | What it does                                                      |
+| ---------------------- | ----------------------------------------------------------------- |
+| `npm run check`        | Runs ESLint, the Prettier check, and the locale check.            |
+| `npm test`             | Tests the PDF pipeline.                                           |
+| `npm run test:content` | Tests the content script, the pickers, the preview, and Markdown. |
+| `npm run test:ui`      | Renders the extension's pages in both themes and fails on errors. |
+| `npm run package`      | Builds the ZIP file for the Chrome Web Store in `dist/`.          |
+
+`npm run package` writes `dist/web-snap-pdf-<version>.zip` with `manifest.json` at the root of the
+archive. It stops if `package.json` and `extension/manifest.json` have different versions, and it
+needs the `zip` command. The release checklist is in [docs/RELEASE.md](docs/RELEASE.md).
+
+## Contributing
+
+To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md). It covers setup, the checks to run,
+and what a good pull request contains. These open tasks need an owner:
+
+- Translate the right-click menu entries, the fallback download page, and the remaining service
+  worker error messages, which are in English only.
+- Close the Markdown gaps listed under [Limitations](#limitations). The converter should handle
+  rowspan, `sup`, `sub`, `mark`, `u`, task lists, reversed lists, and list items with several
+  paragraphs. It should also skip `visibility: hidden` elements and escape less punctuation.
+- Add a "Save selection as PDF" menu entry that saves the element that contains the selected text.
+- Save every tab in the current window in one batch.
+- Make the Chrome Web Store graphics, which are five 1280 × 800 screenshots on a realistic demo page
+  and a 440 × 280 promo tile. [docs/RELEASE.md](docs/RELEASE.md) has the screenshot plan.
+
+## License
+
+Web Snap PDF is free software under the [MIT License](LICENSE).

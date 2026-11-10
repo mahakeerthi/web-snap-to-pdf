@@ -95,9 +95,10 @@ PrepareIsolate ==
 
 \* background.js `finally`: ps:restore, then activeJobs.delete(tabId).
 \* Runs after printing, or early when a step before it throws. One step is
-\* sound: between the two only picker actions can run, none reads job
-\* (StartPicker is only refused there), so each split order equals this
-\* step followed by the same actions.
+\* sound: the code refuses ClaimTab, StartPicker and ResetPage between the
+\* two, and the picker actions do not read job, so each split order equals
+\* this step followed by the same actions. The merged step allows a
+\* superset of the split behaviours.
 ExportDone ==
     /\ job \in {"loading", "printing"}
     /\ inline' = Restored

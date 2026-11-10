@@ -5,7 +5,5 @@ package-lock.json
 extension/_locales/
 # Test fixtures are exact inputs for the converter tests (some deliberately malformed).
 test/fixtures/
-# Planning notes edited by the orchestrator.
-TASKS.md
 # Hand-authored markup with one-line inline SVG icons; Prettier would triple popup.html.
 extension/src/**/*.html

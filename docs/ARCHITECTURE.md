@@ -146,8 +146,7 @@ immediately if `autoDownload`). Sends `ps:discard-job` once loaded. Themed; not 
 
 ## Preview and image capture
 
-The element preview is a full-page preview overlay with a toolbar at the top (being rebuilt in R3,
-see `TASKS.md`; the flow below describes the capture pipeline it uses). The toolbar holds the
+The element preview is a full-page preview overlay with a toolbar at the top. The toolbar holds the
 format (PDF / PNG / JPEG, plus Markdown when enabled), Download, Copy image (PNG and JPEG),
 Reselect, a light / dark toggle and Close. Large elements are split into numbered image parts
 (`preview_part`: "Part 1 of 3", `preview_splitNote`) shown stacked, each with its own Copy
@@ -158,7 +157,7 @@ Flow for Select element:
 
 1. Popup / context menu → `startPicker(tabId, 'print')` injects the content script and sends
    `ps:start-picker` with `strings` and `theme`. While an export holds the tab (`activeJobs`) it
-   refuses instead. The popup gets `{ ok: false, error }`, and a context-menu failure is only logged.
+   refuses instead. The popup gets `{ ok: false, error }`, and `runLogged` only logs a context-menu failure.
 2. A click stores `state.picked`, stops the picker, opens the overlay in its loading state
    (`requestPreview`) and sends `ps:preview-element`.
 3. `previewElement` runs `captureElement` at screen resolution (`scale: null`, at most

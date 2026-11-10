@@ -1,6 +1,7 @@
 // Regression replay of the fixed PageRestore finding: both paths that left an element hidden when
 // the picker opened during an export, on the real extension (test/fixtures/article.html,
 // X = #sidebar) during a real article export, so activeJobs holds the tab throughout.
+// A manual check: neither CI nor any npm script runs it.
 // Usage: node formal/page-restore/replay-finding.mjs   (EXT_DIR=<dir> replays another build)
 //   exit 0  expected: neither path reproduced
 //   exit 1  regression: on at least one path #sidebar stays hidden with 0 removals after "Restore all"

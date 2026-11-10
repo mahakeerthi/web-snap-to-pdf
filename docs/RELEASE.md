@@ -75,7 +75,7 @@ Paste from [store/listing.md](store/listing.md):
   `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
   the summary for other store languages automatically.
 - **Description:** leads with the three ways to save, then the feature bullets, privacy, and the
-  debugging-bar note. It mentions Markdown only as **experimental and off by default** — do not
+  debugging-bar note. It mentions Markdown only as **experimental and off by default**. Do not
   advertise it as a headline feature while it is opt-in, and keep the screenshots on the default
   UI (the popup without the Markdown row), except where noted below.
 - **Category:** Tools.
@@ -133,10 +133,10 @@ downloads through `downloads`).
 
 ## 6. Branding
 
-- [ ] Name, icon, screenshots, promo tiles and description are Web Snap PDF's own. Do not use the
-      name "Web to PDF", the webtopdf.space domain, or the original extension's logo, colours,
-      screenshots or listing text, and do not describe Web Snap as affiliated with it. Copying
-      another listing's branding risks rejection or takedown for impersonation.
+- [ ] Name, icon, screenshots, promo tiles and description are Web Snap PDF's own. Do not reuse
+      another extension's name, logo, screenshots or listing text, and do not describe Web Snap PDF
+      as affiliated with another extension. The store can reject or remove a listing that copies
+      another listing's branding.
 
 ## 7. Submit
 

@@ -4,6 +4,14 @@
   "private": true,
   "description": "Chrome extension that converts the current web page to a PDF locally using Chrome's own print engine.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mahakeerthi/web-snap-to-pdf.git"
+  },
+  "homepage": "https://github.com/mahakeerthi/web-snap-to-pdf#readme",
+  "bugs": {
+    "url": "https://github.com/mahakeerthi/web-snap-to-pdf/issues"
+  },
   "type": "module",
   "scripts": {
     "test": "node test/e2e.mjs",

@@ -1,0 +1,87 @@
+name: Bug report
+description: Something in Web Snap PDF does not work the way the README describes.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste private URLs or the content of private pages. A public URL, or a small HTML file that shows the problem, is enough.
+
+        For a security problem, do not open an issue. Use the private report link in [SECURITY.md](https://github.com/mahakeerthi/web-snap-to-pdf/blob/main/SECURITY.md) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what went wrong? Copy the exact error message if one appeared.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open https://example.com/
+        2. Click the toolbar button, then Full page
+        3. Open the downloaded PDF
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Feature
+      options:
+        - Full page PDF
+        - Article only PDF
+        - Select element and the preview
+        - PNG or JPEG image, or Copy image
+        - Remove elements or Reset page
+        - Markdown export
+        - Right-click menu or keyboard shortcut
+        - Popup or options page
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Web Snap PDF version
+      description: The version at the bottom right of the popup, or on the extension's card in chrome://extensions. If you loaded it from source, add the output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version
+      description: The first line of chrome://version.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15, Windows 11, Ubuntu 24.04
+  - type: textarea
+    id: page
+    attributes:
+      label: A public page or HTML that shows the problem
+      description: A public URL, or a small HTML file pasted here. Leave out anything private.
+      render: html
+  - type: textarea
+    id: console
+    attributes:
+      label: Service worker errors
+      description: In chrome://extensions, click "service worker" next to "Inspect views" on the Web Snap PDF card, open the Console tab, and paste any errors.
+      render: text
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the open issues and found no report of this problem.
+          required: true
