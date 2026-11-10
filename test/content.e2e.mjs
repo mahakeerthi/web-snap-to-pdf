@@ -834,6 +834,75 @@ await test('picker: works on pages that enforce Trusted Types', async () => {
   await page.close();
 });
 
+await test('picker: refused while an export holds the tab', async () => {
+  const PICKER = '[data-websnap-ui=""]';
+  const REFUSAL = 'Wait for the current export to finish before selecting elements.';
+  const { page, tabId } = await openTab('article.html');
+  // Inside the article root, so the export is unchanged; it only keeps the export running long
+  // enough to send both picker requests while activeJobs holds the tab.
+  await page.evaluate(
+    (n) => document.getElementById('body').insertAdjacentHTML('beforeend', '<p>filler</p>'.repeat(n)),
+    1500,
+  );
+  // pageState through the worker (it reports busy); errors come back as { error } instead of a
+  // wrapped evaluate failure.
+  const hook = (fn, ...args) =>
+    sw.evaluate(({ fn, args }) => globalThis.__websnap[fn](...args).catch((e) => ({ error: e.message })), {
+      fn,
+      args,
+    });
+  const pickerOpen = () => page.evaluate((s) => !!document.querySelector(s), PICKER);
+  await sw.evaluate((id) => {
+    globalThis.__heldExport = globalThis.__websnap
+      .generate({ tabId: id, prep: 'article', output: 'return', settings: { loadLazy: true } })
+      .then(
+        (r) => ({ ok: r.ok }),
+        (e) => ({ error: e.message }),
+      );
+  }, tabId);
+  try {
+    await waitFor(() => page.evaluate(() => !!document.querySelector('[data-websnap-root]')), {
+      interval: 10,
+      label: 'prepare() to mark the article root',
+    });
+    const busyBefore = (await hook('pageState', tabId)).busy;
+    check(
+      busyBefore === true,
+      'the export holds the tab before the first picker request',
+      `busy ${busyBefore}`,
+    );
+    for (const mode of ['remove', 'print']) {
+      const res = await hook('startPicker', tabId, mode);
+      check(
+        res.error === REFUSAL,
+        `startPicker('${mode}') is refused during the export`,
+        JSON.stringify(res),
+      );
+      check(!(await pickerOpen()), `no ${mode} picker opens during the export`);
+    }
+    const busyAfter = (await hook('pageState', tabId)).busy;
+    check(
+      busyAfter === true,
+      'the export still holds the tab after the last picker request',
+      `busy ${busyAfter}`,
+    );
+    const exported = await sw.evaluate(() => globalThis.__heldExport);
+    check(exported.ok === true, 'the held export succeeds', JSON.stringify(exported));
+    const busyDone = (await hook('pageState', tabId)).busy;
+    const res = await hook('startPicker', tabId, 'remove');
+    const open = await pickerOpen();
+    check(
+      busyDone === false && res.ok === true && open,
+      'the picker opens once the export has ended',
+      JSON.stringify({ busyDone, res, open }),
+    );
+  } finally {
+    await sw.evaluate(() => globalThis.__heldExport);
+    await send(tabId, { type: 'ps:reset-page' });
+    await page.close();
+  }
+});
+
 // --- 6. shadow DOM --------------------------------------------------------------------------
 
 await test('shadow DOM: remove mode picks elements inside an open shadow root', async () => {
