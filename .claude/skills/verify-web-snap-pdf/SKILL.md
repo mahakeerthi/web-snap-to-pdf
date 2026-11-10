@@ -79,7 +79,7 @@ Proof standards for anything you add:
 
 - `node scripts/verify-popup.mjs doctor` checks the instance, as above.
 - `node scripts/verify-popup.mjs drive <full-page|article|select-element-png|remove-reset|markdown|all>` drives journeys and writes evidence.
-- `node formal/page-restore/replay-finding.mjs` replays the open page-restore finding on the real extension (exit 1 while it reproduces). See `.claude/skills/verify-page-restore/SKILL.md`.
+- `node formal/page-restore/replay-finding.mjs` replays the fixed page-restore finding on the real extension as a regression check (exit 0 expected, 1 on a regression). See `.claude/skills/verify-page-restore/SKILL.md`.
 
 ## Broad regression check
 

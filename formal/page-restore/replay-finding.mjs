@@ -1,8 +1,9 @@
-// Replays both PageRestore counterexamples on the real extension (test/fixtures/article.html,
+// Regression replay of the fixed PageRestore finding: both paths that left an element hidden when
+// the picker opened during an export, on the real extension (test/fixtures/article.html,
 // X = #sidebar) during a real article export, so activeJobs holds the tab throughout.
 // Usage: node formal/page-restore/replay-finding.mjs   (EXT_DIR=<dir> replays another build)
-//   exit 1  reproduced: on at least one path #sidebar stays hidden with 0 removals after "Restore all"
-//   exit 0  neither path reproduced
+//   exit 0  expected: neither path reproduced
+//   exit 1  regression: on at least one path #sidebar stays hidden with 0 removals after "Restore all"
 //   exit 2  inconclusive: the export ended before the picker steps ran, or the replay failed
 import path from 'node:path';
 import { launchExtension, tabIdForUrl } from '../../test/harness.mjs';
@@ -120,7 +121,7 @@ async function openArticle() {
   };
 }
 
-// TLC trace with PageRestore.cfg restricted to no loading window: the user removes X, an export
+// TLC trace, StartPicker guard removed and no loading window: the user removes X, an export
 // isolates the root (snapshotting X's `none !important`), the picker opens and Undo shows X, and
 // ps:restore writes the snapshot back.
 async function undoPath() {
@@ -154,7 +155,7 @@ async function undoPath() {
   return a.finish();
 }
 
-// TLC trace from PageRestore.cfg: during an export's loading window the picker opens and the
+// TLC trace, StartPicker guard removed: during an export's loading window the picker opens and the
 // pointer rests on X; isolate() hides X; a click picks the stale p.current and records
 // `none !important` as X's own value.
 async function staleHoverPath() {

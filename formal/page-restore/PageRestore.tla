@@ -20,25 +20,13 @@
 (*   generate /    ps:prepare ... printToPDF / captureScreenshot ...       *)
 (*   captureElement  ps:restore in `finally`                               *)
 (*   ps:reset-page refused while activeJobs has the tab                    *)
-(*   startPicker   no activeJobs check (popup, context menu)               *)
+(*   startPicker   refused while activeJobs has the tab                    *)
 (***************************************************************************)
 EXTENDS Sequences, Naturals
 
 CONSTANTS
-    Orig,        \* X's own inline display, as the page set it
-    None,        \* display: none !important, as setStyle / pick write it
-    PickerGuard  \* TRUE models startPicker refusing while an export runs.
-                 \* The refusal must be atomic with opening the picker:
-                 \* background.js startPicker awaits readyTab, loadSettings
-                 \* and uiStrings before sendContent, so an activeJobs check
-                 \* at its top is check-then-act and an export can claim the
-                 \* tab in between (that split violates the invariant).
-                 \* Atomic forms: content.js refuses ps:start-picker while
-                 \* prepared (a flag set in prepare, cleared in restore), or
-                 \* the activeJobs check sits right before sendContent,
-                 \* after the awaits.
-
-ASSUME PickerGuard \in BOOLEAN
+    Orig,  \* X's own inline display, as the page set it
+    None   \* display: none !important, as setStyle / pick write it
 
 VARIABLES
     inline,   \* X.style display value and priority
@@ -107,9 +95,9 @@ PrepareIsolate ==
 
 \* background.js `finally`: ps:restore, then activeJobs.delete(tabId).
 \* Runs after printing, or early when a step before it throws. One step is
-\* sound: between the two only picker actions can run, none reads job (a
-\* guarded StartPicker is only refused there), so each split order equals
-\* this step followed by the same actions.
+\* sound: between the two only picker actions can run, none reads job
+\* (StartPicker is only refused there), so each split order equals this
+\* step followed by the same actions.
 ExportDone ==
     /\ job \in {"loading", "printing"}
     /\ inline' = Restored
@@ -120,10 +108,12 @@ ExportDone ==
 -----------------------------------------------------------------------------
 (* User actions *)
 
-\* background.js startPicker -> content.js ps:start-picker
+\* background.js startPicker -> content.js ps:start-picker. The code checks
+\* activeJobs after its awaits and sends in the same synchronous stretch, so
+\* the check and the opening are one step.
 StartPicker ==
     /\ ~picker
-    /\ PickerGuard => job = "idle"
+    /\ job = "idle"
     /\ picker' = TRUE
     /\ hovered' = FALSE
     /\ UNCHANGED <<inline, undo, removed, job>>
@@ -170,8 +160,8 @@ UndoRemoval ==
 \* then content.js restore() followed by resetRemovals().
 \* The model checks job = "idle" in the same step, though handleMessage
 \* awaits between its check and the content message. That overstates
-\* atomicity but is safe: PageRestoreGuarded.cfg still passes with the
-\* guard removed entirely.
+\* atomicity but is safe: PageRestore.cfg still passes with the guard
+\* removed entirely.
 ResetPage ==
     /\ job = "idle"
     /\ picker' = FALSE

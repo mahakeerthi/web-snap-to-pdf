@@ -803,6 +803,10 @@ async function startPicker(tabId, mode) {
   await readyTab(tabId);
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
+  // Checked after the awaits, in the same synchronous stretch as the send: a check at the top would
+  // let an export claim the tab during the awaits (formal/page-restore).
+  if (activeJobs.has(tabId))
+    throw new UserError('Wait for the current export to finish before selecting elements.');
   return sendContent(tabId, { type: 'ps:start-picker', mode, strings, theme: settings.theme || 'system' });
 }
 

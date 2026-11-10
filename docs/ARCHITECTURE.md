@@ -157,7 +157,8 @@ Reselect, a light / dark toggle and Close. Large elements are split into numbere
 Flow for Select element:
 
 1. Popup / context menu → `startPicker(tabId, 'print')` injects the content script and sends
-   `ps:start-picker` with `strings` and `theme`.
+   `ps:start-picker` with `strings` and `theme`. While an export holds the tab (`activeJobs`) it
+   refuses instead. The popup gets `{ ok: false, error }`, and a context-menu failure is only logged.
 2. A click stores `state.picked`, stops the picker, opens the overlay in its loading state
    (`requestPreview`) and sends `ps:preview-element`.
 3. `previewElement` runs `captureElement` at screen resolution (`scale: null`, at most
@@ -270,7 +271,7 @@ start with `ps:`. Handlers reply asynchronously; on any thrown error the reply i
 | `ps:export-markdown`              | popup                                  | `tabId?`, `prep: 'none' \| 'article'`                                                                                                                                                         | `{ ok, filename, bytes }`; `{ ok: false }` while `markdownEnabled` is off                                                                 |
 | `ps:export-markdown-from-content` | content (preview overlay)              | `prep` (default `'element'`)                                                                                                                                                                  | as `ps:export-markdown`                                                                                                                   |
 | `ps:set-theme`                    | content (preview overlay theme toggle) | `theme: 'light' \| 'dark' \| 'system'`                                                                                                                                                        | `{ ok, theme }`; saves `settings.theme`                                                                                                   |
-| `ps:start-picker`                 | popup                                  | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                                         | content script's reply `{ ok }`                                                                                                           |
+| `ps:start-picker`                 | popup                                  | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                                         | content script's reply `{ ok }`; `{ ok: false, error }` while an export holds the tab (context-menu failures are only logged)             |
 | `ps:page-state`                   | popup                                  | `tabId?`                                                                                                                                                                                      | `{ ok, printable, busy, title, url, removed, hasPicked, pickerActive?, previewOpen? }` (last two only when the content script is present) |
 | `ps:reset-page`                   | popup                                  | `tabId?`                                                                                                                                                                                      | `{ ok }`                                                                                                                                  |
 | `ps:get-job`                      | viewer (download fallback)             | `id`                                                                                                                                                                                          | `{ ok, job: { base64, filename, title, autoDownload, createdAt } }` or `{ ok: false, error }` if expired                                  |
@@ -359,8 +360,9 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   matching tests only).
 - `scripts/verify-popup.mjs` — drives the real popup against a fixture tab and checks the
   downloaded file (the `/verify-web-snap-pdf` skill).
-- `formal/page-restore/` — TLA+ model of the page-restore promise (`check.mjs`) and a replay of its
-  open finding on the real extension (`replay-finding.mjs`); the `/verify-page-restore` skill.
+- `formal/page-restore/` — TLA+ model of the page-restore promise (`check.mjs`) and a regression
+  replay of its fixed finding on the real extension (`replay-finding.mjs`); the
+  `/verify-page-restore` skill.
 - `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup, options and viewer pages
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
   errors or missing translation keys.

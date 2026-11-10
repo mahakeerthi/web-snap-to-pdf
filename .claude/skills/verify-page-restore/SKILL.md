@@ -9,7 +9,7 @@ description: Model-check Web Snap PDF's page-restore promise with TLA+ (formal/p
 
 **The harm when it breaks.** An element stays hidden (or reappears) on the user's page after an export, and nothing in the UI can put it back short of reloading the tab.
 
-The check is a TLA+ model of one element's inline `display` under every order of the actions below, checked exhaustively by TLC. It runs in under two seconds.
+The check is a TLA+ model of one element's inline `display` under every order of the actions below, checked exhaustively by TLC. It runs in under a second.
 
 ## Run it
 
@@ -30,7 +30,7 @@ Needs Java and `tools/tla2tools.jar` (gitignored). The script prints the install
 
 ## Does my change touch the verified code?
 
-The covered functions, by file, are listed in `formal/page-restore/coverage.json` under `functions`. The check hashes each one, so exit 2 tells you when you touched one. Besides the mutation and restore code, they include `neutralizeFixed` (the other way `prepare` can hide X), `elementAt`, `pickable` and `setCurrent` (how hovering sets the picker's `p.current`, which a click then picks), and `renderBar` (it builds the Undo button). Also treat these as covered even though they are not hashed: any new code path that writes `el.style` on page elements outside `setStyle`, a new sender of `ps:prepare`, `ps:restore`, `ps:start-picker` or `ps:reset-page`, the closures `startPicker` installs (`p.onMove`, `p.onClick`, `p.onKey`), and the `chrome.contextMenus.onClicked` listener in `background.js`.
+The covered functions, by file, are listed in `formal/page-restore/coverage.json` under `functions`. The check hashes each one, so exit 2 tells you when you touched one. Besides the mutation and restore code, they include `neutralizeFixed` (the other way `prepare` can hide X), `elementAt`, `pickable` and `setCurrent` (how hovering sets the picker's `p.current`, which a click then picks), and `renderBar` (it builds the Undo button). Also treat these as covered even though they are not hashed: any new code path that writes `el.style` on page elements outside `setStyle`, a new sender of `ps:prepare`, `ps:restore`, `ps:start-picker` or `ps:reset-page`, a content-side caller of `startPicker('remove')`, the closures `startPicker` installs (`p.onMove`, `p.onClick`, `p.onKey`), and the `chrome.contextMenus.onClicked` listener in `background.js`.
 
 ## What each model action stands for
 
@@ -46,19 +46,16 @@ The covered functions, by file, are listed in `formal/page-restore/coverage.json
 | `job`                                     | `activeJobs.has(tabId)`: `claimed`, then `loading` (inside `prepare`, at `await loadLazyContent()`), then `printing` (after `isolate`)                                 |
 | `ClaimTab`, `ExportDone`                  | `claimTab`, and the `finally` of `withPreparedPage` sending `ps:restore`                                                                                               |
 | `PrepareStart`, `PrepareIsolate`          | `prepare()` before and after its first `await`; `isolate()` hiding X as a sibling of the root, or `neutralizeFixed()` hiding X as a small fixed element                |
-| `StartPicker`                             | `background.js` `startPicker` (popup and context menu); `PickerGuard` models it refusing while `activeJobs` has the tab                                                |
+| `StartPicker`                             | `background.js` `startPicker` (popup and context menu), refused while `activeJobs` has the tab                                                                         |
 | `Hover`, `Unhover`                        | `p.onMove`: `elementAt` and `setCurrent` make X `p.current` while X is shown; hovering anything else replaces it                                                       |
 | `PickRemove`, `UndoRemoval`, `StopPicker` | `p.onClick` then `pick` (remove mode) on X, or on a stale `p.current`; the picker bar's Undo (built by `renderBar`, runs `undoRemoval`); Done or Escape (`stopPicker`) |
 | `ResetPage`                               | the `ps:reset-page` guard in `handleMessage`, then content `restore()` and `resetRemovals()`                                                                           |
 
-The invariant is `IdlePageMatchesRemovals`. `PageRestore.cfg` models the code as it is. `PageRestoreGuarded.cfg` differs only in `PickerGuard = TRUE`.
+The invariant is `IdlePageMatchesRemovals`. `PageRestore.cfg` is the only config and models the code as it is.
 
-**`PageRestoreGuarded.cfg` models only an atomic guard.** `background.js` `startPicker` awaits `readyTab`, `loadSettings` and `uiStrings` before `sendContent`. An `activeJobs` check at its top is check-then-act: an export can claim the tab during those awaits. A scratch model that splits `StartPicker` into the check and the delivery violates `IdlePageMatchesRemovals` with a 9-state trace even with the guard on. A fix matches the guarded model only in one of two forms:
+**`StartPicker` is one step because the guard is atomic in the code.** `background.js` `startPicker` awaits `readyTab`, `loadSettings` and `uiStrings`, then checks `activeJobs` and calls `sendContent` with no `await` in between. That rests on an assumption the tests do not cover. Chrome delivers `tabs.sendMessage` calls to one tab in send order, so a `ps:start-picker` sent while idle lands before the `ps:prepare` of any export claimed later, and `prepare()`'s `stopPicker()` closes it. A check at the top of `startPicker` would be check-then-act, because an export can claim the tab during the awaits. A scratch model that splits `StartPicker` into the check and the delivery violates `IdlePageMatchesRemovals` with a 9-state trace (36 states found). One other form would also be atomic: `content.js` refusing `ps:start-picker` while the page is prepared, with a flag set in `prepare` and cleared in `restore`. A scratch model of it (refused once `prepare` has run, so allowed while `job = "claimed"`) passes (16 states).
 
-- `content.js` refuses `ps:start-picker` while the page is prepared, with a flag set in `prepare` and cleared in `restore`. A scratch model of this form (refused once `prepare` has run, so allowed while `job = "claimed"`) passes (16 states).
-- The `activeJobs` check sits in `startPicker` right before `sendContent`, after the awaits.
-
-Two other atomic steps are deliberate. `ResetPage` checks `job = "idle"` in the same step as the content `restore()`, though `handleMessage` awaits in between. That overstates atomicity but is safe: `PageRestoreGuarded.cfg` still passes with the guard removed entirely (16 states). `ExportDone` merges `ps:restore` with `activeJobs.delete`. That is sound: between the two only picker actions can run, none of them reads `job`, and a guarded `StartPicker` is only refused there. A scratch model with the two as separate steps passes under the guarded settings (18 states).
+Two other atomic steps are deliberate. `ResetPage` checks `job = "idle"` in the same step as the content `restore()`, though `handleMessage` awaits in between. That overstates atomicity but is safe: `PageRestore.cfg` still passes with that check removed entirely (16 states). `ExportDone` merges `ps:restore` with `activeJobs.delete`. That is sound: between the two only picker actions can run, none of them reads `job`, and `StartPicker` is only refused there. A scratch model with the two as separate steps passes (18 states).
 
 ## Read a result
 
@@ -69,11 +66,13 @@ Then decide which kind of failure it is.
 - **Real bug.** Each step of the trace maps to a user action or a code step in the table above, and you can replay it on the real extension. Replay it before you report it, with the content-script messages the test suites use (`test/content.e2e.mjs` sends `ps:prepare`, `ps:start-picker`, `ps:restore` from the service worker), with `formal/page-restore/replay-finding.mjs` as a template, or with `/verify-web-snap-pdf`. Report the trace in the code's words. Do not edit the model or the expectations to make it pass, and do not change product code unless the user asks.
 - **Modeling error.** A step in the trace cannot happen in the code (an action fires when the code's guard forbids it, or one model step spans an `await` in the code). Fix the model so each atomic step matches an atomic stretch of code, then rerun.
 
-## Known finding (open)
+## Fixed finding
 
-`PageRestore.cfg` violates `IdlePageMatchesRemovals` today. That is expected and recorded in `coverage.json`. Both paths need the picker to open while an export runs, which `startPicker` allows.
+Up to `4e8e253`, `background.js` `startPicker` had no `activeJobs` check, so the picker could open while an export held the tab. TLC found two paths that leave X hidden with nothing for "Restore all removed elements" to restore. `startPicker` now refuses while `activeJobs` has the tab, and `PageRestore.cfg` passes. A change that lets the picker open during an export again brings both paths back.
 
-**Stale-hover path.** This is TLC's trace for `PageRestore.cfg` (`--trace`). It needs the `loading` window, so `loadLazy` on (the default).
+The traces below are model traces with the guard removed. They are TLC's output for a scratch copy of the current model with the `job = "idle"` conjunct deleted from `StartPicker`, which is the code before the fix.
+
+**Stale-hover path.** TLC's first counterexample for that copy, an 8-state trace (28 states found). It needs the `loading` window, so `loadLazy` on (the default).
 
 1. The user saves the article as PDF. `claimTab`, then `prepare()` stops the picker, restores, marks the root and awaits `loadLazyContent()`.
 2. Meanwhile the user picks "Remove elements before saving" from the context menu. The picker opens on the page being prepared.
@@ -82,9 +81,9 @@ Then decide which kind of failure it is.
 5. The user clicks. `p.onClick` picks `p.current` and `pick` has no visibility check, so it records `none !important` as X's own value in `state.removed`.
 6. The export finishes. `ps:restore` shows X again, though a removal of X is on record. TLC stops here.
 
-"Restore all removed elements" then writes the recorded `none !important` back. X is hidden with 0 removals on record. The export need not have a root: with "Hide fixed elements" on (the default), `neutralizeFixed()` hides a small fixed X in step 4 of a full-page export. That was replayed once on the real extension with a scratch copy of the replay (full-page export of `article.html`, X = `header.fixed`): the header stayed hidden with 0 removals after "Restore all".
+"Restore all removed elements" then writes the recorded `none !important` back. X is hidden with 0 removals on record. The export need not have a root: with "Hide fixed elements" on (the default), `neutralizeFixed()` hides a small fixed X in step 4 of a full-page export. Pre-fix history at `4e8e253`, not rerun. A scratch copy of the replay showed this on the real extension (full-page export of `article.html`, X = `header.fixed`), and the header stayed hidden with 0 removals after "Restore all".
 
-**Undo path.** It needs an export with a root, "Article only" or an element export: a full-page export has no root, so `isolate()` does not run, and `neutralizeFixed()` skips elements that are already hidden. TLC reaches it with the hover actions removed (8 states: X removed during the `loading` window), and with user actions barred from the `loading` window, as with `loadLazy` off (this 9-state trace):
+**Undo path.** It needs an export with a root, "Article only" or an element export: a full-page export has no root, so `isolate()` does not run, and `neutralizeFixed()` skips elements that are already hidden. TLC reaches it from the same copy with the hover actions removed (an 8-state trace, 22 states found, in which X is removed during the `loading` window), and with user actions barred from the `loading` window, as with `loadLazy` off (this 9-state trace, 23 states found):
 
 1. The user saves the article as PDF. `claimTab` runs, and before `ps:prepare` arrives the user opens "Remove elements" and removes X (`pick`): X gets `display: none !important`, and `state.removed` remembers X's own value.
 2. `prepare()` stops the picker, and `isolate()` hides X as a sibling of the root, snapshotting `none !important` into `state.undo`.
@@ -93,22 +92,20 @@ Then decide which kind of failure it is.
 
 X is hidden, no removal is on record, and "Restore all removed elements" cannot show it again.
 
-**An Undo-only fix is not enough.** A scratch model where `UndoRemoval` also needs `job = "idle"` still violates `IdlePageMatchesRemovals` (8-state trace, the stale-hover path above). The real extension agrees: with `undoRemoval` patched to do nothing while `state.undo` is non-empty, the replay reports the Undo path not reproduced and the stale-hover path reproduced. `PageRestoreGuarded.cfg` passes, so an atomic `startPicker` guard removes both paths in the model.
+**An Undo-only fix is not enough.** The same copy with `UndoRemoval` also needing `job = "idle"` still violates `IdlePageMatchesRemovals` (an 8-state trace, 27 states found, along the stale-hover path above). Pre-fix history at `4e8e253`, not rerun. On the real extension, with `undoRemoval` patched to do nothing while `state.undo` is non-empty, the replay reported the Undo path not reproduced and the stale-hover path reproduced.
 
-**Replayed on the real extension.** `node formal/page-restore/replay-finding.mjs` drives both paths on `test/fixtures/article.html` with X = `#sidebar`, inside a real `__websnap.generate` article export with `loadLazy` on, so `activeJobs` holds the tab. Its Undo path removes X just before the export starts, which the model also allows. It adds 1500 filler paragraphs to the article through `page.evaluate` (the fixture file is unchanged) so the windows between export steps are wide enough to act in. For each path it prints the steps and `REPRODUCED` when `#sidebar` keeps `display: none !important` with 0 removals after "Restore all". Exit 1 means at least one path reproduced, 0 means neither did, and 2 means inconclusive (the export ended before the picker steps, or the replay failed). Today it exits 1 with both paths reproduced. Against a scratch copy with the `activeJobs` check right before `sendContent` (`EXT_DIR=<copy>`), it exits 0.
+**Regression replay on the real extension.** `node formal/page-restore/replay-finding.mjs` drives both paths on `test/fixtures/article.html` with X = `#sidebar`, inside a real `__websnap.generate` article export with `loadLazy` on, so `activeJobs` holds the tab. Its Undo path removes X just before the export starts, which the model also allows. It adds 1500 filler paragraphs to the article through `page.evaluate` (the fixture file is unchanged) so the windows between export steps are wide enough to act in. For each path it prints the steps, including what `startPicker` returned while `pageState.busy`, and `REPRODUCED` when `#sidebar` keeps `display: none !important` with 0 removals after "Restore all". Exit 0 is expected, with both paths `not reproduced`, each with `startPicker` refused and no picker open. Exit 1 means a regression. Exit 2 means inconclusive (the export ended before the picker steps, or the replay failed). Rerun it, since 2 is not a pass. Pre-fix history at `4e8e253`, not rerun. It exited 1 with both paths reproduced. `test/content.e2e.mjs` checks the refusal itself in `picker: refused while an export holds the tab`.
 
-While this finding is open, `PageRestore.cfg` already expects a violation, so a new bug would not change its result. `PageRestoreGuarded.cfg` is then the regression check for every path except the `startPicker` guard: a new break anywhere else turns it from `pass` to a violation, and the script exits 1.
-
-When the code is fixed with an atomic guard: set `PickerGuard = TRUE` in `PageRestore.cfg` (or delete the guard constant and the second config), change `expect` for `PageRestore.cfg` to `pass`, rerun, check that `replay-finding.mjs` exits 0, then sync.
+`PageRestore.cfg` is the regression check for every path, the `startPicker` guard included. A new break anywhere turns its result from `pass` to a violation, and `check.mjs` exits 1.
 
 ## Evidence that the check can fail
 
-Each of these was run on a scratch copy of the current model, with `PageRestoreGuarded.cfg` settings unless the bullet says otherwise. A violating run stops at the first violation, so its count is the states TLC had found by then.
+Each of these was run on a scratch copy of the current model with `PageRestore.cfg`. A violating run stops at the first violation, so its count is the states TLC had found by then.
 
 - `PrepareIsolate` hiding X without appending to `undo` (a `display` write that skips `setStyle`) violates `IdlePageMatchesRemovals` with a 5-state trace (13 states found).
 - `ExportDone` writing X's original value instead of the snapshot (a `restore()` that calls `removeProperty` instead of putting the snapshot back) violates it with a 7-state trace (17 states found): a removed X reappears after an export.
-- Swapping `restore()` and `resetRemovals()` in `ResetPage` still passes (16 states). That is correct, not a blind spot: `ResetPage` only runs while `job = "idle"`, when `undo` is always empty, so the order cannot matter. With that guard removed (as if `handleMessage` let `ps:reset-page` through during an export), the code's order still passes and the swapped order violates `IdlePageMatchesRemovals` with an 8-state trace.
-- The split guard (guard on) and the Undo-only guard (`PickerGuard = FALSE`) above both violate.
+- Swapping `restore()` and `resetRemovals()` in `ResetPage` still passes (16 states). That is correct, not a blind spot: `ResetPage` only runs while `job = "idle"`, when `undo` is always empty, so the order cannot matter. With that guard removed (as if `handleMessage` let `ps:reset-page` through during an export), the code's order still passes (16 states) and the swapped order violates `IdlePageMatchesRemovals` with an 8-state trace (18 states found).
+- The split check and delivery and the Undo-only guard above both violate.
 
 ## Keep it in step with the code
 
@@ -133,5 +130,6 @@ Never run `--sync` just to silence exit 2. It refuses (exit 3) while a covered f
 - `Unhover` can fire at any time, which over-approximates where the pointer can go.
 - One tab. Exports on other tabs are independent (`activeJobs` is per tab).
 - The preview overlay, Markdown export, and the content of the PDF.
-- No bounds, but not every config is finite. `PageRestoreGuarded.cfg` has 16 reachable states, the full set with or without `-continue`. `PageRestore.cfg` stops at its first violation after 28 states. With `-continue` it never finishes: each stale pick during an export appends another entry to `removed`. Measured with `-continue` and a measurement-only constraint `Len(removed) <= k`, it has 68, 111, 154 and 197 states for k = 1 to 4. Once the code is fixed and `PageRestore.cfg` takes `PickerGuard = TRUE`, it is the finite guarded model.
+- A picker the overlay opens. The overlay's Reselect button (its click handler in `content.js` `openPreview`) calls `startPicker('print')` in the content script without asking the worker, so a select-mode picker can exist during an export outside the model. That is accepted, because a select-mode `pick` writes no `display` (it stores `state.picked` and opens the preview), and remove mode is only reachable through the worker's `ps:start-picker`.
+- No bounds, and the model is finite. `PageRestore.cfg` has 16 reachable states (62 generated, depth 6), the full set with or without `-continue`. The scratch copy with the `StartPicker` guard removed is not finite. TLC stops at its first violation after 28 states, and with `-continue` it never finishes, because each stale pick during an export appends another entry to `removed` (21,331 states after two minutes and still growing). Measured with `-continue` and a measurement-only constraint `Len(removed) <= k`, that copy has 68, 111, 154 and 197 states for k = 1 to 4.
 - A pass covers the model, not the code. The hashes only tell you that covered code changed, not that the model still matches it.

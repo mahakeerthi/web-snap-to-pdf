@@ -15,7 +15,7 @@ Remove elements lets the user click away parts of the page (banners, sidebars, p
 - Click the toolbar icon, then `Remove elements` (`#act-remove`). The popup closes and the picker starts in remove mode. Driven, through `popup.html` in a tab.
 - Right-click the page, a frame or the toolbar icon and choose `Remove elements before saving`. Not drivable by the harness.
 - Reset: the popup's `Reset page (n)` card (`#act-reset`, shown only while elements are removed). Driven. Or the context menu's `Restore all removed elements`. Not drivable by the harness.
-- Picker bar buttons `Undo` and `Save PDF`. Reachable by the helper but not driven by any journey, and no suite asserts them. Only `node formal/page-restore/replay-finding.mjs` clicks `Undo`, during an export.
+- Picker bar buttons `Undo` and `Save PDF`. Reachable by the helper but not driven by any journey, and no suite asserts them. `node formal/page-restore/replay-finding.mjs` would click `Undo` during an export, but the picker is refused there now, so it no longer reaches the button.
 
 ## Driving it with scripts/verify-popup.mjs
 
@@ -35,7 +35,7 @@ Preconditions:
 
 ## Gotchas
 
-- Open finding, not fixed: opening remove mode while an export is running can leave an element hidden with nothing recorded to restore, so even `Reset page` cannot bring it back short of a reload. Two paths: clicking `Undo` during the export, or clicking after the pointer rested on an element the export then hid (the click removes the hidden element). `background.js` `startPicker` does not refuse while an export holds the tab. `node formal/page-restore/replay-finding.mjs` reproduces it on the real extension (exit 1 while it reproduces); the model and trace are in `.claude/skills/verify-page-restore/SKILL.md`. Any change to remove, undo or reset must run that skill.
+- The picker is refused during an export. While an export holds the tab, `background.js` `startPicker` rejects both modes with "Wait for the current export to finish before selecting elements." The popup shows that message in its status line. The context menu stays silent and only logs the error. Opening the picker during an export used to leave an element hidden with nothing for `Reset page` to restore. `node formal/page-restore/replay-finding.mjs` replays both old paths and exits 0 while the fix holds; the model and traces are in `.claude/skills/verify-page-restore/SKILL.md`. Any change to remove, undo or reset must run that skill.
 - Open a new popup after the picker. The first popup closed itself when the picker started, and a popup opened earlier holds a stale removed count.
 - In one popup, the second export's status line still shows the first export until it updates. Wait for the new download id, not `#status.ok`.
 - Removals live in the page. Reloading the tab drops them and the reset card with them.
