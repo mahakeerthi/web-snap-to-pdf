@@ -9,8 +9,9 @@ If a local `TASKS.md` exists, it is the maintainer's planning board. Do not edit
 ## Before you report a change as working
 
 - `npm run check` (lint, Prettier, locale parity) and the suite that covers the change:
-  `npm test` (PDF pipeline), `npm run test:content` (content script, pickers, preview, Markdown),
-  `npm run test:ui` (extension pages render without errors). `ONLY='<test name regex>'` runs a
+  `npm run test:release` (version bump and release tags), `npm test` (PDF pipeline),
+  `npm run test:content` (content script, pickers, preview, Markdown), `npm run test:ui`
+  (extension pages render without errors). `ONLY='<test name regex>'` runs a
   subset of `test/e2e.mjs` or `test/content.e2e.mjs`, and `HEADED=1` shows the browser in both.
 - For user-visible behavior, drive it with the `/verify-web-snap-pdf` skill
   (`.claude/skills/verify-web-snap-pdf/`), which clicks the real popup against a fixture tab and
@@ -32,6 +33,10 @@ If a local `TASKS.md` exists, it is the maintainer's planning board. Do not edit
   (`npm run check:locales`).
 - Tests launch the extension through `test/harness.mjs`, which copies `extension/` and adds a
   host permission for the fixture server. Never add host permissions to `extension/manifest.json`.
+- Never edit `version` in `package.json` or `extension/manifest.json` by hand. `main` stays at
+  `0.0.0`. The manually run `.github/workflows/release.yml` sets the version on a tagged release
+  commit and publishes a GitHub release. It never uploads to the Chrome Web Store, and the repo
+  holds no store credentials. `docs/RELEASE.md` section 7 has the steps.
 - `globalThis.__websnap` in `background.js` is a test hook. Keep it to what tests and the verify
   skill call.
 

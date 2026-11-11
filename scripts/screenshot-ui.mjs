@@ -219,7 +219,11 @@ try {
       const langCount = await page.locator('#language option').count();
       if (langCount < 2) problems.push(`[${label}] language select has ${langCount} options`);
       const version = await page.textContent('#version');
-      if (version !== 'v1.1.0') problems.push(`[${label}] version label is "${version}"`);
+      const { version: expected } = JSON.parse(
+        fs.readFileSync(path.join(root, 'extension/manifest.json'), 'utf8'),
+      );
+      if (version !== `v${expected}`)
+        problems.push(`[${label}] version label is "${version}", expected "v${expected}"`);
       const rawKeys = await page.evaluate(() =>
         [...document.querySelectorAll('body *')]
           .filter((e) => !e.children.length && /^[a-z]+_[A-Za-z0-9_]+$/.test(e.textContent.trim()))
