@@ -519,7 +519,7 @@ async function waitForStableViewport(target, { stableMs = 250, maxMs = 2500 } = 
   let last = null;
   let since = start;
   while (Date.now() - start < maxMs) {
-    let h = null;
+    let h;
     try {
       const r = await cdp(target, 'Runtime.evaluate', { expression: 'innerHeight', returnByValue: true });
       h = r && r.result ? r.result.value : null;
