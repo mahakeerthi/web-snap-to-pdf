@@ -5,16 +5,13 @@ Run every command from the project root. The exact text to paste into the dashbo
 
 ## 1. Version
 
-- [ ] Bump `version` in `extension/manifest.json` (Chrome requires it to be higher than the
-      published version; 1-4 dot-separated integers, e.g. `1.1.1`). Current: `1.1.0`.
-- [ ] Bump `version` in `package.json` to the same value.
-- [ ] Note user-visible changes for the release notes. 1.1.0: redesigned popup (three action cards,
-      Layout + summary line, collapsible Export settings, Help), on-page element preview with PDF /
-      PNG / JPEG export and Copy image, light/dark theme, 8 interface languages, experimental
-      Markdown export (opt-in). Next release: the popup cards always download directly (the
-      separate preview buttons and the "Default action" option are removed); the element preview
-      becomes a full-page overlay with a toolbar at the top and splits large elements into image
-      parts.
+Never edit the version by hand. The release workflow raises it in `package.json`, copies it into
+`extension/manifest.json` (`scripts/sync-version.mjs`), commits, and tags `vX.Y.Z`. The repository
+holds `0.0.0` until the first release, so the first `patch` release is `0.0.1`. Chrome accepts only
+dot-separated integers, so there are no prerelease versions.
+
+- [ ] Note user-visible changes since the last tag. The workflow writes GitHub's generated notes
+      into the release; edit them there if they need more.
 
 ## 2. Verify
 
@@ -48,23 +45,15 @@ Run every command from the project root. The exact text to paste into the dashbo
 
 ## 3. Package
 
+The release workflow runs `npm run package` and attaches `web-snap-pdf-<version>.zip` and its
+`.sha256` to the GitHub release. To build the same ZIP locally:
+
 ```sh
 npm run package
+unzip -l dist/web-snap-pdf-*.zip | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
 ```
 
-builds `dist/web-snap-pdf-<version>.zip` (git-ignored; fails if `package.json` and the manifest
-disagree on the version). The zip must contain the **contents** of `extension/`,
-with `manifest.json` at the zip root. Manual equivalent, and the check to run either way:
-
-```sh
-VERSION=$(node -p "require('./extension/manifest.json').version")
-mkdir -p dist
-(cd extension && zip -r -X "../dist/web-snap-pdf-$VERSION.zip" . -x '*.DS_Store')
-unzip -l "dist/web-snap-pdf-$VERSION.zip" | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
-```
-
-- [ ] Nothing outside `extension/` is in the zip (no `node_modules/`, `test/`, `scripts/`, `docs/`).
-- [ ] `_locales/` is included (the manifest uses `__MSG_*__` strings and `default_locale`).
+The ZIP holds the contents of `extension/` only, with `manifest.json` and `_locales/` at its root.
 
 ## 4. Listing
 
@@ -138,8 +127,62 @@ downloads through `downloads`).
       as affiliated with another extension. The store can reject or remove a listing that copies
       another listing's branding.
 
-## 7. Submit
+## 7. Release
 
-- [ ] Upload `dist/web-snap-pdf-<version>.zip` in the Developer Dashboard (new item or Package → Upload new package).
-- [ ] Fill in listing, privacy practices and distribution (visibility, regions).
-- [ ] Submit for review; after approval, install from the store in a clean profile and repeat the smoke test.
+Pushes to `main` never release. A release starts only when you run the **Release** workflow by
+hand, from `main`, in the Actions tab or with `gh`:
+
+```sh
+gh workflow run release.yml -f bump=patch -f dry_run=true
+gh workflow run release.yml -f bump=patch -f dry_run=false
+```
+
+`dry_run` is on by default. A dry run computes the version, runs every CI check and builds the ZIP
+as a workflow artifact. It creates no tag and no release. Download the `release-zip` artifact to
+inspect the build.
+
+A real run does this, in order:
+
+1. `prepare` refuses to run from any branch but `main`. It reads the highest `vX.Y.Z` tag and
+   raises it (`scripts/next-version.mjs`). With no tags yet, the first `patch` release is `0.0.1`.
+2. `test` runs `ci.yml`: `npm audit`, `npm audit signatures`, lint, Prettier, locales, the release
+   tooling tests and every end-to-end suite.
+3. `build` commits the new version on top of the tested `main` commit, tags it `vX.Y.Z`, builds
+   the ZIP, records a signed build-provenance attestation for it, and pushes the tag. It never
+   pushes to `main`: `main` stays at version `0.0.0`, and only the tagged release commits carry a
+   real version.
+4. `github-release` publishes the GitHub release with the ZIP, its SHA-256 and generated notes.
+
+The workflow never contacts the Chrome Web Store and holds no store or Google credentials. If
+`prepare`, `test` or `build` fails, nothing was pushed: fix the cause and start a new run. If
+`github-release` fails, the tag exists, so use **Re-run failed jobs**. It finishes a draft
+release and leaves a published one alone.
+
+Published releases are final. The repository protects `v*` tags from being moved or deleted, and
+immutable releases lock a published release's files. To replace a bad release, fix `main` and
+run a new release. To remove a tag that has no published release, disable the **Release tags**
+ruleset in **Settings → Rules**, delete the tag, and enable the ruleset again.
+
+The provenance attestation names the tested `main` commit. The tag points at the release commit
+on top of it, which changes only the version in `package.json`, `package-lock.json` and
+`extension/manifest.json`.
+
+### Upload to the Chrome Web Store
+
+Uploading is always by hand, from the GitHub release.
+
+1. Download `web-snap-pdf-X.Y.Z.zip` from the release page.
+2. Check that it is the file this repository built:
+
+   ```sh
+   gh attestation verify web-snap-pdf-X.Y.Z.zip --repo mahakeerthi/web-snap-to-pdf \
+     --signer-workflow mahakeerthi/web-snap-to-pdf/.github/workflows/release.yml \
+     --source-ref refs/heads/main
+   ```
+
+3. In the [Developer Dashboard](https://chrome.google.com/webstore/devconsole), upload it. For
+   the first release, create the item and fill in the listing from
+   [store/listing.md](store/listing.md), the privacy practices (section 5) and distribution. For
+   later releases, use **Package → Upload new package**. Then submit for review.
+4. After approval, install from the store in a clean profile and repeat the smoke test from
+   section 2.

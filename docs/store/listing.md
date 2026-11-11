@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Web Snap PDF 1.1.0
+# Chrome Web Store listing — Web Snap PDF
 
 Exact text to paste into the Developer Dashboard. The dashboard fields are plain text: copy the
 contents of each `text` block, not the Markdown around it. Checklist and background:

@@ -1,6 +1,6 @@
 {
   "name": "web-snap-to-pdf",
-  "version": "1.1.0",
+  "version": "0.0.0",
   "private": true,
   "description": "Chrome extension that converts the current web page to a PDF locally using Chrome's own print engine.",
   "license": "MIT",
@@ -24,7 +24,9 @@
     "check:locales": "node scripts/check-locales.mjs",
     "check": "npm run lint && npm run format:check && npm run check:locales",
     "package": "node scripts/package.mjs",
-    "build:icons": "node scripts/build-icons.mjs"
+    "build:icons": "node scripts/build-icons.mjs",
+    "test:release": "node --test test/release.test.mjs",
+    "version": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

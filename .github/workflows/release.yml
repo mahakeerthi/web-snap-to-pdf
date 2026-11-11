@@ -1,0 +1,153 @@
+name: Release
+
+# Runs only when started by hand from the Actions tab (or `gh workflow run release.yml`).
+# Pushes to main never release. The run tags a release commit and publishes a GitHub release
+# with the store ZIP. It never talks to the Chrome Web Store and holds no store credentials;
+# the ZIP is uploaded to the store by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to raise
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      dry_run:
+        description: Build and check everything, but create no tag and no release
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Dry runs push nothing, so they get their own queue and never cancel a waiting real release.
+concurrency:
+  group: release-${{ inputs.dry_run }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - name: Release only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Start the release from main, not $GITHUB_REF."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: next
+        name: Next version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          tags=$(git ls-remote --tags --refs origin) || { echo "::error::Could not list the remote tags."; exit 1; }
+          version=$(printf '%s\n' "$tags" | awk '{print $2}' | node scripts/next-version.mjs "$BUMP")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Next version: $version" >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      # No npm install runs in this job, and the write token reaches git only in the push step.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # The release commit sits on top of the tested main commit and is reachable only through
+      # its tag. main itself is never pushed to, so it can stay fully protected.
+      - name: Commit the version and tag it
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          npm version "$VERSION" -m 'Release v%s'
+
+      - name: Package
+        run: |
+          npm run package
+          cd dist && sha256sum "web-snap-pdf-$VERSION.zip" > "web-snap-pdf-$VERSION.zip.sha256"
+          { echo '```'; unzip -l "web-snap-pdf-$VERSION.zip"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-zip
+          path: dist/web-snap-pdf-*
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Record build provenance
+        if: ${{ !inputs.dry_run }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/web-snap-pdf-${{ needs.prepare.outputs.version }}.zip
+
+      - name: Push the tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push origin "refs/tags/v$VERSION"
+
+  github-release:
+    needs: [prepare, build]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+
+      - name: Check the ZIP against its checksum
+        run: cd dist && sha256sum -c "web-snap-pdf-$VERSION.zip.sha256"
+
+      # Draft first, then publish, so the release is complete before immutable releases lock it.
+      # A rerun finishes a draft and leaves a published release alone.
+      - name: Publish the GitHub release
+        run: |
+          if ! draft=$(gh release view "v$VERSION" --json isDraft --jq .isDraft 2> err.txt); then
+            grep -qi 'release not found' err.txt || { cat err.txt; exit 1; }
+            draft=missing
+          fi
+          if [ "$draft" = missing ]; then
+            gh release create "v$VERSION" dist/* --draft --verify-tag --generate-notes --title "v$VERSION"
+            draft=true
+          elif [ "$draft" = true ]; then
+            gh release upload "v$VERSION" dist/* --clobber
+          fi
+          if [ "$draft" = true ]; then
+            gh release edit "v$VERSION" --draft=false --latest
+          fi
+          echo "Released [v$VERSION]($GITHUB_SERVER_URL/$GH_REPO/releases/tag/v$VERSION)" >> "$GITHUB_STEP_SUMMARY"
