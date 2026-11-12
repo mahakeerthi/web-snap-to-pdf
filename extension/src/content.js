@@ -26,10 +26,12 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
-  // The lazy-load scroll stops after LAZY_SCROLL_BUDGET_MS (an endless feed has no bottom) and
-  // waits up to LAZY_SETTLE_MS for a placeholder in view (covers scroll handlers throttled to 250 ms).
+  // The lazy-load scroll stops after LAZY_SCROLL_BUDGET_MS (an endless feed has no bottom). It
+  // waits up to LAZY_SETTLE_MS for a loader to fill a placeholder in view (covers scroll handlers
+  // throttled to 250 ms), and stops waiting after LAZY_MAX_MISSES such waits in a row fill nothing.
   const LAZY_SCROLL_BUDGET_MS = 12000;
   const LAZY_SETTLE_MS = 300;
+  const LAZY_MAX_MISSES = 3;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -430,17 +432,24 @@
     });
     for (const img of document.images) if (isPlaceholder(img)) watcher.observe(img);
     let y = 0;
+    let misses = 0;
     while (y < document.documentElement.scrollHeight && performance.now() < deadline) {
       scrollToInstant(0, y);
       await frame();
-      const settleBy = Math.min(performance.now() + LAZY_SETTLE_MS, deadline);
-      while (performance.now() < settleBy && [...inView].some(isPlaceholder)) await frame();
-      // Wait for each placeholder once: a broken image, or one in a fixed header, would
-      // otherwise hold every step.
-      for (const img of inView) {
-        if (!isPlaceholder(img)) continue;
-        watcher.unobserve(img);
-        inView.delete(img);
+      const waiting = misses < LAZY_MAX_MISSES ? [...inView].filter(isPlaceholder) : [];
+      if (waiting.length) {
+        const settleBy = Math.min(performance.now() + LAZY_SETTLE_MS, deadline);
+        while (performance.now() < settleBy && waiting.every(isPlaceholder)) await frame();
+        if (waiting.every(isPlaceholder)) {
+          // Nothing filled them: never wait for these again (an image in a fixed bar stays in view).
+          misses++;
+          for (const img of waiting) {
+            watcher.unobserve(img);
+            inView.delete(img);
+          }
+        } else {
+          misses = 0;
+        }
       }
       y += step;
     }

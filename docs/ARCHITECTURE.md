@@ -56,9 +56,11 @@ in reverse order. Styles are applied with `!important`.
   animation frames.
 - Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
   empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps,
-  one animation frame each, longer (up to 300 ms) while a placeholder image (no source, or 1 × 1)
-  is in view; stop after 12 s and report `lazyIncomplete` if the bottom was not reached (the export
-  then carries a `status_lazyIncomplete` warning); then wait up to 6 s for incomplete images.
+  one animation frame each, longer (up to 300 ms, until one fills) while a placeholder image (no
+  source, or 1 × 1) is in view; a placeholder nothing filled is not waited for again, and after
+  three such waits in a row the scroll stops waiting; stop after 12 s and report `lazyIncomplete`
+  if the bottom was not reached (the export then carries a `status_lazyIncomplete` warning); then
+  wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if

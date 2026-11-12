@@ -594,6 +594,18 @@ await test('lazy images past 170,000 px reach the PDF', async () => {
   await page.close();
 });
 
+await test('images that never load do not hold up the lazy-load scroll', async () => {
+  const { page, tabId } = await openTab('lazy-stuck.html');
+  const r = await generateTimed(tabId);
+  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  check(
+    !r.warning,
+    `scroll reached the bottom within its budget (${Math.round(r.ms)} ms)`,
+    String(r.warning),
+  );
+  await page.close();
+});
+
 await test('endless feed: the lazy-load scroll stops at its time budget and the export warns', async () => {
   const { page, tabId } = await openTab('lazy-endless.html');
   const r = await generateTimed(tabId);

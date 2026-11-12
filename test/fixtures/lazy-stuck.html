@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stuck Placeholders Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .block { height: 1000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<script>
+  // 100 blocks of 1,000 px, each with an image that never gets a source and no loader to fill it.
+  let html = '';
+  for (let i = 0; i < 100; i++) html += `<div class="block"><p>STUCK-${i}-MARK</p><img width="40" height="40" alt=""></div>`;
+  document.body.innerHTML = html;
+</script>
+</body>
+</html>
