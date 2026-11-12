@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lazy Loader Matrix</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .block { box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+  .block img.lz, .block img.native, .block .bg { display: block; width: 300px; height: 120px; background-color: #ccc; }
+  .block img.lz.natural { width: 40px; height: 40px; }
+  .block .bg { background-size: 300px 120px; background-repeat: no-repeat; }
+  .block img.icon { display: block; width: 200px; background: #ccc; }
+  #root { padding: 16px 16px 16px 40px; }
+  .item { height: 1000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<script>
+  // Query parameters are documented in the row table of scripts/lazy-matrix.mjs.
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => Number(q.get(k) ?? d);
+  const LOADERS = (q.get('loader') || 'io').split(',');
+  const T = num('t', 100);
+  const THR = num('thr', 0);
+  const AHEAD = num('ahead', 0);
+  const TARGET = q.get('target') || 'img';
+  const PH = q.get('ph') || 'none';
+  const ATTR = q.get('attr') || 'data-echo';
+  const N = num('n', 60);
+  const GAP = num('gap', 1500);
+  const EVERY = num('every', 1);
+  const STUCK = num('stuck', 0);
+  const MIXED = num('mixed', 0);
+  const DEAD = num('dead', 0);
+  const DEADKIND = q.get('deadkind') || 'missing';
+  const ICONS = num('icons', 0);
+  const ICONKIND = q.get('iconkind') || 'upscaled';
+  const TOP = num('top', 0);
+  const ROOT = q.get('root');
+  const FEED = q.get('feed') === '1';
+  const FIXEDBAR = q.get('fixedbar') === '1';
+
+  const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M0 0h24v24H0z'/></svg>";
+  const PARA = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.';
+  const imageUrl = (i, w, h, label) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff'; ctx.font = (h / 5) + 'px sans-serif'; ctx.fillText(label + i, 4, h / 2);
+    return c.toDataURL('image/png');
+  };
+  const blobUrl = (i) => {
+    const bin = atob(imageUrl(i, 32, 20, 'q').split(',')[1]);
+    const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+  };
+  const placeholder = (i) => ({
+    none: '',
+    empty: ' src=""',
+    pixel: ` src="${PIXEL}"`,
+    blur: ` src="${imageUrl(i, 32, 20, 'q')}"`,
+    blob: ` src="${blobUrl(i)}"`,
+    small: ` src="tiny.png?i=${i}"`,
+    lazy: ` loading="lazy" src="tiny.png?i=${i}"`,
+    natural: ` src="${imageUrl(i, 40, 40, 'sp')}"`,
+    broken: ` src="missing-ph-${i}.png"`,
+  })[PH];
+  const deadImg = (kind, i, style = '') =>
+    kind === 'pixel'
+      ? `<img src="${PIXEL}" width="1" height="1"${style} alt="">`
+      : kind === 'svg'
+        ? `<img src="${SVG}" width="24" height="24"${style} alt="">`
+        : `<img src="missing-${i}.png" width="24" height="24"${style} alt="">`;
+  const icon = (i) => (ICONKIND === 'upscaled' ? `<img class="icon" src="${imageUrl(i, 64, 64, 'ic')}" alt="">` : deadImg(ICONKIND, 'icon-' + i));
+
+  const lazyEl = (i, loader) => {
+    const full = imageUrl(i, 300, 120, loader + ' ');
+    if (loader === 'native') return `<img class="native" loading="lazy" src="${full}" alt="">`;
+    const cls = `lz${PH === 'natural' ? ' natural' : ''}`;
+    if (TARGET === 'bg') return `<div class="bg lz" data-loader="${loader}" ${ATTR}="${full}"></div>`;
+    const img = `<img class="${cls}" data-loader="${loader}" ${TARGET === 'picture' ? '' : `${ATTR}="${full}"`}${placeholder(i)} alt="">`;
+    return TARGET === 'picture' ? `<picture><source type="image/png" ${ATTR}="${full}">${img}</picture>` : img;
+  };
+
+  let blocks = '';
+  for (let k = 0; k < STUCK; k++) blocks += `<div class="block" style="height:1000px"><p>STUCK-${k}-MARK</p><img class="lz" alt=""></div>`;
+  for (let i = 0; i < N; i++) {
+    const loader = LOADERS[i % LOADERS.length];
+    const hasLazy = EVERY === 1 || i % EVERY === Math.min(5, EVERY - 1);
+    blocks += `<div class="block" style="height:${GAP}px"><p>BLOCK-${i}-MARK${ROOT ? ' ' + PARA : ''}</p>` +
+      `${i < ICONS ? icon(i) : ''}${hasLazy && loader !== 'none' ? lazyEl(i, loader) : ''}</div>`;
+    blocks += `<div class="block" style="height:2000px"><img class="lz" alt=""></div>`.repeat(MIXED);
+  }
+  let html = TOP ? `<header style="height:${TOP}px"><nav>Home About Contact</nav></header>` : '';
+  if (ROOT) {
+    const tag = ROOT === 'article' ? 'article' : 'section';
+    html += `<${tag} id="root"><h1>ARTICLE-START-MARK A probe article</h1>` +
+      `<p>${PARA}</p>`.repeat(5) + blocks + `<p>ARTICLE-END-MARK</p></${tag}><footer style="height:3000px">FOOTER</footer>`;
+  } else {
+    html += blocks;
+  }
+  for (let k = 0; k < DEAD; k++) html += deadImg(DEADKIND, k, ` style="position:absolute;left:5px;top:${300 + 700 * k}px"`);
+  if (FEED) html += '<div id="feed"></div><div id="sentinel"></div>';
+  if (FIXEDBAR) html += '<div style="position:fixed;top:0;right:0"><img width="40" height="40" alt=""></div>';
+  document.body.innerHTML = html;
+
+  const els = [...document.querySelectorAll('.lz[data-loader]')];
+  window.__total = els.length;
+  window.__expected = els.length + document.querySelectorAll('img.native').length;
+  window.__filled = () => document.querySelectorAll('.lz[data-done]').length;
+  const fill = (el) => {
+    if (el.dataset.done) return;
+    el.dataset.done = '1';
+    if (TARGET === 'bg') el.style.backgroundImage = `url("${el.getAttribute(ATTR)}")`;
+    else if (TARGET === 'picture') el.previousElementSibling.srcset = el.previousElementSibling.getAttribute(ATTR);
+    else el.src = el.getAttribute(ATTR);
+  };
+  const byLoader = (name) => els.filter((el) => el.dataset.loader === name);
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > -AHEAD && r.top < innerHeight + AHEAD;
+  };
+  const scrollLoader = (name, onScroll) => {
+    const mine = byLoader(name);
+    if (!mine.length) return;
+    const fillVisible = () => mine.forEach((el) => { if (!el.dataset.done && visible(el)) fill(el); });
+    addEventListener('scroll', onScroll(fillVisible));
+    fillVisible();
+  };
+  if (byLoader('io').length) {
+    const io = new IntersectionObserver(
+      (es) => es.forEach((e) => { if (e.isIntersecting) { fill(e.target); io.unobserve(e.target); } }),
+      { threshold: THR, rootMargin: `${AHEAD}px 0px` },
+    );
+    byLoader('io').forEach((el) => io.observe(el));
+  }
+  scrollLoader('lodash', (f) => {
+    let last = 0, trailing = null;
+    return () => {
+      const wait = T - (Date.now() - last);
+      if (wait <= 0) { last = Date.now(); f(); }
+      else if (!trailing) trailing = setTimeout(() => { trailing = null; last = Date.now(); f(); }, wait);
+    };
+  });
+  scrollLoader('echo', (f) => {
+    let poll = null;
+    return () => { if (!poll) poll = setTimeout(() => { poll = null; f(); }, T); };
+  });
+  scrollLoader('debounce', (f) => {
+    let t = null;
+    return () => { clearTimeout(t); t = setTimeout(f, T); };
+  });
+  scrollLoader('raw', (f) => f);
+
+  if (FEED) {
+    const feed = document.getElementById('feed');
+    let n = 0;
+    const more = () => {
+      let h = '';
+      for (let i = 0; i < 10; i++) h += `<div class="item">FEED-${n++}-MARK</div>`;
+      feed.insertAdjacentHTML('beforeend', h);
+    };
+    more();
+    new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) more(); }).observe(document.getElementById('sentinel'));
+  }
+</script>
+</body>
+</html>
