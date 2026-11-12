@@ -1,8 +1,8 @@
 // Web Snap PDF - background service worker.
 // Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
 // viewer and the content script (plus context menus and keyboard shortcuts):
-//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download
-//   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot per part (preview, PNG, JPEG)
+//   generate()        debugger attach -> [lazy pass] -> ps:prepare -> Page.printToPDF -> download
+//   captureElement()  debugger attach -> [lazy pass] -> ps:prepare -> Page.captureScreenshot per part (preview, PNG, JPEG)
 //   exportMarkdown()  ps:to-markdown in the content script (no debugger)
 // Every page change made by ps:prepare is undone with ps:restore, whatever the outcome.
 import { loadSettings, saveSettings, normalizeSettings } from './lib/settings.js';
@@ -26,6 +26,9 @@ const PREVIEW_FORMATS = ['pdf', 'png', 'jpeg', 'markdown'];
 // Tall elements are captured (and shown / saved) as parts of at most this many CSS pixels each, so
 // every image stays readable and far below the capture limit.
 const SEGMENT_PX = 1600;
+const LAZY_RESIZE_SETTLE_MS = 250; // see runLazyPass
+const LAZY_INCOMPLETE_WARNING =
+  'The page kept growing while it was scrolled, so content near its end may be missing.';
 
 const activeJobs = new Set(); // tabIds currently generating
 const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt } (viewer fallback)
@@ -111,11 +114,16 @@ async function generate({ tabId, settings, prep = 'none', output }) {
     progress(tabId, 'prepare', 'Preparing page…');
     const tab = await readyTab(tabId);
     const prepMsg = { prep, loadLazy: settings.loadLazy, ...scanOptions(settings) };
-    const { data, title, warning } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
-      withDebugger(tabId, async (target) => ({
-        ...(await printPage(target, tabId, settings)),
-        title: pageTitle(prepResult, tab),
-      })),
+    const { data, title, warning } = await withDebugger(tabId, (target) =>
+      withPreparedPage(target, prepMsg, async (prepResult) => {
+        const printed = await printPage(target, tabId, settings);
+        const lazyWarning = prepResult.lazyComplete ? null : LAZY_INCOMPLETE_WARNING;
+        return {
+          data: printed.data,
+          warning: [lazyWarning, printed.warning].filter(Boolean).join(' ') || null,
+          title: pageTitle(prepResult, tab),
+        };
+      }),
     );
     const filename = buildFilename(settings.filenameTemplate, { title, domain: hostnameOf(tab.url) });
     if (output === 'return') return { ok: true, base64: data, filename, warning };
@@ -231,7 +239,7 @@ async function captureElement(
     return await withDebugger(tabId, async (target) => {
       await waitForStableViewport(target);
       const prepMsg = { prep: 'element', loadLazy: false, ...scanOptions(settings) };
-      return withPreparedPage(tabId, prepMsg, async (prepResult) => {
+      return withPreparedPage(target, prepMsg, async (prepResult) => {
         const rect = requireOk(
           await sendContent(tabId, { type: 'ps:picked-rect' }),
           'The selected element is gone. Select it again.',
@@ -633,18 +641,54 @@ function scanOptions(settings) {
 }
 
 /**
- * Prepares the page (ps:prepare: lazy content, isolation, fixed bars, scroll panes), runs
- * `fn(prepResult)` and always restores the page afterwards (ps:restore).
+ * Loads lazy content when `loadLazy` (runLazyPass), prepares the page (ps:prepare: isolation,
+ * fixed bars, scroll panes) at the real viewport, runs `fn(prepResult)` and always restores the
+ * page afterwards (ps:restore). `prepResult.lazyComplete` is false when the lazy pass hit a cap.
+ * Needs the debugger attached (`target`).
  */
-async function withPreparedPage(tabId, prepMsg, fn) {
+async function withPreparedPage(target, { loadLazy, ...prepMsg }, fn) {
+  const { tabId } = target;
   try {
+    const lazyComplete = loadLazy ? await runLazyPass(target, prepMsg.prep) : true;
     const prepResult = requireOk(
       await sendContent(tabId, { type: 'ps:prepare', ...prepMsg }),
       'Could not prepare the page.',
     );
-    return await fn(prepResult);
+    return await fn({ ...prepResult, lazyComplete });
   } finally {
     await sendContent(tabId, { type: 'ps:restore' }).catch(() => {});
+  }
+}
+
+/**
+ * The lazy-loading pass: ps:lazy-start, then ps:lazy-scroll under the viewport height the content
+ * script asks for (at the window's own width: width 0 keeps it). Returns false when the pass hit
+ * a cap. After a viewport change the page gets LAZY_RESIZE_SETTLE_MS before the first scroll, so
+ * resize handlers that re-read the viewport behind a debounce see the new height first.
+ */
+async function runLazyPass(target, prep) {
+  const { tabId } = target;
+  const start = requireOk(
+    await sendContent(tabId, { type: 'ps:lazy-start', prep }),
+    'Could not prepare the page.',
+  );
+  if (start.reused) return start.complete;
+  const scroll = async () =>
+    requireOk(await sendContent(tabId, { type: 'ps:lazy-scroll', prep }), 'Could not prepare the page.');
+  if (!start.viewport) return (await scroll()).complete;
+  // The emulation belongs to this debugger session: Chrome drops it on detach even if the clear
+  // below never runs.
+  await cdp(target, 'Emulation.setDeviceMetricsOverride', {
+    width: 0,
+    height: start.viewport,
+    deviceScaleFactor: 0,
+    mobile: false,
+  });
+  try {
+    await sleep(LAZY_RESIZE_SETTLE_MS);
+    return (await scroll()).complete;
+  } finally {
+    await cdp(target, 'Emulation.clearDeviceMetricsOverride').catch(() => {});
   }
 }
 

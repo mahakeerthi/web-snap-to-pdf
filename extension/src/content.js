@@ -26,6 +26,15 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
+  // The lazy pass gives the page the same 50 ms at every scroll position, whatever the page holds:
+  // nothing observable tells "a loader will fill this if given time" from "nothing will", so the
+  // speed comes from fewer positions instead. The worker emulates the viewport height lazyStart
+  // asks for, up to LAZY_VIEWPORT_PX, and each step moves half a viewport (see loadLazyContent).
+  const LAZY_DWELL_MS = 50;
+  const LAZY_STEP_SHARE = 0.5;
+  const LAZY_VIEWPORT_PX = 6000;
+  const LAZY_MAX_PX = 250000; // endless feeds stop here (main's 250-step cap reached ~170,000 px)
+  const LAZY_MAX_MS = 15000; // safety net for pages that are slow to scroll
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -33,6 +42,9 @@
     picked: null, // element chosen with the "print element" picker
     picker: null, // active picker instance
     preview: null, // open element preview overlay
+    // The last full lazy pass: { prep, root, preview, complete }. An export started from the
+    // overlay that ran it reuses it instead of scrolling the page again.
+    lazyPass: null,
     ignoreNextPreview: false, // the overlay was closed while its preview was still being captured
     strings: {}, // UI strings from the background (English fallbacks merged with translations)
     theme: 'system', // light | dark | system
@@ -63,6 +75,10 @@
           pickerActive: !!state.picker,
           previewOpen: !!state.preview,
         };
+      case 'ps:lazy-start':
+        return lazyStart(msg);
+      case 'ps:lazy-scroll':
+        return lazyScroll(msg);
       case 'ps:prepare':
         return prepare(msg);
       case 'ps:restore':
@@ -90,6 +106,7 @@
         restore();
         resetRemovals();
         state.picked = null;
+        state.lazyPass = null;
         return { ok: true };
       default:
         return { ok: false, error: 'Unknown message ' + msg.type };
@@ -100,7 +117,38 @@
   // Preparation & restoration
   // ---------------------------------------------------------------------------
 
-  async function prepare({ prep, hideFixed, loadLazy, expandScroll }) {
+  // The lazy pass is two messages, so the worker can size the viewport between them.
+  // ps:lazy-start begins the export's page work as prepare() does (picker closed, leftovers
+  // restored) and snapshots the scroll position while the viewport is still the real one (a taller
+  // one clamps scrollY). It reuses the pass the open overlay already ran for the same target.
+  // ps:lazy-scroll then scrolls, under whatever viewport the worker set. Neither changes a
+  // `display`. The prepare() that follows restores this pass's scroll and loading="eager" flips
+  // first, after the worker has put the real viewport back.
+  function lazyStart({ prep }) {
+    stopPicker();
+    restore();
+    const { root, error } = prepRoot(prep);
+    if (error) return { ok: false, error };
+    const last = state.lazyPass;
+    if (last && state.preview && last.preview === state.preview && last.prep === prep && last.root === root)
+      return { ok: true, reused: true, complete: last.complete };
+    rememberScroll();
+    rescueLazyAttributes();
+    // At most half the page, so the page can still scroll under it and every position fires a
+    // scroll event (a page no taller than its viewport cannot fire one).
+    const viewport = Math.min(LAZY_VIEWPORT_PX, Math.floor(lazyEnd(root) / 2));
+    return { ok: true, reused: false, viewport: viewport > innerHeight ? viewport : null };
+  }
+
+  async function lazyScroll({ prep }) {
+    const { root, error } = prepRoot(prep);
+    if (error) return { ok: false, error };
+    const complete = await loadLazyContent(root);
+    state.lazyPass = { prep, root, preview: state.preview, complete };
+    return { ok: true, complete };
+  }
+
+  async function prepare({ prep, hideFixed, expandScroll }) {
     stopPicker();
     restore();
 
@@ -114,7 +162,6 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    if (loadLazy) await loadLazyContent();
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -394,7 +441,7 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  async function loadLazyContent() {
+  function rescueLazyAttributes() {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
     // reverting them would only make the images disappear again.
@@ -409,24 +456,46 @@
     for (const img of document.querySelectorAll('img[data-srcset]')) {
       if (!img.getAttribute('srcset')) img.srcset = img.dataset.srcset;
     }
+  }
 
+  // Where the lazy pass stops: the page bottom, or one viewport past the root's bottom, since
+  // nothing further down can reach an article or element export.
+  function lazyEnd(root) {
+    const page = document.documentElement.scrollHeight;
+    return root ? Math.min(page, root.getBoundingClientRect().bottom + window.scrollY + innerHeight) : page;
+  }
+
+  // Returns false when a cap stopped the scroll before the end (endless feeds).
+  async function loadLazyContent(root) {
     const startY = window.scrollY;
-    const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
-    let y = 0;
-    let iterations = 0;
-    while (y < document.documentElement.scrollHeight && iterations < 250) {
-      scrollToInstant(0, y);
-      await sleep(50);
-      y += step;
-      iterations++;
+    const started = performance.now();
+    let complete = true;
+    // What a scroll-driven loader needs is a scroll event while the element is in view, then time.
+    // Every position here fires one: the first moves 1 px off the top when the page starts there.
+    // A step of half the viewport puts each element in view at two events, one at the page's top
+    // and bottom edges. innerHeight is read at every step, so a viewport that shrinks under the
+    // pass shortens the steps instead of skipping content. A position at the bottom that finds the
+    // page taller than before keeps the pass going, so growing pages are followed to the caps.
+    let y = startY === 0 ? 1 : 0;
+    for (;;) {
+      const bottom = Math.max(0, lazyEnd(root) - innerHeight);
+      const at = Math.min(y, bottom);
+      if (at >= LAZY_MAX_PX || performance.now() - started > LAZY_MAX_MS) {
+        complete = false;
+        break;
+      }
+      scrollToInstant(0, at);
+      await sleep(LAZY_DWELL_MS);
+      if (at === bottom && lazyEnd(root) - innerHeight <= bottom) break;
+      y = at + Math.max(200, Math.floor(innerHeight * LAZY_STEP_SHARE));
     }
-    scrollToInstant(0, document.documentElement.scrollHeight);
     await sleep(150);
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
     await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
     await sleep(100);
+    return complete;
   }
 
   function imageSettled(img) {

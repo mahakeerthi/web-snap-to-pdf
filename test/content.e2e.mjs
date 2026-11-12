@@ -70,7 +70,7 @@ async function readSentMessages(tabId) {
     return r && r.result;
   }, tabId);
 }
-const PREP_ALL = { type: 'ps:prepare', prep: 'none', hideFixed: true, loadLazy: false, expandScroll: true };
+const PREP_ALL = { type: 'ps:prepare', prep: 'none', hideFixed: true, expandScroll: true };
 
 // Snapshot of everything prepare/restore may touch: inline declarations (normalised, not the raw
 // attribute string), style-attribute presence, loading attributes, marker attributes, scroll offsets.
@@ -409,7 +409,20 @@ await test('restore: fixed/sticky, scroll panes, lazy images, inline !important,
   });
   const before = await snapshot(page);
   check(before.y === 900, `fixture scrolled to 900 (${before.y})`);
-  const res = await send(tabId, { ...PREP_ALL, loadLazy: true });
+  const start = await send(tabId, { type: 'ps:lazy-start', prep: 'none' });
+  check(start.ok && start.reused === false, 'lazy pass starts', JSON.stringify(start));
+  const scrolled = await send(tabId, { type: 'ps:lazy-scroll', prep: 'none' });
+  check(scrolled.ok && scrolled.complete, 'lazy pass reaches the end of the page', JSON.stringify(scrolled));
+  const lazy = await page.evaluate(() => ({
+    loading: [...document.querySelectorAll('img')].map((i) => i.getAttribute('loading')),
+    lazy2: document.getElementById('lazy2').getAttribute('src'),
+  }));
+  check(
+    lazy.loading.every((l) => l === 'eager'),
+    `lazy images switched to eager during the lazy pass (${lazy.loading})`,
+  );
+  check(!!lazy.lazy2, 'data-src image got a src');
+  const res = await send(tabId, PREP_ALL);
   check(res.ok, 'prepare ok', JSON.stringify(res));
   const during = await page.evaluate(() => ({
     fixed: getComputedStyle(document.getElementById('fixedbar')).display,
@@ -417,17 +430,10 @@ await test('restore: fixed/sticky, scroll panes, lazy images, inline !important,
     innerOverflow: getComputedStyle(document.getElementById('inner')).overflowY,
     innerClipped:
       document.getElementById('inner').scrollHeight > document.getElementById('inner').clientHeight + 4,
-    loading: [...document.querySelectorAll('img')].map((i) => i.getAttribute('loading')),
-    lazy2: document.getElementById('lazy2').getAttribute('src'),
   }));
   check(during.fixed === 'none', 'small fixed bar hidden during prepare');
   check(during.sticky === 'static', 'sticky element made static');
   check(during.innerOverflow === 'visible' && !during.innerClipped, 'inner scroll pane expanded');
-  check(
-    during.loading.every((l) => l === 'eager'),
-    `lazy images switched to eager (${during.loading})`,
-  );
-  check(!!during.lazy2, 'data-src image got a src');
 
   await send(tabId, { type: 'ps:restore' });
   const y = await page.evaluate(() => window.scrollY);
