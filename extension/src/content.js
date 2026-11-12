@@ -407,7 +407,8 @@
   const LAZY_SETTLE_MS = 250; // longest wait past the floor
   const LAZY_GRACE_MS = 34; // after the first fill in a settle, the rest of the position may follow
   const LAZY_SEED_MS = 500; // starting settle credit per shape
-  const LAZY_MAX_STEPS = 250; // main's step cap
+  const LAZY_MAX_STEPS = 400; // main stops at 250 steps
+  const LAZY_BUDGET_MS = 12500; // main's worst case for the scroll, 250 steps of 50 ms
   const LAZY_PIN_PX = 8; // a candidate that moved less than this since its last dwell is pinned
   const LAZY_TRIES = 2; // dwells a named candidate gets across passes
   const LAZY_MEDIA = new Set(['IMG', 'SOURCE', 'IFRAME', 'VIDEO']);
@@ -651,6 +652,7 @@
     const credit = new Map(watched.map((s) => [s.id, LAZY_SEED_MS]));
     const visited = new Set();
     const startY = window.scrollY;
+    const deadline = performance.now() + LAZY_BUDGET_MS;
     const vh = window.innerHeight;
     const step = Math.max(200, Math.floor(vh * 0.85));
     // An article or element export is done one viewport past the root's bottom, even when an
@@ -731,7 +733,7 @@
 
     let y = 0;
     let steps = 0;
-    while (y < end() && steps < LAZY_MAX_STEPS && !signal?.aborted) {
+    while (y < end() && steps < LAZY_MAX_STEPS && performance.now() < deadline && !signal?.aborted) {
       if (record && y + vh <= record.covered && !owedOf(candidatesAt(y)).length) {
         y += step;
         steps++;
