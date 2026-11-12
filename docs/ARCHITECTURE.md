@@ -54,9 +54,21 @@ in reverse order. Styles are applied with `!important`.
   → hide the preview overlay host if open → load lazy content → isolate root → neutralise
   fixed/sticky → expand scroll containers → unlock `<html>`/`<body>` → scroll to top → wait two
   animation frames.
-- Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
-  empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps
-  (max 250 steps, 50 ms each), then wait up to 6 s for incomplete images.
+- Lazy content (`loadLazyContent`, one table `LAZY_SHAPES` in `content.js`). The rows with a
+  `prepass` do what `main` always did: `loading="lazy"` → `eager`; copy `data-src` /
+  `data-lazy-src` / `data-original` into empty or `data:` `src`, `data-srcset` into empty `srcset`.
+  Then scroll the page in 85 %-viewport steps (at most 400 steps and 12.5 s, or one viewport past
+  the root's bottom). At every step the pass asks the page again which in-view elements still wait
+  for a loader (a candidate: an `<img>` or `<source>` with an unapplied `data-*` URL, any other
+  element with one, a lazy class, an `<img>` with no source, or a 1 × 1 or upscaled stand-in). A
+  step with no candidate owed takes one animation frame. An owed candidate gets 50 ms from the
+  scroll call (`main`'s dwell), ending early when all have filled. A wait past that (up to 250 ms)
+  is paid from a per-row credit that starts at 500 ms and is spent only by waits that fill nothing.
+  A candidate that has not moved since its last dwell (a fixed bar) is not owed again. A finished
+  pass leaves `state.lazy`, and the next pass on the same page skips the positions it covered where
+  nothing is owed. `lazyIncomplete` is true when the pass stopped before the end, or when a candidate
+  the page names as lazy (`warn` rows) stayed pending after the pass dwelled on it. The export then
+  carries a `status_lazyIncomplete` warning. Last, wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if
@@ -286,7 +298,7 @@ handler directly inside the worker, without messaging.
 | `ps:progress`     | broadcast (`runtime.sendMessage`; the popup listens) | `tabId`, `stage: 'prepare' \| 'measure' \| 'render' \| 'save' \| 'done'`, `message`                          | none                                                                                                              |
 | `ps:ping`         | content (`tabs.sendMessage`)                         | none                                                                                                         | `{ ok: true }`                                                                                                    |
 | `ps:state`        | content                                              | none                                                                                                         | `{ ok, removed, hasPicked, pickerActive, previewOpen }`                                                           |
-| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title }` or `{ ok: false, error }` (no article found / nothing picked)                               |
+| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title, lazyIncomplete }` or `{ ok: false, error }` (no article found / nothing picked)               |
 | `ps:restore`      | content                                              | none                                                                                                         | `{ ok: true }`                                                                                                    |
 | `ps:measure`      | content                                              | none                                                                                                         | `{ ok, height, width }` (CSS px)                                                                                  |
 | `ps:start-picker` | content                                              | `mode` (anything other than `'remove'` means `'print'`), `strings`, `theme`                                  | `{ ok: true }` (also closes an open preview)                                                                      |

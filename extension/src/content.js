@@ -504,7 +504,8 @@
     },
   ];
 
-  // Dwells already served, per element: where it sat in the viewport, how often, in which pass.
+  // Dwells already served, per element: where it sat in the viewport each time (an element in view at
+  // two steps has two), how many dwells, in which pass.
   // Survives passes, so a candidate that is pinned (a fixed bar) or already served is not owed again.
   const lazyLedger = new WeakMap();
   const lazyBaseline = new WeakMap();
@@ -684,7 +685,7 @@
     const owedOf = (cands) =>
       cands.filter((c) => {
         const d = lazyLedger.get(c.el);
-        if (!d || Math.abs(c.top - d.top) > LAZY_PIN_PX) return true;
+        if (!d || !d.tops.some((t) => Math.abs(c.top - t) <= LAZY_PIN_PX)) return true;
         return c.shape.warn && d.tries < LAZY_TRIES && d.pass !== passId;
       });
 
@@ -727,7 +728,11 @@
       for (const c of here) {
         visited.add(c);
         const d = lazyLedger.get(c.el);
-        lazyLedger.set(c.el, { top: c.top, tries: (d ? d.tries : 0) + 1, pass: passId });
+        lazyLedger.set(c.el, {
+          tops: d ? [...d.tops.slice(-7), c.top] : [c.top],
+          tries: (d ? d.tries : 0) + 1,
+          pass: passId,
+        });
       }
     };
 
