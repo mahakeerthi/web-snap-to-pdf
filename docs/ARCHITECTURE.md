@@ -63,12 +63,13 @@ in reverse order. Styles are applied with `!important`.
   element with one, a lazy class, an `<img>` with no source, or a 1 × 1 or upscaled stand-in). A
   step with no candidate owed takes one animation frame. An owed candidate gets 50 ms from the
   scroll call (`main`'s dwell), ending early when all have filled. A wait past that (up to 250 ms)
-  is paid from a per-row credit that starts at 500 ms and is spent only by waits that fill nothing.
-  A candidate that has not moved since its last dwell (a fixed bar) is not owed again. A finished
-  pass leaves `state.lazy`, and the next pass on the same page skips the positions it covered where
-  nothing is owed. `lazyIncomplete` is true when the pass stopped before the end, or when a candidate
-  the page names as lazy (`warn` rows) stayed pending after the pass dwelled on it. The export then
-  carries a `status_lazyIncomplete` warning. Last, wait up to 6 s for incomplete images.
+  is paid from a per-row credit that starts at 500 ms, regains 5 % of the scroll time, and is spent
+  only by waits that fill nothing. A candidate that is within 8 px of a viewport top it was already
+  served at (a fixed bar) is not owed again. A finished pass leaves `state.lazy`, and the next pass
+  on the same page skips the positions it covered where nothing is owed. `lazyIncomplete` is true
+  when the pass stopped before the end, or when an element that some pass dwelled on, of a row the
+  page names as lazy (`warn` rows), is still pending. The export then carries a
+  `status_lazyIncomplete` warning. Last, wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if
