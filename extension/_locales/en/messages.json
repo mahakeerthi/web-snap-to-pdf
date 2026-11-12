@@ -383,6 +383,10 @@
     "message": "Could not start the picker.",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "Ran out of time loading the page, so some images or content may be missing.",
+    "description": "Added after the saved status when the scroll that loads lazy content ran out of time: before the end of the page, or before the images it waits for had loaded"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"

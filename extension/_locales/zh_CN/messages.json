@@ -383,6 +383,10 @@
     "message": "无法启动元素选择器。",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "加载页面超时，部分图片或内容可能缺失。",
+    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"

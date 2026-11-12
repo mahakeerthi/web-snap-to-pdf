@@ -33,6 +33,7 @@
     picked: null, // element chosen with the "print element" picker
     picker: null, // active picker instance
     preview: null, // open element preview overlay
+    lazy: null, // LazyRecord of the last finished lazy pass (see loadLazyContent)
     ignoreNextPreview: false, // the overlay was closed while its preview was still being captured
     strings: {}, // UI strings from the background (English fallbacks merged with translations)
     theme: 'system', // light | dark | system
@@ -114,7 +115,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    if (loadLazy) await loadLazyContent();
+    const lazyComplete = loadLazy ? await loadLazyContent(root) : true;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -122,7 +123,7 @@
     scrollToInstant(0, 0);
     await nextFrame();
     await nextFrame();
-    return { ok: true, title: document.title };
+    return { ok: true, title: document.title, lazyIncomplete: !lazyComplete };
   }
 
   // The element a prep mode works on: the detected article, the picked element, or null for the
@@ -393,40 +394,374 @@
   // ---------------------------------------------------------------------------
   // Lazy content
   // ---------------------------------------------------------------------------
+  //
+  // One pass over the page, driven by one table (LAZY_SHAPES). At every scroll position the pass
+  // recomputes which in-view elements still wait for a loader (a candidate). Each candidate is
+  // owed what `main` gave every position, LAZY_FLOOR_MS, and no state can lower that. A wait past
+  // the floor (the settle) is funded per shape: from a seed, and from settles that ended in a
+  // fill. A shape that never fills runs out of credit and cannot starve one that does. A position
+  // with nothing owed takes one frame. Elements no row recognizes get that one frame too, which
+  // is the pass's known blind spot (docs/LAZY-LOADING.md).
 
-  async function loadLazyContent() {
-    // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
-    // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
-    // reverting them would only make the images disappear again.
-    for (const el of document.querySelectorAll('img[loading="lazy"], iframe[loading="lazy"]')) {
-      setAttr(el, 'loading', 'eager');
+  const LAZY_FLOOR_MS = 50; // main's dwell per step
+  const LAZY_SETTLE_MS = 250; // longest wait past the floor
+  const LAZY_GRACE_MS = 34; // after the first fill in a settle, the rest of the position may follow
+  const LAZY_SEED_MS = 500; // starting settle credit per shape
+  const LAZY_MAX_STEPS = 250; // main's step cap
+  const LAZY_PIN_PX = 8; // a candidate that moved less than this since its last dwell is pinned
+  const LAZY_TRIES = 2; // dwells a named candidate gets across passes
+  const LAZY_MEDIA = new Set(['IMG', 'SOURCE', 'IFRAME', 'VIDEO']);
+  const LAZY_SKIP =
+    /^(?:SCRIPT|STYLE|LINK|META|A|BUTTON|INPUT|FORM|LABEL|NOSCRIPT|TEMPLATE|HEAD|TITLE|BASE)$/;
+  const LAZY_URL =
+    /^(?:https?:)?\/\/|^\/\S|^\.{1,2}\/|^data:image\/|^blob:|\.(?:png|jpe?g|gif|webp|avif|svg|bmp)(?:[?#\s]|$)|\S\s+\d+(?:\.\d+)?[wx](?:\s*,|$)/i;
+  const LAZY_SRCSET = /\S\s+\d+(?:\.\d+)?[wx](?:\s*,|$)/;
+  // Attribute names that say "a loader will put this in". Only these can raise the warning. Any
+  // other data-* URL still earns a dwell, because a missed dwell loses images and a wrong warning
+  // only costs trust.
+  const LAZY_NAMED = /lazy|echo|src|original|defer|(?:^|-)bg(?:-|$)|background/i;
+  const LAZY_CLASSES = ['lazy', 'lazyload', 'lazyloading', 'lozad', 'b-lazy', 'js-lazy', 'lazy-load'];
+  const LAZY_CLASS_DONE = new Set(['lazyloaded', 'loaded', 'is-loaded', 'lazy-loaded', 'b-loaded']);
+
+  /**
+   * @typedef {object} LazyShape One row of the table.
+   * @property {string} id
+   * @property {string | ((names: string[]) => string)} select CSS selector for the elements the row may claim.
+   * @property {(el: Element) => void} [prepass] Runs once per pass, before the scroll (the rescues of main).
+   * @property {(el: Element) => boolean} [pending] True while a loader still has to act on `el`.
+   * @property {(el: Element) => string} [sig] State a loader writes; a change means it acted.
+   * @property {boolean} [warn] A candidate of this row still pending at the end raises the warning.
+   */
+
+  /** The first row whose `pending` is true claims an element, so named rows come first. */
+  /** @type {readonly LazyShape[]} */
+  const LAZY_SHAPES = [
+    {
+      id: 'native-lazy',
+      select: 'img[loading="lazy"], iframe[loading="lazy"]',
+      prepass: (el) => setAttr(el, 'loading', 'eager'),
+    },
+    {
+      id: 'src-attr',
+      select: 'img[data-src], img[data-lazy-src], img[data-original]',
+      prepass: (img) => {
+        const src = img.dataset.src || img.dataset.lazySrc || img.dataset.original;
+        const cur = img.getAttribute('src') || '';
+        if (src && (!cur || cur.startsWith('data:'))) img.src = src;
+      },
+    },
+    {
+      id: 'srcset-attr',
+      select: 'img[data-srcset]',
+      prepass: (img) => {
+        if (!img.getAttribute('srcset')) img.srcset = img.dataset.srcset;
+      },
+    },
+    {
+      id: 'lazy-attr',
+      select: (names) => names.map((n) => `[${CSS.escape(n)}]`).join(','),
+      pending: (el) => lazyUnapplied(el, true),
+      sig: lazySig,
+      warn: true,
+    },
+    {
+      id: 'url-attr',
+      select: (names) => names.map((n) => `[${CSS.escape(n)}]`).join(','),
+      pending: (el) => lazyUnapplied(el, false),
+      sig: lazySig,
+    },
+    {
+      id: 'lazy-class',
+      select: LAZY_CLASSES.map((c) => '.' + c).join(','),
+      pending: (el) => {
+        let lazy = false;
+        for (const c of el.classList) {
+          if (LAZY_CLASS_DONE.has(c)) return false;
+          if (LAZY_CLASSES.includes(c)) lazy = true;
+        }
+        if (!lazy || el.dataset.llStatus === 'loaded' || el.dataset.loaded) return false;
+        return el.tagName === 'IMG'
+          ? !(el.complete && el.naturalWidth > 1)
+          : getComputedStyle(el).backgroundImage === 'none';
+      },
+    },
+    {
+      id: 'img-srcless',
+      select: 'img',
+      pending: (el) =>
+        el.tagName === 'IMG' && !el.getAttribute('src') && !el.getAttribute('srcset') && !el.currentSrc,
+    },
+    {
+      id: 'img-stand-in',
+      select: 'img',
+      pending: (el) =>
+        el.tagName === 'IMG' &&
+        el.complete &&
+        el.naturalWidth > 0 &&
+        !/^data:image\/svg|\.svg(?:[?#]|$)/i.test(el.currentSrc) &&
+        (el.naturalWidth <= 1 || el.clientWidth > el.naturalWidth * 2),
+    },
+  ];
+
+  // Dwells already served, per element: where it sat in the viewport, how often, in which pass.
+  // Survives passes, so a candidate that is pinned (a fixed bar) or already served is not owed again.
+  const lazyLedger = new WeakMap();
+  const lazyBaseline = new WeakMap();
+  let lazyPassCount = 0;
+
+  /** data-* attributes of `el` whose value looks like a URL, when `el` could show an image. */
+  function lazyAttrs(el) {
+    const out = [];
+    if (!el.hasAttributes() || LAZY_SKIP.test(el.tagName)) return out;
+    const media = LAZY_MEDIA.has(el.tagName);
+    for (const a of el.attributes) {
+      if (!a.name.startsWith('data-') || a.value.length < 4 || !LAZY_URL.test(a.value)) continue;
+      if (media || LAZY_NAMED.test(a.name) || /image|img|photo|pic|thumb|poster/i.test(a.name)) out.push(a);
     }
-    for (const img of document.querySelectorAll('img[data-src], img[data-lazy-src], img[data-original]')) {
-      const src = img.dataset.src || img.dataset.lazySrc || img.dataset.original;
-      const cur = img.getAttribute('src') || '';
-      if (src && (!cur || cur.startsWith('data:'))) img.src = src;
+    return out;
+  }
+
+  function lazyUnapplied(el, named) {
+    for (const a of lazyAttrs(el)) {
+      if (LAZY_NAMED.test(a.name) === named && !lazyApplied(el, a.value)) return true;
     }
-    for (const img of document.querySelectorAll('img[data-srcset]')) {
-      if (!img.getAttribute('srcset')) img.srcset = img.dataset.srcset;
+    return false;
+  }
+
+  function lazyResource(url) {
+    try {
+      const u = new URL(url, document.baseURI);
+      return u.protocol === 'data:' || u.protocol === 'blob:' ? u.href : u.origin + u.pathname;
+    } catch {
+      return url;
+    }
+  }
+
+  function lazyApplied(el, value) {
+    if (LAZY_MEDIA.has(el.tagName)) {
+      for (const k of ['src', 'srcset', 'poster']) {
+        const v = el.getAttribute(k);
+        if (!v) continue;
+        if (k === 'srcset' && LAZY_SRCSET.test(value)) return true;
+        if (v === value || lazyResource(v) === lazyResource(value)) return true;
+      }
+      return false;
+    }
+    const bg = el.style.backgroundImage || getComputedStyle(el).backgroundImage;
+    return bg !== 'none' && bg !== '' && (bg.includes(value) || bg.includes(lazyResource(value)));
+  }
+
+  function lazySig(el) {
+    if (LAZY_MEDIA.has(el.tagName)) {
+      return `${el.getAttribute('src')}|${el.getAttribute('srcset')}|${el.getAttribute('poster')}`;
+    }
+    return getComputedStyle(el).backgroundImage;
+  }
+
+  /** The element whose box says where a candidate is: a <source> has none, its <img> does. */
+  function lazyBox(el) {
+    if (el.tagName !== 'SOURCE') return el;
+    return el.parentElement ? el.parentElement.querySelector('img') || el.parentElement : el;
+  }
+
+  /** data-* attribute names that carry a URL somewhere on this page (the table's vocabulary). */
+  function lazyVocabulary() {
+    const names = new Set();
+    let n = 0;
+    for (const el of document.querySelectorAll('*')) {
+      if (++n > MAX_SCAN) break;
+      for (const a of lazyAttrs(el)) names.add(a.name);
+    }
+    return [...names];
+  }
+
+  /**
+   * @typedef {object} LazyCandidate
+   * @property {Element} el
+   * @property {LazyShape} shape
+   * @property {number} top Viewport top at the position being asked about.
+   * @property {string | null} base `shape.sig(el)` when the page was first seen pending.
+   */
+
+  /** @param {LazyCandidate} c */
+  function lazyPending(c) {
+    return c.el.isConnected && c.shape.pending(c.el) && (!c.shape.sig || c.shape.sig(c.el) === c.base);
+  }
+
+  /**
+   * What a finished pass leaves for the next one on the same page. A pass resumes from it: positions
+   * it covered and where nothing is owed take no frame. Dropped when the page shrank or moved.
+   * @typedef {{ href: string, covered: number, height: number, count: number }} LazyRecord
+   */
+  function lazyElementCount() {
+    return document.body ? document.body.getElementsByTagName('*').length : 0;
+  }
+
+  function lazyRecordValid(rec) {
+    return (
+      !!rec &&
+      rec.href === location.href &&
+      document.documentElement.scrollHeight >= rec.height &&
+      lazyElementCount() >= rec.count * 0.99
+    );
+  }
+
+  // Resolves at the next frame, or after 100 ms in a tab that draws none, or when `signal` aborts.
+  function frame(signal) {
+    return nap(100, signal, requestAnimationFrame);
+  }
+
+  function nap(ms, signal, on) {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal?.addEventListener('abort', done, { once: true });
+      if (on) on(done);
+    });
+  }
+
+  /**
+   * Scrolls the page through once so lazy content loads. Resolves false when the export may miss
+   * content: the pass stopped before the end of the page (or of the root), or a loader the page
+   * names (`warn` rows) never filled something the pass dwelled on. Aborting resolves false at the
+   * next frame without the tail, and the caller's restore puts the scroll position back.
+   * @param {Element | null} root The element being exported; the pass ends one viewport past it.
+   * @param {AbortSignal} [signal]
+   * @returns {Promise<boolean>}
+   */
+  async function loadLazyContent(root, signal) {
+    for (const shape of LAZY_SHAPES) {
+      if (!shape.prepass) continue;
+      for (const el of document.querySelectorAll(shape.select)) shape.prepass(el);
     }
 
+    const names = lazyVocabulary();
+    const watched = LAZY_SHAPES.filter((s) => s.pending);
+    const selector = [
+      ...new Set(watched.map((s) => (typeof s.select === 'function' ? s.select(names) : s.select))),
+    ]
+      .filter(Boolean)
+      .join(',');
+    const passId = ++lazyPassCount;
+    const record = lazyRecordValid(state.lazy) ? state.lazy : null;
+    const credit = new Map(watched.map((s) => [s.id, LAZY_SEED_MS]));
+    const visited = new Set();
     const startY = window.scrollY;
-    const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
+    const vh = window.innerHeight;
+    const step = Math.max(200, Math.floor(vh * 0.85));
+    // An article or element export is done one viewport past the root's bottom, even when an
+    // endless feed follows it.
+    const end = () => {
+      const pageEnd = document.documentElement.scrollHeight;
+      if (!root) return pageEnd;
+      return Math.min(pageEnd, root.getBoundingClientRect().bottom + window.scrollY + vh);
+    };
+
+    // Fresh at every call: the in-view elements that are pending now, with where `atY` puts them.
+    const candidatesAt = (atY) => {
+      const out = [];
+      for (const el of document.querySelectorAll(selector)) {
+        const r = lazyBox(el).getBoundingClientRect();
+        const top = r.top + window.scrollY - atY;
+        if (r.width <= 0 || r.height <= 0 || top >= vh || top + r.height <= 0) continue;
+        const shape = watched.find((s) => s.pending(el));
+        if (!shape) continue;
+        let base = null;
+        if (shape.sig) {
+          base = lazyBaseline.get(el) ?? null;
+          if (base === null) lazyBaseline.set(el, (base = shape.sig(el)));
+        }
+        out.push({ el, shape, top, base });
+      }
+      return out;
+    };
+    const owedOf = (cands) =>
+      cands.filter((c) => {
+        const d = lazyLedger.get(c.el);
+        if (!d || Math.abs(c.top - d.top) > LAZY_PIN_PX) return true;
+        return c.shape.warn && d.tries < LAZY_TRIES && d.pass !== passId;
+      });
+
+    // Serves the floor to every pending candidate, then settles for those whose shape has credit.
+    const dwell = async (here, t0) => {
+      for (const c of here) {
+        visited.add(c);
+        const d = lazyLedger.get(c.el);
+        lazyLedger.set(c.el, { top: c.top, tries: (d ? d.tries : 0) + 1, pass: passId });
+      }
+      let waiting = here;
+      for (;;) {
+        waiting = waiting.filter(lazyPending);
+        if (!waiting.length || signal?.aborted) return;
+        const left = t0 + LAZY_FLOOR_MS - performance.now();
+        if (left <= 0) break;
+        await nap(Math.min(left, 16), signal);
+      }
+      const funded = waiting.filter((c) => credit.get(c.shape.id) > 0);
+      if (!funded.length) return;
+      const shapes = [...new Set(funded.map((c) => c.shape))];
+      const s0 = performance.now();
+      const limit = s0 + Math.min(LAZY_SETTLE_MS, Math.max(...shapes.map((s) => credit.get(s.id))));
+      let firstFill = 0;
+      let left = funded;
+      while (performance.now() < limit && !signal?.aborted) {
+        left = left.filter(lazyPending);
+        if (!left.length) break;
+        if (left.length < funded.length) {
+          firstFill ||= performance.now();
+          if (performance.now() - firstFill >= LAZY_GRACE_MS) break;
+        }
+        await nap(16, signal);
+      }
+      const spent = performance.now() - s0;
+      for (const s of shapes) {
+        const filled = funded.some((c) => c.shape === s && !lazyPending(c));
+        if (!filled) credit.set(s.id, credit.get(s.id) - spent);
+      }
+    };
+
     let y = 0;
-    let iterations = 0;
-    while (y < document.documentElement.scrollHeight && iterations < 250) {
+    let steps = 0;
+    while (y < end() && steps < LAZY_MAX_STEPS && !signal?.aborted) {
+      if (record && y + vh <= record.covered && !owedOf(candidatesAt(y)).length) {
+        y += step;
+        steps++;
+        continue;
+      }
+      const t0 = performance.now();
       scrollToInstant(0, y);
-      await sleep(50);
+      await frame(signal);
+      const here = owedOf(candidatesAt(window.scrollY));
+      if (here.length) await dwell(here, t0);
+      // At the bottom a sentinel may still grow the page: give it main's dwell before looking again.
+      if (y + step >= end()) await nap(t0 + LAZY_FLOOR_MS - performance.now(), signal);
       y += step;
-      iterations++;
+      steps++;
     }
-    scrollToInstant(0, document.documentElement.scrollHeight);
-    await sleep(150);
+    if (signal?.aborted) return false;
+    const reached = y >= end();
+
+    scrollToInstant(0, end());
+    await nap(150, signal);
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
-    await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
-    await sleep(100);
+    await Promise.race([Promise.all(pending.map(imageSettled)), nap(6000, signal)]);
+    await nap(100, signal);
+    if (signal?.aborted) return false;
+
+    state.lazy = {
+      href: location.href,
+      covered: y,
+      height: document.documentElement.scrollHeight,
+      count: lazyElementCount(),
+    };
+    const missed = [...visited].some((c) => c.shape.warn && lazyPending(c));
+    return reached && !missed;
   }
 
   function imageSettled(img) {
@@ -1844,10 +2179,6 @@
 
   function errorText(err) {
     return String((err && err.message) || err);
-  }
-
-  function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
   }
 
   function nextFrame() {
