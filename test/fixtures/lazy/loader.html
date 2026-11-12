@@ -39,6 +39,8 @@
   const ROOT = q.get('root');
   const FEED = q.get('feed') === '1';
   const FIXEDBAR = q.get('fixedbar') === '1';
+  const KEYED = q.get('keyed') === '1';
+  const KEYS = {};
 
   const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
   const SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M0 0h24v24H0z'/></svg>";
@@ -76,11 +78,12 @@
 
   const lazyEl = (i, loader) => {
     const full = imageUrl(i, 300, 120, loader + ' ');
+    const val = KEYED ? ((KEYS['k' + i] = full), 'k' + i) : full;
     if (loader === 'native') return `<img class="native" loading="lazy" src="${full}" alt="">`;
     const cls = `lz${PH === 'natural' ? ' natural' : ''}`;
-    if (TARGET === 'bg') return `<div class="bg lz" data-loader="${loader}" ${ATTR}="${full}"></div>`;
-    const img = `<img class="${cls}" data-loader="${loader}" ${TARGET === 'picture' ? '' : `${ATTR}="${full}"`}${placeholder(i)} alt="">`;
-    return TARGET === 'picture' ? `<picture><source type="image/png" ${ATTR}="${full}">${img}</picture>` : img;
+    if (TARGET === 'bg') return `<div class="bg lz" data-loader="${loader}" ${ATTR}="${val}"></div>`;
+    const img = `<img class="${cls}" data-loader="${loader}" ${TARGET === 'picture' ? '' : `${ATTR}="${val}"`}${placeholder(i)} alt="">`;
+    return TARGET === 'picture' ? `<picture><source type="image/png" ${ATTR}="${val}">${img}</picture>` : img;
   };
 
   let blocks = '';
@@ -112,9 +115,10 @@
   const fill = (el) => {
     if (el.dataset.done) return;
     el.dataset.done = '1';
-    if (TARGET === 'bg') el.style.backgroundImage = `url("${el.getAttribute(ATTR)}")`;
-    else if (TARGET === 'picture') el.previousElementSibling.srcset = el.previousElementSibling.getAttribute(ATTR);
-    else el.src = el.getAttribute(ATTR);
+    const url = (node) => (KEYED ? KEYS[node.getAttribute(ATTR)] : node.getAttribute(ATTR));
+    if (TARGET === 'bg') el.style.backgroundImage = `url("${url(el)}")`;
+    else if (TARGET === 'picture') el.previousElementSibling.srcset = url(el.previousElementSibling);
+    else el.src = url(el);
   };
   const byLoader = (name) => els.filter((el) => el.dataset.loader === name);
   const visible = (el) => {

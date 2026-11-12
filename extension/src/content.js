@@ -401,7 +401,7 @@
   // the floor (the settle) is funded per shape: from a seed, and from settles that ended in a
   // fill. A shape that never fills runs out of credit and cannot starve one that does. A position
   // with nothing owed takes one frame. Elements no row recognizes get that one frame too, which
-  // is the pass's known blind spot (docs/LAZY-LOADING.md).
+  // is the pass's known blind spot.
 
   const LAZY_FLOOR_MS = 50; // main's dwell per step
   const LAZY_SETTLE_MS = 250; // longest wait past the floor
@@ -687,12 +687,7 @@
       });
 
     // Serves the floor to every pending candidate, then settles for those whose shape has credit.
-    const dwell = async (here, t0) => {
-      for (const c of here) {
-        visited.add(c);
-        const d = lazyLedger.get(c.el);
-        lazyLedger.set(c.el, { top: c.top, tries: (d ? d.tries : 0) + 1, pass: passId });
-      }
+    const serve = async (here, t0) => {
       let waiting = here;
       for (;;) {
         waiting = waiting.filter(lazyPending);
@@ -721,6 +716,16 @@
       for (const s of shapes) {
         const filled = funded.some((c) => c.shape === s && !lazyPending(c));
         if (!filled) credit.set(s.id, credit.get(s.id) - spent);
+      }
+    };
+    // A dwell cut short by an abort is not recorded, so the next pass owes it again.
+    const dwell = async (here, t0) => {
+      await serve(here, t0);
+      if (signal?.aborted) return;
+      for (const c of here) {
+        visited.add(c);
+        const d = lazyLedger.get(c.el);
+        lazyLedger.set(c.el, { top: c.top, tries: (d ? d.tries : 0) + 1, pass: passId });
       }
     };
 
