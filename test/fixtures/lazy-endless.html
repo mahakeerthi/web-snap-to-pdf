@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Endless Feed Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .item { height: 1000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<p>FEED-START-MARK</p>
+<div id="feed"></div>
+<div id="sentinel"></div>
+<script>
+  // An endless feed: whenever the sentinel below the feed comes into view, ten more 1,000 px
+  // items are appended, so the bottom of the page is never reached.
+  const feed = document.getElementById('feed');
+  let n = 0;
+  const more = () => {
+    let html = '';
+    for (let i = 0; i < 10; i++) html += `<div class="item">ITEM-${n++}</div>`;
+    feed.insertAdjacentHTML('beforeend', html);
+  };
+  more();
+  new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) more();
+  }).observe(document.getElementById('sentinel'));
+</script>
+</body>
+</html>

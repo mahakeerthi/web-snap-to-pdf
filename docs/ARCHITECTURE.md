@@ -55,8 +55,10 @@ in reverse order. Styles are applied with `!important`.
   fixed/sticky → expand scroll containers → unlock `<html>`/`<body>` → scroll to top → wait two
   animation frames.
 - Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
-  empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps
-  (max 250 steps, 50 ms each), then wait up to 6 s for incomplete images.
+  empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps,
+  one animation frame each, longer (up to 300 ms) while a placeholder image (no source, or 1 × 1)
+  is in view; stop after 12 s and report `lazyIncomplete` if the bottom was not reached (the export
+  then carries a `status_lazyIncomplete` warning); then wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if
@@ -286,7 +288,7 @@ handler directly inside the worker, without messaging.
 | `ps:progress`     | broadcast (`runtime.sendMessage`; the popup listens) | `tabId`, `stage: 'prepare' \| 'measure' \| 'render' \| 'save' \| 'done'`, `message`                          | none                                                                                                              |
 | `ps:ping`         | content (`tabs.sendMessage`)                         | none                                                                                                         | `{ ok: true }`                                                                                                    |
 | `ps:state`        | content                                              | none                                                                                                         | `{ ok, removed, hasPicked, pickerActive, previewOpen }`                                                           |
-| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title }` or `{ ok: false, error }` (no article found / nothing picked)                               |
+| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title, lazyIncomplete }` or `{ ok: false, error }` (no article found / nothing picked)               |
 | `ps:restore`      | content                                              | none                                                                                                         | `{ ok: true }`                                                                                                    |
 | `ps:measure`      | content                                              | none                                                                                                         | `{ ok, height, width }` (CSS px)                                                                                  |
 | `ps:start-picker` | content                                              | `mode` (anything other than `'remove'` means `'print'`), `strings`, `theme`                                  | `{ ok: true }` (also closes an open preview)                                                                      |

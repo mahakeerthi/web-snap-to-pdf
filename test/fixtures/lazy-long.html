@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lazy Long Fixture</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .block { height: 2000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+  .block img { display: block; width: 300px; height: 120px; background: #ccc; }
+</style>
+</head>
+<body>
+<script>
+  // 100 blocks of 2,000 px = a 200,000 px page, each with one lazy image, in turn filled by an
+  // IntersectionObserver, by a scroll handler throttled to 100 ms (neither uses an attribute the
+  // content script knows), or natively with loading="lazy". Every image is distinct, so the PDF
+  // cannot merge them. A fixed bar holds an image that never loads, which must not hold up
+  // every scroll step.
+  const TOTAL = 100;
+  const KINDS = ['observer', 'scroll', 'native'];
+  const imageUrl = (i, kind) => {
+    const c = document.createElement('canvas'); c.width = 300; c.height = 120;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; ctx.fillRect(0, 0, 300, 120);
+    ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif'; ctx.fillText(kind + ' ' + i, 20, 70);
+    return c.toDataURL('image/png');
+  };
+  let html = '';
+  for (let i = 0; i < TOTAL; i++) {
+    const kind = KINDS[i % 3];
+    const src = kind === 'native' ? ` loading="lazy" src="${imageUrl(i, kind)}"` : '';
+    html += `<div class="block"><p>BLOCK-${i}-MARK</p><img class="${kind}" data-index="${i}"${src} alt=""></div>`;
+  }
+  html += '<div style="position: fixed; top: 0; right: 0"><img width="40" height="40" alt=""></div>';
+  document.body.innerHTML = html;
+
+  const fill = (img) => {
+    img.src = imageUrl(Number(img.dataset.index), img.className);
+    img.dataset.filled = '1';
+  };
+  window.__lazyFilled = () => document.querySelectorAll('img[data-filled]').length;
+  window.__lazyTotal = document.querySelectorAll('img.observer, img.scroll').length;
+
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      fill(e.target);
+      io.unobserve(e.target);
+    }
+  });
+  document.querySelectorAll('img.observer').forEach((img) => io.observe(img));
+
+  const fillVisible = () => {
+    for (const img of document.querySelectorAll('img.scroll:not([data-filled])')) {
+      const r = img.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) fill(img);
+    }
+  };
+  const THROTTLE_MS = 100;
+  let last = 0;
+  let trailing = null;
+  addEventListener('scroll', () => {
+    const wait = THROTTLE_MS - (Date.now() - last);
+    if (wait <= 0) {
+      last = Date.now();
+      fillVisible();
+    } else if (!trailing) {
+      trailing = setTimeout(() => {
+        trailing = null;
+        last = Date.now();
+        fillVisible();
+      }, wait);
+    }
+  });
+  fillVisible();
+</script>
+</body>
+</html>

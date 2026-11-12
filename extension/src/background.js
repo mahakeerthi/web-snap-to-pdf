@@ -111,12 +111,20 @@ async function generate({ tabId, settings, prep = 'none', output }) {
     progress(tabId, 'prepare', 'Preparing page…');
     const tab = await readyTab(tabId);
     const prepMsg = { prep, loadLazy: settings.loadLazy, ...scanOptions(settings) };
-    const { data, title, warning } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
+    const {
+      data,
+      title,
+      warning: printWarning,
+      lazyIncomplete,
+    } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
       withDebugger(tabId, async (target) => ({
         ...(await printPage(target, tabId, settings)),
         title: pageTitle(prepResult, tab),
+        lazyIncomplete: prepResult.lazyIncomplete,
       })),
     );
+    const lazyWarning = lazyIncomplete && t(await getMessages(settings.language), 'status_lazyIncomplete');
+    const warning = [printWarning, lazyWarning].filter(Boolean).join(' ') || null;
     const filename = buildFilename(settings.filenameTemplate, { title, domain: hostnameOf(tab.url) });
     if (output === 'return') return { ok: true, base64: data, filename, warning };
 

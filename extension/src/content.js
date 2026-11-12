@@ -26,6 +26,10 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
+  // The lazy-load scroll stops after LAZY_SCROLL_BUDGET_MS (an endless feed has no bottom) and
+  // waits up to LAZY_SETTLE_MS for a placeholder in view (covers scroll handlers throttled to 250 ms).
+  const LAZY_SCROLL_BUDGET_MS = 12000;
+  const LAZY_SETTLE_MS = 300;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -114,7 +118,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    if (loadLazy) await loadLazyContent();
+    const lazyComplete = loadLazy ? await loadLazyContent() : true;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -122,7 +126,7 @@
     scrollToInstant(0, 0);
     await nextFrame();
     await nextFrame();
-    return { ok: true, title: document.title };
+    return { ok: true, title: document.title, lazyIncomplete: !lazyComplete };
   }
 
   // The element a prep mode works on: the detected article, the picked element, or null for the
@@ -412,14 +416,36 @@
 
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
+    const deadline = performance.now() + LAZY_SCROLL_BUDGET_MS;
+    // The timer keeps the deadline reachable where frames stall (a hidden tab).
+    const frame = () => Promise.race([nextFrame(), sleep(100)]);
+    // Placeholders in view. IntersectionObserver loaders fill them within a frame; loaders behind
+    // a throttled scroll handler only when the throttle fires, so the scroll waits for those.
+    const inView = new Set();
+    const watcher = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) inView.add(e.target);
+        else inView.delete(e.target);
+      }
+    });
+    for (const img of document.images) if (isPlaceholder(img)) watcher.observe(img);
     let y = 0;
-    let iterations = 0;
-    while (y < document.documentElement.scrollHeight && iterations < 250) {
+    while (y < document.documentElement.scrollHeight && performance.now() < deadline) {
       scrollToInstant(0, y);
-      await sleep(50);
+      await frame();
+      const settleBy = Math.min(performance.now() + LAZY_SETTLE_MS, deadline);
+      while (performance.now() < settleBy && [...inView].some(isPlaceholder)) await frame();
+      // Wait for each placeholder once: a broken image, or one in a fixed header, would
+      // otherwise hold every step.
+      for (const img of inView) {
+        if (!isPlaceholder(img)) continue;
+        watcher.unobserve(img);
+        inView.delete(img);
+      }
       y += step;
-      iterations++;
     }
+    watcher.disconnect();
+    const complete = y >= document.documentElement.scrollHeight;
     scrollToInstant(0, document.documentElement.scrollHeight);
     await sleep(150);
     scrollToInstant(0, startY);
@@ -427,6 +453,12 @@
     const pending = Array.from(document.images).filter((i) => !i.complete);
     await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
     await sleep(100);
+    return complete;
+  }
+
+  // No source yet, or a 1 x 1 stand-in (or broken) image.
+  function isPlaceholder(img) {
+    return (!img.currentSrc && !img.getAttribute('src')) || (img.complete && img.naturalWidth <= 1);
   }
 
   function imageSettled(img) {

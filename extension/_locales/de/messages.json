@@ -383,6 +383,10 @@
     "message": "Auswahlwerkzeug konnte nicht gestartet werden.",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "Die Seite ist zu lang, um rechtzeitig vollständig geladen zu werden. Inhalte gegen Ende können fehlen.",
+    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"

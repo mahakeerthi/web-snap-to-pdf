@@ -559,6 +559,54 @@ await test('scroll-locked page: body { position: fixed; overflow: auto } prints 
   await page.close();
 });
 
+// --- 3. lazy loading ----------------------------------------------------------------------
+
+async function generateTimed(tabId) {
+  return sw.evaluate(async (tabId) => {
+    const t0 = performance.now();
+    const r = await globalThis.__websnap
+      .generate({ tabId, output: 'return', settings: { loadLazy: true } })
+      .catch((e) => ({ error: String(e && e.message) }));
+    return { ...r, ms: performance.now() - t0 };
+  }, tabId);
+}
+
+await test('lazy images past 170,000 px reach the PDF', async () => {
+  const { page, tabId } = await openTab('lazy-long.html');
+  const before = await snapshot(page);
+  const r = await generateTimed(tabId);
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify(r));
+    return page.close();
+  }
+  const file = path.join(outDir, 'content-lazy-long.pdf');
+  fs.writeFileSync(file, Buffer.from(r.base64, 'base64'));
+  const images =
+    execFileSync('pdfimages', ['-list', file], { encoding: 'utf8' }).trim().split('\n').length - 2;
+  check(images === 100, `all 100 lazy images are in the PDF (${images}, ${Math.round(r.ms)} ms)`);
+  const [filled, total] = await page.evaluate(() => [window.__lazyFilled(), window.__lazyTotal]);
+  check(filled === total, `observer and throttled scroll loaders filled every image (${filled}/${total})`);
+  const text = execFileSync('pdftotext', [file, '-'], { encoding: 'utf8' });
+  check(text.includes('BLOCK-99-MARK'), 'PDF reaches the last block');
+  check(!r.warning, 'no warning when the scroll reached the bottom', String(r.warning));
+  await wait(300);
+  await expectRestored(page, before);
+  await page.close();
+});
+
+await test('endless feed: the lazy-load scroll stops at its time budget and the export warns', async () => {
+  const { page, tabId } = await openTab('lazy-endless.html');
+  const r = await generateTimed(tabId);
+  const expected = JSON.parse(fs.readFileSync(path.join(root, 'extension/_locales/en/messages.json'), 'utf8'))
+    .status_lazyIncomplete.message;
+  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  check(r.warning === expected, `export carries the lazy-load warning (${r.warning})`);
+  check(r.ms >= 12000 && r.ms < 30000, `export ends after the 12 s scroll budget (${Math.round(r.ms)} ms)`);
+  const y = await page.evaluate(() => window.scrollY);
+  check(y === 0, `scroll position restored (${y})`);
+  await page.close();
+});
+
 // --- 4. article detection ---------------------------------------------------------------
 
 async function articleCase(
