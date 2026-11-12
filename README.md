@@ -167,8 +167,8 @@ also turns on Markdown export and resets all settings.
 - Article detection is a heuristic. If it picks the wrong block or finds none, use **Select
   element**.
 - Canvas, WebGL, and video content prints as Chrome's print engine renders it.
-- On very long pages, page scans stop after 200,000 elements, auto-scroll stops after 250 steps, and
-  the wait for slow images ends after 6 seconds.
+- On very long pages, page scans stop after 200,000 elements, auto-scroll stops after 12 seconds (the
+  export then warns that content may be missing), and the wait for slow images ends after 6 seconds.
 - Markdown export drops `data:` images larger than 2 KB, escapes Markdown punctuation everywhere
   (`snake_case` becomes `snake\_case`), and exports elements hidden with `visibility: hidden`. It
   has no support for rowspan, `sup`, `sub`, `mark`, `u`, task lists, or reversed lists. It merges

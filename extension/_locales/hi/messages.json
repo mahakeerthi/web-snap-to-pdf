@@ -384,7 +384,7 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "पेज इतना लंबा है कि सब कुछ समय पर लोड नहीं हो सका, इसलिए अंत के पास की कुछ सामग्री छूट सकती है।",
+    "message": "पेज लोड करने का समय खत्म हो गया, इसलिए कुछ इमेज या सामग्री छूट सकती है।",
     "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
   },
   "paper_A0": {

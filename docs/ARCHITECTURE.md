@@ -56,11 +56,16 @@ in reverse order. Styles are applied with `!important`.
   animation frames.
 - Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
   empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps,
-  one animation frame each, longer (up to 300 ms, until one fills) while a placeholder image (no
-  source, or 1 × 1) is in view; a placeholder nothing filled is not waited for again, and after
-  three such waits in a row the scroll stops waiting; stop after 12 s and report `lazyIncomplete`
-  if the bottom was not reached (the export then carries a `status_lazyIncomplete` warning); then
-  wait up to 6 s for incomplete images.
+  one animation frame each, to the bottom (with a root: one viewport past the root's bottom).
+  While a placeholder image is in view, a step waits up to 300 ms, until one of them fills. A
+  placeholder is an `<img>` with no source, a 1 × 1 or broken image, or one shown at more than twice
+  its natural width (a blurred preview). A placeholder nothing filled is not waited for again.
+  Waits that fill nothing may add up to 1.2 s plus 10 % of the scroll time so far; past that,
+  steps skip the wait until the allowance grows back. Stop after 12 s. `lazyIncomplete` is true
+  when the scroll did not reach its end, or when it skipped waits on a page where a loader was
+  filling placeholders (a wait filled one after more than one frame, or a skipped one filled
+  later). The export then carries a `status_lazyIncomplete` warning. Then wait up to 6 s for
+  incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if

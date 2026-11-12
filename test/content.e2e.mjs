@@ -561,18 +561,47 @@ await test('scroll-locked page: body { position: fixed; overflow: auto } prints 
 
 // --- 3. lazy loading ----------------------------------------------------------------------
 
-async function generateTimed(tabId) {
-  return sw.evaluate(async (tabId) => {
-    const t0 = performance.now();
-    const r = await globalThis.__websnap
-      .generate({ tabId, output: 'return', settings: { loadLazy: true } })
-      .catch((e) => ({ error: String(e && e.message) }));
-    return { ...r, ms: performance.now() - t0 };
-  }, tabId);
+async function generateTimed(tabId, prep = 'none') {
+  return sw.evaluate(
+    async ({ tabId, prep }) => {
+      const t0 = performance.now();
+      const r = await globalThis.__websnap
+        .generate({ tabId, prep, output: 'return', settings: { loadLazy: true } })
+        .catch((e) => ({ error: String(e && e.message) }));
+      return { ...r, ms: performance.now() - t0 };
+    },
+    { tabId, prep },
+  );
+}
+
+const lazyWarning = () =>
+  JSON.parse(fs.readFileSync(path.join(root, 'extension/_locales/en/messages.json'), 'utf8'))
+    .status_lazyIncomplete.message;
+
+// Images of the given width in a generated PDF (placeholders have other sizes).
+function pdfImagesOfWidth(r, name, width) {
+  const file = path.join(outDir, name);
+  fs.writeFileSync(file, Buffer.from(r.base64, 'base64'));
+  const rows = execFileSync('pdfimages', ['-list', file], { encoding: 'utf8' }).trim().split('\n').slice(2);
+  return rows.filter((l) => l.trim().split(/\s+/)[3] === String(width)).length;
+}
+
+async function throttledCase(query, name) {
+  const { page, tabId } = await openTab(`lazy-throttled.html?${query}`);
+  const r = await generateTimed(tabId);
+  const filled = await page.evaluate(() =>
+    [...document.querySelectorAll('img.lazy')].map((i) => !!i.dataset.filled),
+  );
+  await page.close();
+  if (!r.base64) check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+  return { ...r, filled, images: r.base64 ? pdfImagesOfWidth(r, name, 300) : 0 };
 }
 
 await test('lazy images past 170,000 px reach the PDF', async () => {
   const { page, tabId } = await openTab('lazy-long.html');
+  // A taller viewport halves the scroll steps, so a slow CI runner stays well inside the 12 s
+  // budget. Every image still passes through view, which is what this test proves.
+  await page.setViewportSize({ width: 1200, height: 1600 });
   const before = await snapshot(page);
   const r = await generateTimed(tabId);
   if (!r.base64) {
@@ -609,13 +638,68 @@ await test('images that never load do not hold up the lazy-load scroll', async (
 await test('endless feed: the lazy-load scroll stops at its time budget and the export warns', async () => {
   const { page, tabId } = await openTab('lazy-endless.html');
   const r = await generateTimed(tabId);
-  const expected = JSON.parse(fs.readFileSync(path.join(root, 'extension/_locales/en/messages.json'), 'utf8'))
-    .status_lazyIncomplete.message;
   check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
-  check(r.warning === expected, `export carries the lazy-load warning (${r.warning})`);
+  check(r.warning === lazyWarning(), `export carries the lazy-load warning (${r.warning})`);
   check(r.ms >= 12000 && r.ms < 30000, `export ends after the 12 s scroll budget (${Math.round(r.ms)} ms)`);
   const y = await page.evaluate(() => window.scrollY);
   check(y === 0, `scroll position restored (${y})`);
+  await page.close();
+});
+
+await test('a throttled loader after images that never load still fills every image', async () => {
+  const r = await throttledCase('stuck=4&t=50', 'content-lazy-stuck-first.pdf');
+  check(
+    r.images === 60,
+    `all 60 throttled-loader images are in the PDF (${r.images}, ${Math.round(r.ms)} ms)`,
+  );
+  check(!r.warning, 'no warning', String(r.warning));
+});
+
+await test('a throttled loader after a long run of images that never load: every image, or a warning', async () => {
+  const r = await throttledCase('stuck=8&t=100', 'content-lazy-stuck-run.pdf');
+  check(
+    r.images === 60 || r.warning === lazyWarning(),
+    `every image is in the PDF, or the export warns (${r.images}/60, ${Math.round(r.ms)} ms, ${r.warning})`,
+  );
+  // Past the stuck images the scroll waits for the loader again, so the end of the page is whole.
+  const tail = r.filled.slice(-15).filter(Boolean).length;
+  check(tail === 15, `the last 15 images were filled (${tail})`);
+});
+
+for (const [ph, label] of [
+  ['blur', 'a small preview shown stretched'],
+  ['blob', 'a blob: preview'],
+]) {
+  await test(`a throttled loader behind ${label} fills every image`, async () => {
+    const r = await throttledCase(`ph=${ph}&t=50`, `content-lazy-${ph}.pdf`);
+    check(r.images === 60, `all 60 full-size images are in the PDF (${r.images}, ${Math.round(r.ms)} ms)`);
+    check(!r.warning, 'no warning', String(r.warning));
+  });
+}
+
+await test('a throttled loader among many images that never load: the export warns', async () => {
+  const r = await throttledCase('mixed=1&t=50', 'content-lazy-mixed.pdf');
+  check(
+    r.images === 34 || r.warning === lazyWarning(),
+    `every image is in the PDF, or the export warns (${r.images}/34, ${Math.round(r.ms)} ms, ${r.warning})`,
+  );
+});
+
+await test('article export above an endless feed stops after the article, without a warning', async () => {
+  const { page, tabId } = await openTab('lazy-article-feed.html');
+  const r = await generateTimed(tabId, 'article');
+  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  check(!r.warning, `no warning (${Math.round(r.ms)} ms)`, String(r.warning));
+  check(r.ms < 6000, `export does not spend the scroll budget on the feed (${Math.round(r.ms)} ms)`);
+  if (r.base64) {
+    const file = path.join(outDir, 'content-lazy-article-feed.pdf');
+    fs.writeFileSync(file, Buffer.from(r.base64, 'base64'));
+    const text = execFileSync('pdftotext', [file, '-'], { encoding: 'utf8' });
+    check(
+      text.includes('ARTICLE-END-MARK') && !text.includes('RELATED-'),
+      'PDF holds the whole article and no feed item',
+    );
+  }
   await page.close();
 });
 

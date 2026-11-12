@@ -384,7 +384,7 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "La page est trop longue pour tout charger à temps : du contenu vers la fin peut manquer.",
+    "message": "Le temps de chargement de la page est écoulé : des images ou du contenu peuvent manquer.",
     "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
   },
   "paper_A0": {

@@ -26,12 +26,15 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
-  // The lazy-load scroll stops after LAZY_SCROLL_BUDGET_MS (an endless feed has no bottom). It
-  // waits up to LAZY_SETTLE_MS for a loader to fill a placeholder in view (covers scroll handlers
-  // throttled to 250 ms), and stops waiting after LAZY_MAX_MISSES such waits in a row fill nothing.
+  // The lazy-load scroll stops after LAZY_SCROLL_BUDGET_MS (an endless feed has no bottom). At
+  // each step it waits up to LAZY_SETTLE_MS for a placeholder in view to fill, enough for a scroll
+  // handler throttled to about 100 ms. Waits that fill nothing may add up to LAZY_FRUITLESS_MS
+  // plus LAZY_FRUITLESS_SHARE of the time so far: images that never load cost a bounded share,
+  // and the allowance grows back, so a loader further down the page is still waited for.
   const LAZY_SCROLL_BUDGET_MS = 12000;
   const LAZY_SETTLE_MS = 300;
-  const LAZY_MAX_MISSES = 3;
+  const LAZY_FRUITLESS_MS = 1200;
+  const LAZY_FRUITLESS_SHARE = 0.1;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -120,7 +123,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    const lazyComplete = loadLazy ? await loadLazyContent() : true;
+    const lazyComplete = loadLazy ? await loadLazyContent(root) : true;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -400,7 +403,9 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  async function loadLazyContent() {
+  // Returns false when the export may miss lazy content: the scroll ran out of time before the
+  // end, or it skipped waiting for placeholders on a page where a loader was filling them.
+  async function loadLazyContent(root) {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
     // reverting them would only make the images disappear again.
@@ -418,9 +423,15 @@
 
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
-    const deadline = performance.now() + LAZY_SCROLL_BUDGET_MS;
-    // The timer keeps the deadline reachable where frames stall (a hidden tab).
-    const frame = () => Promise.race([nextFrame(), sleep(100)]);
+    const start = performance.now();
+    const deadline = start + LAZY_SCROLL_BUDGET_MS;
+    // An article or element export is done one viewport past the root's bottom, even when an
+    // endless feed follows it.
+    const end = () => {
+      const pageEnd = document.documentElement.scrollHeight;
+      if (!root) return pageEnd;
+      return Math.min(pageEnd, root.getBoundingClientRect().bottom + window.scrollY + window.innerHeight);
+    };
     // Placeholders in view. IntersectionObserver loaders fill them within a frame; loaders behind
     // a throttled scroll handler only when the throttle fires, so the scroll waits for those.
     const inView = new Set();
@@ -430,32 +441,43 @@
         else inView.delete(e.target);
       }
     });
-    for (const img of document.images) if (isPlaceholder(img)) watcher.observe(img);
     let y = 0;
-    let misses = 0;
-    while (y < document.documentElement.scrollHeight && performance.now() < deadline) {
-      scrollToInstant(0, y);
-      await frame();
-      const waiting = misses < LAZY_MAX_MISSES ? [...inView].filter(isPlaceholder) : [];
-      if (waiting.length) {
-        const settleBy = Math.min(performance.now() + LAZY_SETTLE_MS, deadline);
-        while (performance.now() < settleBy && waiting.every(isPlaceholder)) await frame();
-        if (waiting.every(isPlaceholder)) {
-          // Nothing filled them: never wait for these again (an image in a fixed bar stays in view).
-          misses++;
-          for (const img of waiting) {
-            watcher.unobserve(img);
-            inView.delete(img);
+    let fruitless = 0;
+    let waitHelped = false; // a wait ended with a placeholder filled
+    const skipped = new Set(); // placeholders in view while the fruitless allowance was used up
+    try {
+      for (const img of document.images) if (isPlaceholder(img)) watcher.observe(img);
+      while (y < end() && performance.now() < deadline) {
+        scrollToInstant(0, y);
+        await nextFrame();
+        const waiting = [...inView].filter(isPlaceholder);
+        const allowance = LAZY_FRUITLESS_MS + LAZY_FRUITLESS_SHARE * (performance.now() - start);
+        if (waiting.length && fruitless >= allowance) {
+          for (const img of waiting) skipped.add(img);
+        } else if (waiting.length) {
+          const waitStart = performance.now();
+          const settleBy = Math.min(waitStart + LAZY_SETTLE_MS, deadline);
+          while (performance.now() < settleBy && waiting.every(isPlaceholder)) await nextFrame();
+          if (!waiting.every(isPlaceholder)) {
+            waitHelped = true;
+          } else {
+            // Never wait for these again (an image in a fixed bar stays in view).
+            fruitless += performance.now() - waitStart;
+            for (const img of waiting) {
+              watcher.unobserve(img);
+              inView.delete(img);
+            }
           }
-        } else {
-          misses = 0;
         }
+        y += step;
       }
-      y += step;
+    } finally {
+      watcher.disconnect();
     }
-    watcher.disconnect();
-    const complete = y >= document.documentElement.scrollHeight;
-    scrollToInstant(0, document.documentElement.scrollHeight);
+    // A skipped placeholder that filled later shows a loader that waiting would have kept up with.
+    const missedLoader = skipped.size > 0 && (waitHelped || [...skipped].some((img) => !isPlaceholder(img)));
+    const complete = y >= end() && !missedLoader;
+    scrollToInstant(0, end());
     await sleep(150);
     scrollToInstant(0, startY);
 
@@ -465,9 +487,11 @@
     return complete;
   }
 
-  // No source yet, or a 1 x 1 stand-in (or broken) image.
+  // No source yet, a 1 x 1 or broken stand-in, or a small preview shown at more than twice its
+  // width (a blurred placeholder).
   function isPlaceholder(img) {
-    return (!img.currentSrc && !img.getAttribute('src')) || (img.complete && img.naturalWidth <= 1);
+    if (!img.currentSrc && !img.getAttribute('src')) return true;
+    return img.complete && (img.naturalWidth <= 1 || img.clientWidth > img.naturalWidth * 2);
   }
 
   function imageSettled(img) {

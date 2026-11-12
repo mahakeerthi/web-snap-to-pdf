@@ -384,7 +384,7 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "ページが長すぎて時間内にすべてを読み込めなかったため、末尾付近の内容が欠けている可能性があります。",
+    "message": "ページの読み込み中に時間切れになったため、一部の画像や内容が欠けている可能性があります。",
     "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
   },
   "paper_A0": {

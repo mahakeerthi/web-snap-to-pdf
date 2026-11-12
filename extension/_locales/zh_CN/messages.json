@@ -384,7 +384,7 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "页面过长，无法及时加载全部内容，靠近末尾的部分内容可能缺失。",
+    "message": "加载页面超时，部分图片或内容可能缺失。",
     "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
   },
   "paper_A0": {
