@@ -25,6 +25,8 @@ const CASES = [
   { id: 'text-117', url: 'lazy/text.html' },
   { id: 'lodash100', url: L + 'ph=blur&loader=lodash&t=100' },
   { id: 'stuck-100', url: L + 'loader=none&n=0&stuck=100' },
+  // Named lazy images that nothing ever fills, three exports in a row. Every one must warn.
+  { id: 'never filled x3', url: L + 'loader=xyz&n=20&gap=900', runs: 3 },
   {
     id: 'text-117 shrinks',
     url: 'lazy/text.html',
@@ -75,16 +77,19 @@ try {
         text: crypto.createHash('sha1').update(text).digest('hex').slice(0, 8),
       };
     };
-    const first = await run(1);
-    if (c.between) await page.evaluate(c.between);
-    const second = await run(2);
+    const results = [];
+    for (let n = 1; n <= (c.runs || 2); n++) {
+      if (n === 2 && c.between) await page.evaluate(c.between);
+      results.push(await run(n));
+    }
+    const [first, ...rest] = results;
     rows.push({
       case: c.id,
       first: `${first.ms} ms`,
-      second: `${second.ms} ms`,
-      'imgs 1/2': `${first.imgs}/${second.imgs}`,
-      'warned 1/2': `${first.warned}/${second.warned}`,
-      'same text': c.between ? 'n/a' : String(first.text === second.text),
+      later: rest.map((r) => `${r.ms} ms`).join(', '),
+      imgs: results.map((r) => r.imgs).join('/'),
+      warned: results.map((r) => r.warned).join('/'),
+      'same text': c.between ? 'n/a' : String(results.every((r) => r.text === first.text)),
     });
     await page.close();
   }

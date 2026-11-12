@@ -410,7 +410,7 @@
   const LAZY_MAX_STEPS = 400; // main stops at 250 steps
   const LAZY_BUDGET_MS = 12500; // main's worst case for the scroll, 250 steps of 50 ms
   const LAZY_PIN_PX = 8; // a candidate that moved less than this since its last dwell is pinned
-  const LAZY_TRIES = 2; // dwells a named candidate gets across passes
+  const LAZY_TRIES = 2; // passes that dwell on a named candidate that stays pending
   const LAZY_MEDIA = new Set(['IMG', 'SOURCE', 'IFRAME', 'VIDEO']);
   const LAZY_SKIP =
     /^(?:SCRIPT|STYLE|LINK|META|A|BUTTON|INPUT|FORM|LABEL|NOSCRIPT|TEMPLATE|HEAD|TITLE|BASE)$/;
@@ -615,6 +615,7 @@
 
   function nap(ms, signal, on) {
     return new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
       const done = () => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', done);
@@ -624,6 +625,20 @@
       signal?.addEventListener('abort', done, { once: true });
       if (on) on(done);
     });
+  }
+
+  // The warning, from the end state and from every pass: an element some pass dwelled on, whose
+  // named loader still has not filled it. Not from this pass's dwells alone, because a resumed
+  // pass owes a served element nothing and would report a page that is still missing images as whole.
+  function lazyMissed(selector, watched) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (!lazyLedger.has(el)) continue;
+      const shape = watched.find((s) => s.pending(el));
+      if (!shape || !shape.warn) continue;
+      if (shape.sig && shape.sig(el) !== lazyBaseline.get(el)) continue;
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -651,7 +666,6 @@
     const passId = ++lazyPassCount;
     const record = lazyRecordValid(state.lazy) ? state.lazy : null;
     const credit = new Map(watched.map((s) => [s.id, LAZY_SEED_MS]));
-    const visited = new Set();
     const startY = window.scrollY;
     const deadline = performance.now() + LAZY_BUDGET_MS;
     const vh = window.innerHeight;
@@ -726,11 +740,10 @@
       await serve(here, t0);
       if (signal?.aborted) return;
       for (const c of here) {
-        visited.add(c);
         const d = lazyLedger.get(c.el);
         lazyLedger.set(c.el, {
           tops: d ? [...d.tops.slice(-7), c.top] : [c.top],
-          tries: (d ? d.tries : 0) + 1,
+          tries: d && d.pass === passId ? d.tries : (d ? d.tries : 0) + 1,
           pass: passId,
         });
       }
@@ -772,8 +785,7 @@
       height: document.documentElement.scrollHeight,
       count: lazyElementCount(),
     };
-    const missed = [...visited].some((c) => c.shape.warn && lazyPending(c));
-    return reached && !missed;
+    return reached && !lazyMissed(selector, watched);
   }
 
   function imageSettled(img) {

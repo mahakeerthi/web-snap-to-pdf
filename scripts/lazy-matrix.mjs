@@ -82,11 +82,16 @@ const ROWS = [
   { id: 'icons10-lodash100', url: L + 'gap=1200&every=10&icons=10&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet upscaled icons' },
   { id: 'deadicons10-lodash100', url: L + 'gap=1200&every=10&icons=10&iconkind=missing&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet kind=dead' },
   { id: 'natural-every6-lodash100', url: L + 'gap=1200&every=6&ph=natural&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet natural-size preview' },
-  // Blind rows: shapes the table cannot see. They run only when --only names them, and a FAIL is the
-  // measurement, not a regression.
-  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', blind: true, from: 'probe: URL held in JavaScript' },
-  { id: 'blind-keyed-debounce50', url: L + 'ph=natural&attr=data-k&keyed=1&loader=debounce&t=50', count: 'filled', blind: true, from: 'probe: URL held in JavaScript' },
-  { id: 'blind-keyed-io', url: L + 'ph=natural&attr=data-k&keyed=1&loader=io', count: 'filled', blind: true, from: 'probe control: IntersectionObserver needs no dwell' },
+  // Probe rows: a shape the table cannot see (blind-*), and the floor with its settle credit spent
+  // (floor-*). They run only when --only names them, and a FAIL is a measurement, not a regression.
+  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', probe: true, from: 'probe: URL held in JavaScript' },
+  { id: 'blind-keyed-debounce50', url: L + 'ph=natural&attr=data-k&keyed=1&loader=debounce&t=50', count: 'filled', probe: true, from: 'probe: URL held in JavaScript' },
+  { id: 'blind-keyed-io', url: L + 'ph=natural&attr=data-k&keyed=1&loader=io', count: 'filled', probe: true, from: 'probe control: IntersectionObserver needs no dwell' },
+  // Eight stuck images in one recognizer row (an <img> with no source) spend its settle credit, and the
+  // loader images, in the same row, then get the floor alone.
+  { id: 'floor-debounce30-stuck8', url: L + 'stuck=8&gap=2000&ph=none&attr=data-k&keyed=1&loader=debounce&t=30', count: 'filled', probe: true, from: 'probe: the floor with no settle credit' },
+  { id: 'floor-debounce50-stuck8', url: L + 'stuck=8&gap=2000&ph=none&attr=data-k&keyed=1&loader=debounce&t=50', count: 'filled', probe: true, from: 'probe: the floor with no settle credit' },
+  { id: 'floor-lodash100-stuck8', url: L + 'stuck=8&gap=2000&ph=none&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', probe: true, from: 'probe: the floor with no settle credit' },
 ];
 
 const SLOWER = 0.1;
@@ -323,7 +328,7 @@ async function main() {
     }
   }
   const only = args.only ? new RegExp(args.only, 'i') : null;
-  const rows = ROWS.filter((r) => (only ? only.test(r.id) : !r.blind));
+  const rows = ROWS.filter((r) => (only ? only.test(r.id) : !r.probe));
   if (!rows.length) throw new Error(`--only ${args.only} matches no row`);
   const rounds = Number(args.rounds);
   if (!(rounds >= 1)) throw new Error('--rounds must be at least 1');
