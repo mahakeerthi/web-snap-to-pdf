@@ -162,9 +162,10 @@ async function undoPath() {
 async function staleHoverPath() {
   const a = await openArticle();
   await a.startExport();
+  // ps:lazy-start opens the loading window: it flips the article's lazy images to eager.
   await a.until(
-    () => a.page.evaluate(() => !!document.querySelector('[data-websnap-root]')),
-    'prepare() to mark the root',
+    () => a.page.evaluate(() => !!document.querySelector('img.lazy[loading="eager"]')),
+    'ps:lazy-start to begin the lazy pass',
   );
   if ((await a.sidebar()).hidden) throw new Inconclusive('isolate() ran before the picker could open');
   if (await a.openPickerDuringExport()) {
