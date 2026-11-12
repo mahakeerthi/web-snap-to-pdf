@@ -81,7 +81,6 @@ const ROWS = [
   { id: 'debounce30-dead4', url: L + 'top=6000&dead=4&n=30&loader=debounce&t=30', count: 'pdf', from: 'r3 opus control' },
   { id: 'icons10-lodash100', url: L + 'gap=1200&every=10&icons=10&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet upscaled icons' },
   { id: 'deadicons10-lodash100', url: L + 'gap=1200&every=10&icons=10&iconkind=missing&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet kind=dead' },
-  { id: 'natural-lodash100', url: L + 'gap=1200&every=10&ph=natural&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet natural-size preview' },
   { id: 'natural-every6-lodash100', url: L + 'gap=1200&every=6&ph=natural&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet natural-size preview' },
 ];
 
