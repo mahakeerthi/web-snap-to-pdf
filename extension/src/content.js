@@ -406,7 +406,9 @@
   const LAZY_FLOOR_MS = 50; // main's dwell per step
   const LAZY_SETTLE_MS = 250; // longest wait past the floor
   const LAZY_GRACE_MS = 34; // after the first fill in a settle, the rest of the position may follow
-  const LAZY_SEED_MS = 500; // starting settle credit per shape
+  const LAZY_SEED_MS = 500; // starting settle credit per shape, and its ceiling
+  const LAZY_TRICKLE = 0.05; // settle credit regained per ms of scroll
+  const LAZY_POLL_MS = 16; // the poll step of every wait, and the least credit worth a settle
   const LAZY_MAX_STEPS = 400; // main stops at 250 steps
   const LAZY_BUDGET_MS = 12500; // main's worst case for the scroll, 250 steps of 50 ms
   const LAZY_PIN_PX = 8; // a candidate that moved less than this since its last dwell is pinned
@@ -666,6 +668,14 @@
     const passId = ++lazyPassCount;
     const record = lazyRecordValid(state.lazy) ? state.lazy : null;
     const credit = new Map(watched.map((s) => [s.id, LAZY_SEED_MS]));
+    const grownAt = new Map(watched.map((s) => [s.id, performance.now()]));
+    // A trickle of elapsed time, so a row whose credit stuck images spent before its loader showed
+    // itself can fund a settle again. It cannot be spent on anything but a settle.
+    const regrow = (s) => {
+      const now = performance.now();
+      credit.set(s.id, Math.min(LAZY_SEED_MS, credit.get(s.id) + LAZY_TRICKLE * (now - grownAt.get(s.id))));
+      grownAt.set(s.id, now);
+    };
     const startY = window.scrollY;
     const deadline = performance.now() + LAZY_BUDGET_MS;
     const vh = window.innerHeight;
@@ -711,9 +721,10 @@
         if (!waiting.length || signal?.aborted) return;
         const left = t0 + LAZY_FLOOR_MS - performance.now();
         if (left <= 0) break;
-        await nap(Math.min(left, 16), signal);
+        await nap(Math.min(left, LAZY_POLL_MS), signal);
       }
-      const funded = waiting.filter((c) => credit.get(c.shape.id) > 0);
+      for (const s of watched) regrow(s);
+      const funded = waiting.filter((c) => credit.get(c.shape.id) >= LAZY_POLL_MS);
       if (!funded.length) return;
       const shapes = [...new Set(funded.map((c) => c.shape))];
       const s0 = performance.now();
@@ -727,12 +738,12 @@
           firstFill ||= performance.now();
           if (performance.now() - firstFill >= LAZY_GRACE_MS) break;
         }
-        await nap(16, signal);
+        await nap(LAZY_POLL_MS, signal);
       }
       const spent = performance.now() - s0;
       for (const s of shapes) {
         const filled = funded.some((c) => c.shape === s && !lazyPending(c));
-        if (!filled) credit.set(s.id, credit.get(s.id) - spent);
+        if (!filled) credit.set(s.id, Math.max(0, credit.get(s.id) - spent));
       }
     };
     // A dwell cut short by an abort is not recorded, so the next pass owes it again.
