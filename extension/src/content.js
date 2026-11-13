@@ -26,20 +26,13 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
-  // The lazy pass. A page that can lazy-load holds every position LAZY_DWELL_MS, so a scroll
-  // handler throttled or debounced below 50 ms runs at each one. A page with nothing that can
-  // lazy-load moves one frame per position. Past LAZY_MIN_POSITIONS positions the pass stops, and
-  // reports incomplete, as soon as the page has grown since that position (an endless feed), or
-  // once it has run LAZY_TIME_CAP_MS, which bounds the export on an enormous page that does not grow.
-  const LAZY_DWELL_MS = 50;
+  // The lazy pass scrolls every page the way the extension always has: from the top in steps of
+  // 85 % of the viewport, 50 ms at each position. A page that is 250 positions long or shorter is
+  // scrolled to its end. Past LAZY_MIN_POSITIONS the pass stops, and reports incomplete, as soon as
+  // the page has grown since that position (an endless feed), or once it has run LAZY_TIME_CAP_MS,
+  // which bounds the export on an enormous page that does not grow.
   const LAZY_MIN_POSITIONS = 250;
   const LAZY_TIME_CAP_MS = 30000;
-  // What can lazy-load: media elements, lazy-loader and scroll-reveal markers, inline backgrounds,
-  // and custom elements, whose shadow roots this scan does not enter.
-  const LAZY_SELECTOR =
-    'img, picture, iframe, video, canvas, embed, object, svg image, input[type="image" i], ' +
-    '[class*="lazy" i], .wow, [data-aos], [data-sr-id], [style*="url(" i]';
-  const LAZY_ATTR = /^data-.*(src|lazy|original|echo|bg|background|image|img|poster)/;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -128,7 +121,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    const lazy = loadLazy ? await loadLazyContent(root) : null;
+    const lazy = loadLazy ? await loadLazyContent() : null;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -408,9 +401,8 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  // Returns { complete }: false when the pass stopped before the end of the page, or with a root,
-  // before one viewport past the root's bottom.
-  async function loadLazyContent(root) {
+  // Returns { complete }: false when the pass stopped before the end of the page.
+  async function loadLazyContent() {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
     // reverting them would only make the images disappear again.
@@ -429,91 +421,31 @@
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
     const pageEnd = () => document.documentElement.scrollHeight;
-    const rootEnd = () =>
-      root
-        ? Math.min(pageEnd(), root.getBoundingClientRect().bottom + window.scrollY + window.innerHeight)
-        : pageEnd();
-    const watch = watchLazyContent();
-    // Only a page that cannot lazy-load stops at the root: one that can covers the whole page.
-    const end = () => (watch.canLazyLoad() ? pageEnd() : rootEnd());
     const start = performance.now();
     let y = 0;
     let positions = 0;
-    let heightAtMin = Infinity;
-    let complete;
-    const more = () =>
-      positions < LAZY_MIN_POSITIONS ||
-      (pageEnd() <= heightAtMin && performance.now() - start < LAZY_TIME_CAP_MS);
-    try {
-      for (;;) {
-        while (y < end() && more()) {
-          scrollToInstant(0, y);
-          const at = performance.now();
-          if (!watch.canLazyLoad()) await nextFrame();
-          if (watch.canLazyLoad()) await sleep(Math.ceil(LAZY_DWELL_MS - (performance.now() - at)));
-          y += step;
-          positions++;
-          if (positions === LAZY_MIN_POSITIONS) heightAtMin = pageEnd();
-        }
-        complete = y >= rootEnd();
-        // A frame-paced pass can outrun a loader that answers a few frames later. When the page
-        // turns out to lazy-load during the wait at the bottom, the pass carries on at the dwell.
-        const framePaced = !watch.canLazyLoad();
-        scrollToInstant(0, end());
-        await sleep(150);
-        if (!(framePaced && watch.canLazyLoad() && y < end() && more())) break;
-      }
-    } finally {
-      watch.stop();
+    let heightAtMin;
+    while (y < pageEnd()) {
+      if (
+        positions >= LAZY_MIN_POSITIONS &&
+        (pageEnd() > heightAtMin || performance.now() - start >= LAZY_TIME_CAP_MS)
+      )
+        break;
+      scrollToInstant(0, y);
+      await sleep(50);
+      y += step;
+      positions++;
+      if (positions === LAZY_MIN_POSITIONS) heightAtMin = pageEnd();
     }
+    const complete = y >= pageEnd();
+    scrollToInstant(0, pageEnd());
+    await sleep(150);
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
     await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
     await sleep(100);
     return { complete };
-  }
-
-  // Whether the page can lazy-load: the document has an element that can, the page adds or changes
-  // one, an attribute change gives an element a background image, or the page grows. Once true it
-  // stays true.
-  function watchLazyContent() {
-    const startHeight = document.documentElement.scrollHeight;
-    let found = hasLazyElement(document.documentElement);
-    const sawLazy = (records) =>
-      records.some((r) =>
-        r.type === 'attributes'
-          ? isLazyElement(r.target) || /url\(/i.test(getComputedStyle(r.target).backgroundImage)
-          : [...r.addedNodes].some(hasLazyElement),
-      );
-    const update = (records) => {
-      found ||= document.documentElement.scrollHeight > startHeight || sawLazy(records);
-      if (found) observer.disconnect();
-      return found;
-    };
-    const observer = new MutationObserver(update);
-    if (!found)
-      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-    return {
-      canLazyLoad: () => found || update(observer.takeRecords()),
-      stop: () => observer.disconnect(),
-    };
-  }
-
-  function hasLazyElement(node) {
-    if (node.nodeType !== Node.ELEMENT_NODE) return false;
-    if (isLazyElement(node) || node.querySelector(LAZY_SELECTOR)) return true;
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
-    while (walker.nextNode()) if (isLazyElement(walker.currentNode)) return true;
-    return false;
-  }
-
-  function isLazyElement(el) {
-    return (
-      el.matches(LAZY_SELECTOR) ||
-      el.localName.includes('-') ||
-      el.getAttributeNames().some((name) => LAZY_ATTR.test(name))
-    );
   }
 
   function imageSettled(img) {

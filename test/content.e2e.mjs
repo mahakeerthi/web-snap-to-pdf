@@ -620,6 +620,10 @@ async function recordedPositions(page) {
 }
 // The positions the pass held, in order (the first record is the time before it started).
 const passPositions = ({ positions }) => positions.slice(1);
+// The furthest position the scroll loop held on a page that does not grow, leaving out the jump to
+// the bottom that follows it (the one position at the page's last scroll offset).
+const loopFurthest = ({ positions, maxScroll }) =>
+  Math.max(...positions.map((p) => p.y).filter((y) => y < maxScroll));
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 // Whether every hold looks like a 50 ms dwell. The page notices each new position up to a few ms
 // late when the machine is busy, which shortens one recorded hold by as much as it lengthens the
@@ -637,136 +641,37 @@ async function lazyPass(page, tabId) {
   return { res, rec };
 }
 
-await test('lazy pass: a page with images holds each 85 %-viewport position at least 50 ms', async () => {
-  const { page, tabId } = await openTab('lazy/loader.html?loader=lodash&t=50&n=20');
-  const { res, rec } = await lazyPass(page, tabId);
-  check(res.ok && res.lazy && res.lazy.complete, 'pass reports complete', JSON.stringify(res.lazy));
-  const step = LAZY_STEP(rec.innerHeight);
-  const expected = [];
-  for (let y = step; y < rec.scrollHeight && y < rec.maxScroll; y += step) expected.push(y);
-  const seen = passPositions(rec);
-  const ys = seen.map((p) => p.y).slice(0, expected.length);
-  check(
-    JSON.stringify(ys) === JSON.stringify(expected),
-    `scroll positions are ${step} px steps from the top (${expected.length} positions)`,
-    `got ${ys.slice(0, 6).join(',')}..., expected ${expected.slice(0, 6).join(',')}...`,
-  );
-  const dwell = seen.slice(0, expected.length).map((p) => p.ms);
-  check(heldDwell(dwell), `every position held 50 ms (${holdsNote(dwell)})`);
-  const [filled, total] = await page.evaluate(() => [window.__filled(), window.__total]);
-  check(filled === total, `a scroll handler throttled to 50 ms filled every image (${filled}/${total})`);
-  await page.close();
-});
-
-await test('lazy pass: each element kind that can lazy-load keeps the 50 ms hold, other pages move one frame per position', async () => {
-  const KINDS = [
-    ['plain div', '<div>x</div>', false],
-    ['data-id and data-testid', '<div data-id="1" data-testid="a">x</div>', false],
-    ['svg path', '<svg width="10" height="10"><path d="M0 0h10v10z"/></svg>', false],
-    ['img', '<img alt="" width="10" height="10">', true],
-    ['picture', '<picture><source srcset="a.png"></picture>', true],
-    ['iframe', '<iframe width="10" height="10"></iframe>', true],
-    ['video', '<video width="10" height="10"></video>', true],
-    ['canvas', '<canvas width="10" height="10"></canvas>', true],
-    ['embed', '<embed width="10" height="10">', true],
-    ['object', '<object width="10" height="10"></object>', true],
-    ['svg image', '<svg width="10" height="10"><image href="a.png" width="10" height="10"/></svg>', true],
-    ['input type=image', '<input type="image" alt="">', true],
-    ['class lazyload', '<div class="lazyload">x</div>', true],
-    ['class containing Lazy', '<div class="is-Lazy-x">x</div>', true],
-    ['class wow', '<div class="wow fadeIn">x</div>', true],
-    ['data-aos', '<div data-aos="fade-up">x</div>', true],
-    ['data-sr-id', '<div data-sr-id="1">x</div>', true],
-    ['inline background url', '<div style="background:url(a.png)">x</div>', true],
-    ['data-src', '<div><p data-src="a.png">x</p></div>', true],
-    ['data-lazy-src', '<div><p data-lazy-src="a.png">x</p></div>', true],
-    ['data-original', '<div><p data-original="a.png">x</p></div>', true],
-    ['data-echo', '<div><p data-echo="a.png">x</p></div>', true],
-    ['data-bg', '<div><p data-bg="a.png">x</p></div>', true],
-    ['data-background-image', '<div><p data-background-image="a.png">x</p></div>', true],
-    ['data-poster', '<div><p data-poster="a.png">x</p></div>', true],
-    ['custom element', '<div><my-widget>x</my-widget></div>', true],
+await test('lazy pass: every page holds each 85 %-viewport position 50 ms, with or without images', async () => {
+  const PAGES = [
+    ['a page with images and a throttled loader', 'lazy/loader.html?loader=lodash&t=50&n=20'],
+    ['a page of text only', 'lazy/text.html?paras=150'],
   ];
-  for (const [name, html, lazy] of KINDS) {
-    const { page, tabId } = await openTab('lazy/text.html?paras=150');
-    await page.evaluate((h) => document.body.insertAdjacentHTML('afterbegin', h), html);
-    const { rec } = await lazyPass(page, tabId);
-    const holds = passPositions(rec)
-      .filter((p) => p.y < rec.maxScroll)
-      .map((p) => p.ms);
-    const m = median(holds);
-    check(
-      lazy ? m >= 48 : m < 30,
-      `${name}: ${lazy ? 'holds 50 ms' : 'one frame'} per position (median ${m.toFixed(1)} ms over ${holds.length})`,
-    );
-    await page.close();
-  }
-});
-
-await test('lazy pass: a text-only page moves one frame per position until the page shows it can lazy-load', async () => {
-  // Each trigger runs once, two thirds of the way down. From there on every position is held 50 ms.
-  const TRIGGERS = [
-    'adds an image',
-    'sets data-src on a paragraph',
-    'adds a class that gives a background image',
-    'grows',
-  ];
-  for (const name of TRIGGERS) {
-    const { page, tabId } = await openTab('lazy/text.html');
-    await page.evaluate((name) => {
-      const triggers = {
-        'adds an image': () =>
-          document.body.insertAdjacentHTML('beforeend', '<img alt="" width="10" height="10">'),
-        'sets data-src on a paragraph': () => document.querySelector('p').setAttribute('data-src', 'a.png'),
-        'adds a class that gives a background image': () => {
-          const style = document.createElement('style');
-          style.textContent = '.shown { background-image: url("tiny.png"); }';
-          document.head.appendChild(style);
-          document.querySelector('p').classList.add('shown');
-        },
-        grows: () => document.body.insertAdjacentHTML('beforeend', '<p>MORE TEXT</p>'.repeat(20)),
-      };
-      const at = (document.documentElement.scrollHeight * 2) / 3;
-      addEventListener('scroll', function once() {
-        if (scrollY < at) return;
-        removeEventListener('scroll', once);
-        triggers[name]();
-      });
-    }, name);
+  for (const [name, file] of PAGES) {
+    const { page, tabId } = await openTab(file);
     const { res, rec } = await lazyPass(page, tabId);
     check(
       res.ok && res.lazy && res.lazy.complete,
       `${name}: pass reports complete`,
       JSON.stringify(res.lazy),
     );
-    const seen = passPositions(rec);
-    const at = (rec.scrollHeight * 2) / 3;
     const step = LAZY_STEP(rec.innerHeight);
-    const before = seen.filter((p) => p.y < at - step).map((p) => p.ms);
-    const after = seen.filter((p) => p.y > at + step && p.y < rec.maxScroll).map((p) => p.ms);
+    const expected = [];
+    for (let y = step; y < rec.scrollHeight && y < rec.maxScroll; y += step) expected.push(y);
+    const seen = passPositions(rec);
+    const ys = seen.map((p) => p.y).slice(0, expected.length);
     check(
-      median(before) < 30,
-      `${name}: before, one frame per position (median ${median(before).toFixed(1)} ms)`,
+      JSON.stringify(ys) === JSON.stringify(expected),
+      `${name}: scroll positions are ${step} px steps from the top (${expected.length} positions)`,
+      `got ${ys.slice(0, 6).join(',')}..., expected ${expected.slice(0, 6).join(',')}...`,
     );
-    check(heldDwell(after), `${name}: after, every position held 50 ms (${holdsNote(after)})`);
+    const dwell = seen.slice(0, expected.length).map((p) => p.ms);
+    check(heldDwell(dwell), `${name}: every position held 50 ms (${holdsNote(dwell)})`);
+    if (file.startsWith('lazy/loader.html')) {
+      const [filled, total] = await page.evaluate(() => [window.__filled(), window.__total]);
+      check(filled === total, `a scroll handler throttled to 50 ms filled every image (${filled}/${total})`);
+    }
     await page.close();
   }
-  // A pass that holds every position 50 ms, then waits 250 ms at the bottom and after scrolling back.
-  const { page, tabId } = await openTab('lazy/text.html');
-  const { rec } = await lazyPass(page, tabId);
-  const positions = Math.ceil(rec.scrollHeight / LAZY_STEP(rec.innerHeight));
-  const heldFloor = positions * 50 + 250;
-  const times = [];
-  for (let i = 0; i < 3; i++) {
-    const r = await send(tabId, { type: 'ps:prepare', prep: 'none', loadLazy: true });
-    await send(tabId, { type: 'ps:restore' });
-    times.push(r.ms);
-  }
-  check(
-    median(times) <= heldFloor * 0.6,
-    `prepare takes at most 60% of the ${heldFloor} ms a 50 ms hold needs (${positions} positions): ${times.map(Math.round).join(' / ')} ms`,
-  );
-  await page.close();
 });
 
 await test('lazy images past 170,000 px reach the PDF, without a warning', async () => {
@@ -806,11 +711,86 @@ await test('endless feed: past 250 positions the pass stops once the page grows,
   await page.close();
 });
 
-await test('a 500,000 px text page that does not grow is scrolled to the end, without a warning', async () => {
-  const { page, tabId } = await openTab('lazy/text.html?paras=7000');
+await test('image feed that stops growing before position 250 on a page longer than 250 positions: complete, no warning, every image', async () => {
+  const { page, tabId } = await openTab('lazy/scroll.html?mode=feed&img=1&init=25&batches=15&lat=0');
+  await recordScrollPositions(page);
+  await page.evaluate(() => {
+    window.__lastGrowthY = 0;
+    new MutationObserver(() => {
+      window.__lastGrowthY = scrollY;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
   const r = await generateLazy(tabId);
-  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  const rec = await recordedPositions(page);
+  const step = LAZY_STEP(rec.innerHeight);
+  const lastGrowthY = await page.evaluate(() => window.__lastGrowthY);
+  check(
+    lastGrowthY > 0 && lastGrowthY <= 249 * step,
+    `premise: the last batch arrived before position 250 (at ${lastGrowthY} px, position 250 at ${249 * step} px)`,
+  );
+  check(
+    rec.scrollHeight > 250 * step,
+    `premise: the page is longer than 250 positions (${rec.scrollHeight} px, 250 positions ${250 * step} px)`,
+  );
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+    return page.close();
+  }
   check(!r.warning, `no warning (${Math.round(r.ms)} ms)`, String(r.warning));
+  const reached = loopFurthest(rec);
+  check(
+    reached >= rec.maxScroll - step,
+    `the scroll loop reached the end of the page (last position ${reached} px, end ${rec.maxScroll} px)`,
+  );
+  const { images } = lazyPdf(r, 'content-lazy-feed-finite.pdf');
+  const loaded = await page.evaluate(() => window.__filled());
+  check(
+    images === loaded && loaded === 175,
+    `every image the page loaded is in the PDF (${images} of ${loaded}, 175 expected)`,
+  );
+  await page.close();
+});
+
+await test('image feed that keeps growing past position 250: the pass stops there, warns, and every image the page loaded is in the PDF', async () => {
+  const { page, tabId } = await openTab('lazy/scroll.html?mode=feed&img=1&batches=30&lat=0');
+  await recordScrollPositions(page);
+  const r = await generateLazy(tabId);
+  const rec = await recordedPositions(page);
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+    return page.close();
+  }
+  check(r.warning === lazyWarning(), `export carries the lazy-load warning (${r.warning})`);
+  const step = LAZY_STEP(rec.innerHeight);
+  const batch = 10000;
+  const furthest = Math.max(...rec.positions.map((p) => p.y));
+  check(
+    furthest >= 250 * step && furthest <= 250 * step + 3 * batch,
+    `the pass covered 250 positions and stopped within the next batches (furthest ${furthest} px, 250 positions ${250 * step} px, ${Math.round(r.ms)} ms)`,
+  );
+  const { images } = lazyPdf(r, 'content-lazy-feed-growing.pdf');
+  const loaded = await page.evaluate(() => window.__filled());
+  check(
+    images === loaded && loaded > (250 * step) / 1000,
+    `every image the page loaded is in the PDF (${images} of ${loaded})`,
+  );
+  await page.close();
+});
+
+await test('a 500,000 px text page that does not grow: the pass goes past 250 positions, stops at the 30 s cap and warns', async () => {
+  const { page, tabId } = await openTab('lazy/text.html?paras=7000');
+  await recordScrollPositions(page);
+  const r = await generateLazy(tabId);
+  const rec = await recordedPositions(page);
+  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  check(r.warning === lazyWarning(), `export carries the lazy-load warning (${r.warning})`);
+  const step = LAZY_STEP(rec.innerHeight);
+  const reached = loopFurthest(rec);
+  check(
+    reached > 250 * step && reached < rec.maxScroll - step,
+    `the pass went past 250 positions and stopped short of the end (last position ${reached} px, 250 positions ${250 * step} px, end ${rec.maxScroll} px)`,
+  );
+  check(r.ms >= 30000 && r.ms < 40000, `the cap ended the export (${Math.round(r.ms)} ms, cap 30000 ms)`);
   await page.close();
 });
 
@@ -827,59 +807,38 @@ await test('article export of a page with images: every image loads and the pass
   check(images === 20, `all 20 article images are in the PDF (${images}, ${Math.round(r.ms)} ms)`);
   check(text.includes('BLOCK-19-MARK') && text.includes('ARTICLE-END-MARK'), 'PDF holds the whole article');
   check(!r.warning, 'no warning', String(r.warning));
-  const furthest = Math.max(...rec.positions.map((p) => p.y));
+  const step = LAZY_STEP(rec.innerHeight);
+  const reached = loopFurthest(rec);
   check(
-    furthest >= rec.maxScroll,
-    `the pass reached the end of the page, past the 3,000 px footer (${furthest} px, end ${rec.maxScroll} px)`,
+    reached >= rec.maxScroll - step,
+    `the scroll loop reached the end of the page, past the 3,000 px footer (last position ${reached} px, end ${rec.maxScroll} px)`,
   );
   await page.close();
 });
 
-await test('article export of a text-only page: the pass stops one viewport past the article, before the feed after it', async () => {
-  const { page, tabId } = await openTab('lazy/loader.html?root=article&top=3000&n=0&feed=1');
-  const stop = await page.evaluate(() => {
-    const r = document.getElementById('root').getBoundingClientRect();
-    return Math.ceil(r.bottom + scrollY + innerHeight);
-  });
-  await recordScrollPositions(page);
-  const r = await generateLazy(tabId, 'article');
-  const { positions } = await recordedPositions(page);
-  if (!r.base64) {
-    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
-    return page.close();
+await test('element export of a list that grows near the end of the page loads every batch, with images or text only', async () => {
+  for (const [name, query] of [
+    ['an image per item', 'mode=rootfeed'],
+    ['text only, 3,000 px footer', 'mode=rootfeed&img=0&foot=3000'],
+  ]) {
+    const { page, tabId } = await openTab(`lazy/scroll.html?${query}`);
+    await pickElement(page, tabId, '#root', { widenTo: 'section' });
+    const r = await generateLazy(tabId, 'element');
+    await closePreviewOverlay(page);
+    if (!r.base64) {
+      check(false, `${name}: PDF generated`, JSON.stringify({ error: r.error }));
+      await page.close();
+      continue;
+    }
+    const { text } = lazyPdf(r, 'content-lazy-rootfeed.pdf');
+    const items = (text.match(/FEED-\d+-MARK/g) || []).length;
+    check(
+      items === 60,
+      `${name}: all 60 list items (10, then 5 batches of 10) are in the PDF (${items}, ${Math.round(r.ms)} ms)`,
+    );
+    check(!r.warning, `${name}: no warning`, String(r.warning));
+    await page.close();
   }
-  const { text } = lazyPdf(r, 'content-lazy-article-text.pdf');
-  check(
-    text.includes('ARTICLE-START-MARK') && text.includes('ARTICLE-END-MARK'),
-    'PDF holds the whole article',
-  );
-  check(!text.includes('FEED-'), 'PDF holds no feed item');
-  check(!r.warning, 'no warning', String(r.warning));
-  const furthest = Math.max(...positions.map((p) => p.y));
-  check(
-    furthest <= stop,
-    `the pass went no further than one viewport past the article (${furthest} px, stop ${stop} px, ${Math.round(r.ms)} ms)`,
-  );
-  await page.close();
-});
-
-await test('element export of a list that grows near the end of the page loads every batch', async () => {
-  const { page, tabId } = await openTab('lazy/scroll.html?mode=rootfeed');
-  await pickElement(page, tabId, '#root', { widenTo: 'section' });
-  const r = await generateLazy(tabId, 'element');
-  await closePreviewOverlay(page);
-  if (!r.base64) {
-    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
-    return page.close();
-  }
-  const { text } = lazyPdf(r, 'content-lazy-rootfeed.pdf');
-  const items = (text.match(/FEED-\d+-MARK/g) || []).length;
-  check(
-    items === 60,
-    `all 60 list items (10, then 5 batches of 10) are in the PDF (${items}, ${Math.round(r.ms)} ms)`,
-  );
-  check(!r.warning, 'no warning', String(r.warning));
-  await page.close();
 });
 
 await test('text feed that answers 100 ms after its end comes near: every batch reaches the PDF', async () => {

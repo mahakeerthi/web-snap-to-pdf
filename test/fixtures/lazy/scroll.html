@@ -25,9 +25,10 @@
   //   mode=feed      a text feed: init items, then batches of 10 appended lat ms after a sentinel
   //                  comes within margin px of the viewport, up to batches times. img=1 puts an img
   //                  in every item.
-  //   mode=rootfeed  a 1,000 px header, a section#root list of init items with images, a footer of
-  //                  foot px, and an infinite-scroll handler that appends 10 items to the list when
-  //                  the window is within 300 px of the document end, up to batches times.
+  //   mode=rootfeed  a 1,000 px header, a section#root list of init items with images (img=0: text
+  //                  only), a footer of foot px, and an infinite-scroll handler that appends 10 items
+  //                  to the list when the window is within 300 px of the document end, up to batches
+  //                  times.
   //   mode=reveal    n sections of gap px whose text is transparent until a throttled scroll handler
   //                  (t ms) adds the class "in" to the visible ones, as scroll-reveal libraries do.
   // window.__filled() counts filled backgrounds, feed items or revealed sections.
@@ -120,7 +121,7 @@
     const footer = document.createElement('footer'); footer.style.height = num('foot', 2000) + 'px'; footer.textContent = 'FOOTER';
     document.body.append(header, root, footer);
     let n = 0, batches = 0;
-    const add = (count) => { for (let i = 0; i < count; i++) root.appendChild(feedItem(n++, true)); };
+    const add = (count) => { for (let i = 0; i < count; i++) root.appendChild(feedItem(n++, q.get('img') !== '0')); };
     add(num('init', 10));
     addEventListener('scroll', () => {
       if (batches >= BATCHES) return;
