@@ -63,6 +63,8 @@ const ROWS = [
   { id: 'no-loader-dead100', url: L + 'loader=none&n=2&top=2000&dead=100', count: null, loader: false, from: 'r2 noloader-broken100' },
   { id: 'no-loader-icons', url: L + 'loader=none&gap=1200&icons=60', count: null, loader: false, from: 'r2 icons60' },
   { id: 'endless', url: L + 'n=0&feed=1', count: 'feed', text: false, from: 'PR lazy-endless.html' },
+  { id: 'endless-img', url: L + 'loader=io&n=5&feed=1', count: 'feed', text: false, from: 'review: endless feed after images' },
+  { id: 'textfeed-img-320', url: S + 'mode=feed&img=1&batches=30&lat=0', count: 'feed', text: false, from: 'review: finite 320,000 px feed that grows' },
   { id: 'article-feed', url: L + 'root=article&n=0&feed=1', prep: 'article', count: null, loader: false, from: 'PR lazy-article-feed.html' },
   { id: 'article-lodash50', url: L + 'root=article&top=3000&loader=lodash&t=50', prep: 'article', count: 'pdf', from: 'r3 opus article root' },
   { id: 'article-io', url: L + 'root=article&top=3000&loader=io', prep: 'article', count: 'pdf', from: 'r3 opus article root' },
