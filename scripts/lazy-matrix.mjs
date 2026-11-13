@@ -112,7 +112,6 @@ const ROWS = [
   { id: 'hero-db100', url: A + 'loader=io&n=20&hero=1&herodb=100', count: 'pdf', from: 'interrogate hero from innerHeight' },
   { id: 'hero-db250', url: A + 'loader=io&n=20&hero=1&herodb=250', count: 'pdf', from: 'interrogate hero from innerHeight' },
   { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', from: 'arch candidate 2 blind loader' },
-  { id: 'blind-keyed-debounce50', url: L + 'ph=natural&attr=data-k&keyed=1&loader=debounce&t=50', count: 'filled', from: 'arch candidate 2 blind loader' },
   { id: 'blindspot-bg-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
   { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
 ];

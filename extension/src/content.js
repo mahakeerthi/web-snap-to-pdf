@@ -465,20 +465,18 @@
   // element the page adds or changes. Once true it stays true.
   function watchLazyContent() {
     let found = hasLazyElement(document.documentElement);
-    const changes = [];
-    const observer = new MutationObserver((records) => changes.push(...records));
+    const sawLazy = (records) =>
+      records.some((r) =>
+        r.type === 'attributes' ? isLazyElement(r.target) : [...r.addedNodes].some(hasLazyElement),
+      );
+    const observer = new MutationObserver((records) => {
+      found ||= sawLazy(records);
+    });
     if (!found)
       observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
     return {
       canLazyLoad() {
-        if (found) return true;
-        changes.push(...observer.takeRecords());
-        found = changes
-          .splice(0)
-          .some((r) =>
-            r.type === 'attributes' ? isLazyElement(r.target) : [...r.addedNodes].some(hasLazyElement),
-          );
-        if (found) observer.disconnect();
+        found ||= sawLazy(observer.takeRecords());
         return found;
       },
       stop: () => observer.disconnect(),

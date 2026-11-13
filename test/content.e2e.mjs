@@ -722,7 +722,13 @@ await test('endless feed: the lazy pass stops at its budget and the export warns
 
 await test('article export: lazy images below a 3,000 px header load, and the pass stops before the feed after it', async () => {
   const { page, tabId } = await openTab('lazy/loader.html?root=article&top=3000&loader=io&n=20&feed=1');
+  const stop = await page.evaluate(() => {
+    const r = document.getElementById('root').getBoundingClientRect();
+    return Math.ceil(r.bottom + scrollY + innerHeight);
+  });
+  await recordScrollPositions(page);
   const r = await generateLazy(tabId, 'article');
+  const { positions } = await recordedPositions(page);
   if (!r.base64) {
     check(false, 'PDF generated', JSON.stringify({ error: r.error }));
     return page.close();
@@ -732,7 +738,11 @@ await test('article export: lazy images below a 3,000 px header load, and the pa
   check(text.includes('BLOCK-19-MARK') && text.includes('ARTICLE-END-MARK'), 'PDF holds the whole article');
   check(!text.includes('FEED-'), 'PDF holds no feed item');
   check(!r.warning, 'no warning: the pass ended one viewport past the article', String(r.warning));
-  check(r.ms < 15000, `the pass did not run on into the feed (${Math.round(r.ms)} ms)`);
+  const furthest = Math.max(...positions.map((p) => p.y));
+  check(
+    furthest <= stop,
+    `the pass went no further than one viewport past the article (${furthest} px, stop ${stop} px)`,
+  );
   await page.close();
 });
 
