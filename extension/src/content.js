@@ -30,8 +30,9 @@
   // so a scroll handler throttled or debounced below 50 ms runs at each one. A page with nothing
   // that can lazy-load moves one frame per position. The pass stops at the end, or, once it has
   // held LAZY_MIN_POSITIONS positions (main's old cap), when it has spent LAZY_BUDGET_MS, and then
-  // reports incomplete. A position costs the budget at least one dwell, so a frame-paced endless
-  // feed stops after the distance a lazy one covers instead of three times further.
+  // reports incomplete. Once the page has grown, a position costs the budget at least one dwell,
+  // so a frame-paced endless feed stops after the distance a lazy one covers instead of three
+  // times further, while a long page that does not grow gets the whole budget at frame pace.
   const LAZY_DWELL_MS = 50;
   const LAZY_BUDGET_MS = 30000;
   const LAZY_MIN_POSITIONS = 250;
@@ -434,7 +435,11 @@
       return Math.min(pageEnd, root.getBoundingClientRect().bottom + window.scrollY + window.innerHeight);
     };
     const start = performance.now();
-    const spent = (positions) => Math.max(performance.now() - start, positions * LAZY_DWELL_MS);
+    const startHeight = document.documentElement.scrollHeight;
+    const spent = (positions) =>
+      document.documentElement.scrollHeight > startHeight
+        ? Math.max(performance.now() - start, positions * LAZY_DWELL_MS)
+        : performance.now() - start;
     const watch = watchLazyContent();
     let y = 0;
     let positions = 0;

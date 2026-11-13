@@ -44,13 +44,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Row fields: count is the rule (a) metric (pdf: 300 x 120 images in the PDF, filled: elements the
 // page's loader filled, feed: FEED-n-MARK lines in the PDF text); loader: false means any head
 // warning is false; faster: the share head must cut from base's time; text: false skips rule (d);
-// zoom: browser zoom for the row; known: a documented blind spot, reported but never failed.
+// zoom: browser zoom for the row; known: a documented blind spot whose silent loss (rule a) is
+// reported but not failed; every other rule still fails it.
 const L = 'lazy/loader.html?';
 const A = 'lazy/adv.html?';
 // prettier-ignore
 const ROWS = [
   { id: 'text-117', url: 'lazy/text.html', count: null, loader: false, faster: 0.4, from: 'p4 plain page' },
   { id: 'text-noise', url: 'lazy/text.html?noise=1', count: null, loader: false, from: 'p4 noise page' },
+  { id: 'text-long', url: 'lazy/text.html?paras=7000', count: null, loader: false, from: 'build: 500,000 px page that does not grow' },
   { id: 'lazy-long', url: L + 'loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1', count: 'pdf', from: 'PR lazy-long.html' },
   { id: 'stuck-100', url: L + 'loader=none&n=0&stuck=100', count: null, loader: false, from: 'PR lazy-stuck.html' },
   { id: 'no-loader-dead100', url: L + 'loader=none&n=2&top=2000&dead=100', count: null, loader: false, from: 'r2 noloader-broken100' },
@@ -317,7 +319,9 @@ function report(rows, results, sides) {
     const warned = (s) =>
       `${side(s).filter((r) => r.warning).length}/${runs.filter((r) => r.side === s).length}`;
     const ms = (s) => (side(s).length ? secs(side(s).map((r) => r.ms)) : '-');
-    const fails = judge(row, runs);
+    const all = judge(row, runs);
+    const excused = row.known ? all.filter((f) => f.startsWith('(a)')) : [];
+    const fails = all.filter((f) => !excused.includes(f));
     return {
       row: row.id,
       metric: !row.count
@@ -331,12 +335,12 @@ function report(rows, results, sides) {
       'base time': ms('base'),
       'head time': ms('head'),
       pages: `${stat(side('base').map((r) => r.pages))} ${stat(side('head').map((r) => r.pages))}`,
-      result: !fails.length ? 'pass' : row.known ? 'known' : 'FAIL',
-      known: !!row.known,
+      result: fails.length ? 'FAIL' : excused.length ? 'known' : 'pass',
       fails,
+      excused,
     };
   });
-  const cols = Object.keys(table[0]).filter((c) => c !== 'fails' && c !== 'known');
+  const cols = Object.keys(table[0]).filter((c) => c !== 'fails' && c !== 'excused');
   const width = Object.fromEntries(
     cols.map((c) => [c, Math.max(c.length, ...table.map((t) => t[c].length))]),
   );
@@ -344,9 +348,9 @@ function report(rows, results, sides) {
   console.log(`\nbase: ${sides.base.label}\nhead: ${sides.head.label}\n`);
   console.log(line(Object.fromEntries(cols.map((c) => [c, c]))));
   for (const t of table) console.log(line(t));
-  const failed = table.filter((t) => t.fails.length && !t.known);
-  const known = table.filter((t) => t.fails.length && t.known);
-  for (const t of known) for (const f of t.fails) console.log(`KNOWN ${t.row}: ${f}`);
+  const failed = table.filter((t) => t.fails.length);
+  const known = table.filter((t) => !t.fails.length && t.excused.length);
+  for (const t of known) for (const f of t.excused) console.log(`KNOWN ${t.row}: ${f}`);
   for (const t of failed) for (const f of t.fails) console.log(`FAIL ${t.row}: ${f}`);
   console.log(
     `\n${table.length - failed.length - known.length} rows passed, ${known.length} known blind spots, ${failed.length} failed`,

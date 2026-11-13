@@ -720,6 +720,14 @@ await test('endless feed: the lazy pass stops at its budget and the export warns
   await page.close();
 });
 
+await test('a 500,000 px text page that does not grow is scrolled to the end, without a warning', async () => {
+  const { page, tabId } = await openTab('lazy/text.html?paras=7000');
+  const r = await generateLazy(tabId);
+  check(!!r.base64, 'PDF generated', JSON.stringify({ error: r.error }));
+  check(!r.warning, `no warning (${Math.round(r.ms)} ms)`, String(r.warning));
+  await page.close();
+});
+
 await test('article export: lazy images below a 3,000 px header load, and the pass stops before the feed after it', async () => {
   const { page, tabId } = await openTab('lazy/loader.html?root=article&top=3000&loader=io&n=20&feed=1');
   const stop = await page.evaluate(() => {

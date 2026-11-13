@@ -66,9 +66,10 @@ in reverse order. Styles are applied with `!important`.
     element the page adds or changes during it (a `MutationObserver`). Once true it stays true.
   - Any other page moves one animation frame per position.
   - The scroll stops at the end, or, once it has held 250 positions, when it has spent its 30 s
-    budget. Each position costs the budget at least 50 ms, so a frame-paced page stops after the
-    same 600 positions. 30 s is about twice what a 200,000 px page that can lazy-load needs
-    (about 294 positions at about 51 ms each).
+    budget. Once the page has grown since the pass started, each position costs the budget at
+    least 50 ms, so a frame-paced endless feed stops after 600 positions. A page that does not grow
+    gets the whole budget, so a 500,000 px text page completes. 30 s is about twice what a
+    200,000 px page that can lazy-load needs (about 294 positions at about 51 ms each).
   - `ps:prepare` replies `lazy: { complete, reason }`: `reason` is `'end'`, or `'budget'` with
     `complete: false`. `generate` then adds the `status_lazyIncomplete` warning to its reply, which
     the popup and the preview overlay show. Shortcut and context-menu exports drop it.
