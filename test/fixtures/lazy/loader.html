@@ -19,13 +19,14 @@
   // Query parameters are documented in the row table of scripts/lazy-matrix.mjs.
   const q = new URLSearchParams(location.search);
   const num = (k, d) => Number(q.get(k) ?? d);
-  const LOADERS = (q.get('loader') || 'io').split(',');
+  const LOADER_NAMES = ['io', 'lodash', 'echo', 'debounce', 'raw', 'native', 'none', 'cachedvh', 'velocity'];
+  const LOADERS = (q.get('loader') || 'io').split(',').map((l) => (LOADER_NAMES.includes(l) ? l : 'none'));
   const T = num('t', 100);
   const THR = num('thr', 0);
   const AHEAD = num('ahead', 0);
   const TARGET = q.get('target') || 'img';
   const PH = q.get('ph') || 'none';
-  const ATTR = q.get('attr') || 'data-echo';
+  const ATTR = ['data-src', 'data-bg', 'data-k'].includes(q.get('attr')) ? q.get('attr') : 'data-echo';
   const N = num('n', 60);
   const GAP = num('gap', 1500);
   const EVERY = num('every', 1);

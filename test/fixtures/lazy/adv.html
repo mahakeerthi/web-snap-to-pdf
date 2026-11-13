@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Tall viewport adversary</title>
+<title>Viewport-reactive galleries</title>
 <style>
   body { margin: 0; font-family: sans-serif; }
   .block { box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
@@ -15,7 +15,8 @@
 </head>
 <body>
 <script>
-  // Adversary fixture for the tall-viewport lazy pass.
+  // Galleries that react to the viewport: orientation media queries, re-render on resize,
+  // vh-sized blocks and a hero sized from innerHeight.
   //   loader   io | lodash (leading + trailing throttle, t ms)    t (100)
   //   n (60)   blocks, each with one 300 x 120 lazy image (no placeholder)
   //   attr     the attribute holding the real URL (data-lazy, which the pre-pass does not rescue;
@@ -37,11 +38,11 @@
   const T = num('t', 100);
   const N = num('n', 60);
   const GAP = num('gap', 1500);
-  const VH = q.get('vh');
+  const VH = q.has('vh') ? num('vh', 100) : null;
   const MODE = q.get('mode') || 'none';
   const HERO = num('hero', 0);
   const HERODB = num('herodb', -1);
-  const ATTR = q.get('attr') || 'data-lazy';
+  const ATTR = q.get('attr') === 'data-src' ? 'data-src' : 'data-lazy';
   // mqs=plain spells the query (orientation: portrait), which print media also evaluates (portrait paper).
   const MQ = q.get('mqs') === 'plain' ? '(orientation: portrait)' : 'screen and (orientation: portrait)';
   window.__boots = Number(sessionStorage.getItem('boots:' + location.search) || 0) + 1;
