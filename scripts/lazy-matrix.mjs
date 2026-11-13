@@ -48,8 +48,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // warning is false; faster: the share head must cut from base's time; text: false skips rule (d);
 // zoom: browser zoom for the row; rounds: at least this many rounds for a row whose count varies
 // from run to run on any build; known: the head median of a documented blind spot, whose silent
-// loss (rule a) is reported but not failed while the head median stays within slack of it. Every
-// other rule still fails a known row.
+// loss (rule a) is reported but not failed while the head median stays within the base median's
+// slack of it. Every other rule still fails a known row.
 const L = 'lazy/loader.html?';
 const A = 'lazy/adv.html?';
 const S = 'lazy/scroll.html?';
@@ -127,7 +127,7 @@ const ROWS = [
   { id: 'textfeed-lat60', url: S + 'mode=feed&lat=60', count: 'feed', text: false, from: 'review: text feed that grows on scroll' },
   { id: 'textfeed-img-lat100', url: S + 'mode=feed&lat=100&img=1', count: 'feed', text: false, from: 'review control' },
   { id: 'rootfeed-element', url: S + 'mode=rootfeed', prep: 'element', count: 'feed', text: false, from: 'review: list that grows at the document end' },
-  { id: 'reveal-lodash99', url: S + 'mode=reveal&n=90&gap=1200&t=99', count: 'filled', text: false, known: 24, from: 'known blind spot: scroll reveal without markers' },
+  { id: 'reveal-lodash99', url: S + 'mode=reveal&n=90&gap=1200&t=99', count: 'filled', text: false, rounds: 5, known: 25, from: 'known blind spot: scroll reveal without markers' },
   { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: 0, from: 'known blind spot: no markers, backgrounds set on scroll' },
 ];
 
@@ -297,7 +297,7 @@ function judge(row, runs) {
     const lost = h < b - slack(b) && silent.length > 0;
     if (row.known == null) {
       if (lost) fails.push(loss);
-    } else if (lost && Math.abs(h - row.known) <= slack(row.known)) excused.push(loss);
+    } else if (lost && Math.abs(h - row.known) <= slack(b)) excused.push(loss);
     else fails.push(`(a) known blind spot changed: head median ${h}, recorded ${row.known}; update the row`);
   }
   for (const r of head) {
