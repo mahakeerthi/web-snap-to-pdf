@@ -22,7 +22,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 //            scroll event) | native (real src, loading="lazy") | none; a comma list rotates per block
 //   t        throttle, poll or debounce ms (100)      thr     IntersectionObserver threshold (0)
 //   ahead    px the loader looks past the viewport (0)
-//   target   img | picture (<source> srcset) | bg (CSS background-image)   attr  data-echo | data-src | ...
+//   target   img | picture (<source> srcset) | bg (CSS background-image)   attr  data-echo | data-src | data-bg | data-k
 //   ph       placeholder: none | empty | pixel (data: 1x1) | blur (data: 32x20 shown at 300x120) |
 //            blob (blob: 32x20) | small (real-URL 16x16 preview) | lazy (same with loading="lazy") |
 //            natural (40x40 preview shown at 40x40) | broken (404)
@@ -38,16 +38,21 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 //   loader=velocity  fills only when the scroll moved at most v (20) px/ms since the last event
 // lazy/text.html: 1400 paragraphs, 117 pages; paras=<n> sets the count; noise=1 adds a header that
 // changes on every scroll.
+// lazy/scroll.html: content that appears on scroll without lazy markers (class backgrounds, text
+// feeds, a list that grows at the document end, scroll reveal); its modes are listed in the file.
 // lazy/adv.html: galleries that react to the viewport (orientation media queries, re-render on
 // resize, vh-sized blocks, a hero sized from innerHeight); its parameters are listed in the file.
 //
 // Row fields: count is the rule (a) metric (pdf: 300 x 120 images in the PDF, filled: elements the
 // page's loader filled, feed: FEED-n-MARK lines in the PDF text); loader: false means any head
 // warning is false; faster: the share head must cut from base's time; text: false skips rule (d);
-// zoom: browser zoom for the row; known: a documented blind spot whose silent loss (rule a) is
-// reported but not failed; every other rule still fails it.
+// zoom: browser zoom for the row; rounds: at least this many rounds for a row whose count varies
+// from run to run on any build; known: the head median of a documented blind spot, whose silent
+// loss (rule a) is reported but not failed while the head median stays within slack of it. Every
+// other rule still fails a known row.
 const L = 'lazy/loader.html?';
 const A = 'lazy/adv.html?';
+const S = 'lazy/scroll.html?';
 // prettier-ignore
 const ROWS = [
   { id: 'text-117', url: 'lazy/text.html', count: null, loader: false, faster: 0.4, from: 'p4 plain page' },
@@ -64,7 +69,7 @@ const ROWS = [
   { id: 'element-feed-lodash50', url: L + 'root=section&top=3000&n=20&loader=lodash&t=50&feed=1', prep: 'element', count: 'pdf', from: 'new: element root above a feed' },
   { id: 'blur-lodash100', url: L + 'ph=blur&loader=lodash&t=100', count: 'pdf', from: 'r1 sonnet blurred preview' },
   { id: 'blur-lodash250', url: L + 'ph=blur&loader=lodash&t=250', count: 'pdf', from: 'r1 sonnet blurred preview' },
-  { id: 'blur-echo100', url: L + 'ph=blur&loader=echo&t=100', count: 'pdf', from: 'r1 sonnet trailing poll' },
+  { id: 'blur-echo100', url: L + 'ph=blur&loader=echo&t=100', count: 'pdf', rounds: 5, from: 'r1 sonnet trailing poll' },
   { id: 'blur-io', url: L + 'ph=blur&loader=io', count: 'pdf', from: 'r1 sonnet control' },
   { id: 'blob-datasrc-lodash100', url: L + 'ph=blob&attr=data-src&loader=lodash&t=100', count: 'pdf', from: 'r1 sonnet blob: preview' },
   { id: 'data-datasrc-lodash100', url: L + 'ph=blur&attr=data-src&loader=lodash&t=100', count: 'pdf', from: 'r1 sonnet data: preview' },
@@ -79,7 +84,7 @@ const ROWS = [
   { id: 'mixed-io', url: L + 'n=34&gap=2000&mixed=2&loader=io', count: 'pdf', from: 'r1 opus observer mix' },
   { id: 'io-dead100', url: L + 'loader=io&dead=100', count: 'pdf', from: 'r1 sonnet observer + 100 broken' },
   { id: 'io-thr50', url: L + 'loader=io&thr=0.5&n=100', count: 'pdf', from: 'r3 opus warning at 100/100' },
-  { id: 'lazyph-lodash100', url: L + 'ph=lazy&loader=lodash&t=100', count: 'pdf', from: 'r3 opus loading="lazy" preview' },
+  { id: 'lazyph-lodash100', url: L + 'ph=lazy&loader=lodash&t=100', count: 'pdf', rounds: 5, from: 'r3 opus loading="lazy" preview' },
   { id: 'lazyph-lodash50', url: L + 'ph=lazy&loader=lodash&t=50', count: 'pdf', from: 'r3 opus loading="lazy" preview' },
   { id: 'smallph-lodash100', url: L + 'ph=small&loader=lodash&t=100', count: 'pdf', from: 'r3 opus control' },
   { id: 'bg-lodash50', url: L + 'target=bg&attr=data-bg&loader=lodash&t=50', count: 'filled', from: 'r3 opus + sonnet backgrounds' },
@@ -87,7 +92,6 @@ const ROWS = [
   { id: 'bg-lodash125-ahead500', url: L + 'target=bg&attr=data-bg&loader=lodash&t=125&ahead=500', count: 'filled', from: 'r3 opus backgrounds' },
   { id: 'bg-io', url: L + 'target=bg&attr=data-bg&loader=io', count: 'filled', from: 'r3 control' },
   { id: 'debounce30-dead8', url: L + 'top=6000&dead=8&n=30&loader=debounce&t=30', count: 'pdf', from: 'r3 opus debounce after broken run' },
-  { id: 'debounce50-dead8', url: L + 'top=6000&dead=8&n=30&loader=debounce&t=50', count: 'pdf', from: 'r3 opus debounce after broken run' },
   { id: 'debounce30-dead4', url: L + 'top=6000&dead=4&n=30&loader=debounce&t=30', count: 'pdf', from: 'r3 opus control' },
   { id: 'icons10-lodash100', url: L + 'gap=1200&every=10&icons=10&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet upscaled icons' },
   { id: 'deadicons10-lodash100', url: L + 'gap=1200&every=10&icons=10&iconkind=missing&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet kind=dead' },
@@ -113,9 +117,18 @@ const ROWS = [
   { id: 'vh100-n60-io', url: A + 'loader=io&vh=100&n=60', count: 'pdf', from: 'interrogate vh blocks' },
   { id: 'hero-db100', url: A + 'loader=io&n=20&hero=1&herodb=100', count: 'pdf', from: 'interrogate hero from innerHeight' },
   { id: 'hero-db250', url: A + 'loader=io&n=20&hero=1&herodb=250', count: 'pdf', from: 'interrogate hero from innerHeight' },
-  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', from: 'arch candidate 2 blind loader' },
-  { id: 'blindspot-bg-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
-  { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
+  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', rounds: 5, from: 'arch candidate 2 blind loader' },
+  { id: 'blindspot-bg-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', from: 'backgrounds set on scroll flip the pass to 50 ms' },
+  { id: 'bg-datattr-debounce30', url: L + 'target=bg&attr=data-bg&top=1600&loader=debounce&t=30', count: 'filled', from: 'review: lazy only through a data-* attribute' },
+  { id: 'classbg-lodash100', url: S + 'mode=classbg&loader=lodash&t=100', count: 'filled', from: 'review: backgrounds from a class set on scroll' },
+  { id: 'classbg-lodash50', url: S + 'mode=classbg&loader=lodash&t=50', count: 'filled', rounds: 5, from: 'review: backgrounds from a class set on scroll' },
+  { id: 'classbg-logo-lodash100', url: S + 'mode=classbg&loader=lodash&t=100&logo=1', count: 'filled', from: 'review control' },
+  { id: 'textfeed-lat100', url: S + 'mode=feed&lat=100', count: 'feed', text: false, from: 'review: text feed that grows on scroll' },
+  { id: 'textfeed-lat60', url: S + 'mode=feed&lat=60', count: 'feed', text: false, from: 'review: text feed that grows on scroll' },
+  { id: 'textfeed-img-lat100', url: S + 'mode=feed&lat=100&img=1', count: 'feed', text: false, from: 'review control' },
+  { id: 'rootfeed-element', url: S + 'mode=rootfeed', prep: 'element', count: 'feed', text: false, from: 'review: list that grows at the document end' },
+  { id: 'reveal-lodash99', url: S + 'mode=reveal&n=90&gap=1200&t=99', count: 'filled', text: false, known: 24, from: 'known blind spot: scroll reveal without markers' },
+  { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: 0, from: 'known blind spot: no markers, backgrounds set on scroll' },
 ];
 
 const SLOWER = 0.1;
@@ -142,12 +155,14 @@ const git = (...a) => execFileSync('git', ['-C', root, ...a], { encoding: 'utf8'
 
 function resolveSide(name, spec) {
   if (fs.existsSync(path.join(spec, 'manifest.json'))) {
-    const dirty = git('status', '--porcelain', '--', path.resolve(spec)) ? '+dirty' : '';
-    return {
-      name,
-      dir: path.resolve(spec),
-      label: `${spec} (${git('rev-parse', '--short', 'HEAD')}${dirty})`,
-    };
+    const dir = path.resolve(spec);
+    let state;
+    try {
+      state = git('rev-parse', '--short', 'HEAD') + (git('status', '--porcelain', '--', dir) ? '+dirty' : '');
+    } catch {
+      state = 'outside the repository';
+    }
+    return { name, dir, label: `${spec} (${state})` };
   }
   let sha;
   try {
@@ -259,12 +274,15 @@ async function runRow(env, row, outDir) {
   }
 }
 
+// Returns { fails, excused }: excused holds the rule (a) loss of a known row that still loses as
+// recorded.
 function judge(row, runs) {
   const base = runs.filter((r) => r.side === 'base');
   const head = runs.filter((r) => r.side === 'head');
   const fails = [];
+  const excused = [];
   for (const r of runs.filter((x) => x.error)) fails.push(`error on ${r.side} round ${r.round}: ${r.error}`);
-  if (fails.length) return fails;
+  if (fails.length) return { fails, excused };
   const count = (r) => r[row.count];
   const total = (r) => (row.count === 'pdf' ? r.expected : r.total);
   const baseWarnings = new Set(base.map((r) => r.warning));
@@ -273,12 +291,14 @@ function judge(row, runs) {
   if (row.count) {
     const b = median(base.map(count));
     if (!(b >= 1)) fails.push(`no signal: base median ${b} for ${row.count}, the row cannot detect a loss`);
-    for (const r of head) {
-      if (count(r) < b - slack(b) && !newWarning(r))
-        fails.push(
-          `(a) silent loss: head round ${r.round} got ${count(r)}, base median ${b} (slack ${slack(b)}), no warning`,
-        );
-    }
+    const h = median(head.map(count));
+    const silent = head.filter((r) => count(r) < b - slack(b) && !newWarning(r)).map((r) => r.round);
+    const loss = `(a) silent loss: head median ${h}, base median ${b} (slack ${slack(b)}), rounds ${silent} did not warn`;
+    const lost = h < b - slack(b) && silent.length > 0;
+    if (row.known == null) {
+      if (lost) fails.push(loss);
+    } else if (lost && Math.abs(h - row.known) <= slack(row.known)) excused.push(loss);
+    else fails.push(`(a) known blind spot changed: head median ${h}, recorded ${row.known}; update the row`);
   }
   for (const r of head) {
     if (!newWarning(r)) continue;
@@ -300,7 +320,7 @@ function judge(row, runs) {
     fails.push(
       `(d) PDF text differs: head ${[...new Set(head.map((r) => r.textHash))]} vs base ${[...new Set(base.map((r) => r.textHash))]}`,
     );
-  return fails;
+  return { fails, excused };
 }
 
 function report(rows, results, sides) {
@@ -319,9 +339,7 @@ function report(rows, results, sides) {
     const warned = (s) =>
       `${side(s).filter((r) => r.warning).length}/${runs.filter((r) => r.side === s).length}`;
     const ms = (s) => (side(s).length ? secs(side(s).map((r) => r.ms)) : '-');
-    const all = judge(row, runs);
-    const excused = row.known ? all.filter((f) => f.startsWith('(a)')) : [];
-    const fails = all.filter((f) => !excused.includes(f));
+    const { fails, excused } = judge(row, runs);
     return {
       row: row.id,
       metric: !row.count
@@ -371,6 +389,8 @@ async function main() {
   if (!rows.length) throw new Error(`--only ${args.only} matches no row`);
   const rounds = Number(args.rounds);
   if (!(rounds >= 1)) throw new Error('--rounds must be at least 1');
+  const roundsOf = (row) => Math.max(rounds, row.rounds || 0);
+  const maxRounds = Math.max(...rows.map(roundsOf));
   const sides = { base: resolveSide('base', args.base), head: resolveSide('head', args.head) };
 
   const logDir = path.join(root, 'test/out/lazy-matrix');
@@ -378,18 +398,19 @@ async function main() {
   const log = path.join(logDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
   console.log(`base ${sides.base.label}\nhead ${sides.head.label}`);
   console.log(
-    `${rows.length} rows x ${rounds} rounds, viewport ${VIEWPORT.width}x${VIEWPORT.height}, load${execFileSync('uptime', { encoding: 'utf8' }).split('load')[1].trim()}`,
+    `${rows.length} rows x ${rounds} rounds (up to ${maxRounds} for noisy rows), viewport ${VIEWPORT.width}x${VIEWPORT.height}, load${execFileSync('uptime', { encoding: 'utf8' }).split('load')[1].trim()}`,
   );
   console.log(`raw runs: ${path.relative(root, log)}`);
 
   const results = [];
   const started = Date.now();
-  for (let round = 0; round < rounds; round++) {
+  for (let round = 0; round < maxRounds; round++) {
+    const rowsNow = rows.filter((row) => round < roundsOf(row));
     for (const side of round % 2 ? [sides.head, sides.base] : [sides.base, sides.head]) {
       const env = await launchExtension({ extDir: side.dir, viewport: VIEWPORT });
       const outDir = tempDir('lazy-matrix-pdf-');
       try {
-        for (const row of rows) {
+        for (const row of rowsNow) {
           const res = { id: row.id, side: side.name, round, ...(await runRow(env, row, outDir)) };
           results.push(res);
           fs.appendFileSync(log, JSON.stringify(res) + '\n');

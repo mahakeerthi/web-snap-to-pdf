@@ -50,8 +50,9 @@ match. `npm run test:ui` always runs headless.
 
 `npm run test:lazy` compares lazy loading in two builds of the extension. It exports every row of
 the table in `scripts/lazy-matrix.mjs` (pages in `test/fixtures/lazy/`) with `origin/main` and with
-your working tree, in three interleaved rounds, and fails when the working tree loses images
-without a warning, warns falsely, gets slower, or changes the PDF text. Run it before asking for
+your working tree, in three interleaved rounds (five for the rows whose counts vary most), and
+fails when the working tree's median loses images without a warning, warns falsely, gets slower,
+or changes the PDF text. Run it before asking for
 review of a change to lazy loading. After `--`, `--base` and `--head` take an extension folder or a
 git ref, `--only '<regex>'` picks rows, and `--rounds N` sets the rounds. It needs poppler's
 `pdfimages`. A full run takes about 45 minutes, so CI does not run it.

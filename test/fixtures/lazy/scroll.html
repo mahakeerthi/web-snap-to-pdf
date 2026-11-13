@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Content that appears on scroll</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .block { box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+  .pic { width: 300px; height: 120px; background-color: #ccc; background-size: 300px 120px; background-repeat: no-repeat; }
+  .item { height: 1000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+  .item img { display: block; width: 300px; height: 120px; }
+  #root { padding: 16px 16px 16px 40px; }
+  .rv { opacity: 0; }
+  .rv.in { opacity: 1; }
+</style>
+<style id="bgcss"></style>
+</head>
+<body>
+<script>
+  // Pages whose content appears on scroll without the markers the lazy pass looks for.
+  //   mode=classbg   n blocks of gap px, each with a div whose background-image comes from a
+  //                  stylesheet rule for the class "shown", which a throttled (loader=lodash) or
+  //                  debounced (loader=debounce) scroll handler (t ms) adds to visible divs. No img,
+  //                  no lazy class, no inline url(, no matching data-* attribute. logo=1 adds an img.
+  //   mode=feed      a text feed: init items, then batches of 10 appended lat ms after a sentinel
+  //                  comes within margin px of the viewport, up to batches times. img=1 puts an img
+  //                  in every item.
+  //   mode=rootfeed  a 1,000 px header, a section#root list of init items with images, a footer of
+  //                  foot px, and an infinite-scroll handler that appends 10 items to the list when
+  //                  the window is within 300 px of the document end, up to batches times.
+  //   mode=reveal    n sections of gap px whose text is transparent until a throttled scroll handler
+  //                  (t ms) adds the class "in" to the visible ones, as scroll-reveal libraries do.
+  // window.__filled() counts filled backgrounds, feed items or revealed sections.
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => Number(q.get(k) ?? d);
+  const MODE = ['classbg', 'feed', 'rootfeed', 'reveal'].includes(q.get('mode')) ? q.get('mode') : 'classbg';
+  const LOADER = q.get('loader') === 'debounce' ? 'debounce' : 'lodash';
+  const T = num('t', 100);
+  const N = num('n', 60);
+  const GAP = num('gap', 1500);
+  const imageUrl = (i, w, h, label) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff'; ctx.font = (h / 5) + 'px sans-serif'; ctx.fillText(label + i, 4, h / 2);
+    return c.toDataURL('image/png');
+  };
+  const onScroll = (f) => {
+    if (LOADER === 'debounce') {
+      let t = null;
+      addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(f, T); });
+      return;
+    }
+    let last = 0, trailing = null;
+    addEventListener('scroll', () => {
+      const wait = T - (Date.now() - last);
+      if (wait <= 0) { last = Date.now(); f(); }
+      else if (!trailing) trailing = setTimeout(() => { trailing = null; last = Date.now(); f(); }, wait);
+    });
+  };
+  const inView = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > 0 && r.top < innerHeight;
+  };
+  const feedItem = (n, img) => {
+    const item = document.createElement('div'); item.className = 'item';
+    const p = document.createElement('p'); p.textContent = `FEED-${n}-MARK`;
+    item.appendChild(p);
+    if (img) {
+      const im = document.createElement('img'); im.alt = ''; im.src = imageUrl(n, 300, 120, 'f ');
+      item.appendChild(im);
+    }
+    return item;
+  };
+  if (q.get('logo') === '1') {
+    const logo = document.createElement('img');
+    logo.src = imageUrl(0, 40, 40, 'L'); logo.width = 40; logo.height = 40; logo.alt = '';
+    document.body.appendChild(logo);
+  }
+
+  if (MODE === 'classbg') {
+    let css = '';
+    for (let i = 0; i < N; i++) {
+      css += `#p${i}.shown { background-image: url("${imageUrl(i, 300, 120, 'bg ')}"); }\n`;
+      const block = document.createElement('div');
+      block.className = 'block'; block.style.height = GAP + 'px';
+      const p = document.createElement('p'); p.textContent = `BLOCK-${i}-MARK`;
+      const pic = document.createElement('div'); pic.className = 'pic'; pic.id = 'p' + i;
+      block.append(p, pic);
+      document.body.appendChild(block);
+    }
+    document.getElementById('bgcss').textContent = css;
+    const pics = [...document.querySelectorAll('.pic')];
+    const fill = () => pics.forEach((el) => { if (inView(el)) el.classList.add('shown'); });
+    onScroll(fill);
+    fill();
+    window.__total = N;
+    window.__filled = () => document.querySelectorAll('.pic.shown').length;
+  } else if (MODE === 'feed') {
+    const LAT = num('lat', 100);
+    const BATCHES = num('batches', 8);
+    const IMG = q.get('img') === '1';
+    const feed = document.createElement('div');
+    const sentinel = document.createElement('div');
+    document.body.append(feed, sentinel);
+    let n = 0, batches = 0, loading = false;
+    const add = (count) => { for (let i = 0; i < count; i++) feed.appendChild(feedItem(n++, IMG)); };
+    add(num('init', 20));
+    new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting) || loading || batches >= BATCHES) return;
+      loading = true;
+      setTimeout(() => { add(10); batches++; loading = false; }, LAT);
+    }, { rootMargin: `${num('margin', 1500)}px 0px` }).observe(sentinel);
+    window.__total = num('init', 20) + 10 * BATCHES;
+    window.__filled = () => n;
+  } else if (MODE === 'rootfeed') {
+    const BATCHES = num('batches', 5);
+    const header = document.createElement('header'); header.style.height = '1000px'; header.textContent = 'HEADER';
+    const root = document.createElement('section'); root.id = 'root';
+    const footer = document.createElement('footer'); footer.style.height = num('foot', 2000) + 'px'; footer.textContent = 'FOOTER';
+    document.body.append(header, root, footer);
+    let n = 0, batches = 0;
+    const add = (count) => { for (let i = 0; i < count; i++) root.appendChild(feedItem(n++, true)); };
+    add(num('init', 10));
+    addEventListener('scroll', () => {
+      if (batches >= BATCHES) return;
+      if (scrollY + innerHeight >= document.documentElement.scrollHeight - 300) { add(10); batches++; }
+    });
+    window.__total = num('init', 10) + 10 * BATCHES;
+    window.__filled = () => n;
+  } else {
+    for (let i = 0; i < N; i++) {
+      const section = document.createElement('section');
+      section.className = 'block'; section.style.height = GAP + 'px';
+      const p = document.createElement('p'); p.className = 'rv'; p.textContent = `REVEAL-${i}-MARK`;
+      section.appendChild(p);
+      document.body.appendChild(section);
+    }
+    const els = [...document.querySelectorAll('.rv')];
+    const reveal = () => els.forEach((el) => { if (inView(el)) el.classList.add('in'); });
+    onScroll(reveal);
+    reveal();
+    window.__total = N;
+    window.__filled = () => document.querySelectorAll('.rv.in').length;
+  }
+</script>
+</body>
+</html>
