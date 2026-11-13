@@ -18,7 +18,7 @@ agree on the approach first.
 ## Set up
 
 You need Node.js 20 or newer (CI uses Node.js 22), Playwright's Chromium, and poppler. The tests
-use poppler's `pdfinfo` and `pdftotext` to read the PDFs they generate.
+use poppler's `pdfinfo`, `pdftotext` and `pdfimages` to read the PDFs they generate.
 
 ```sh
 npm install

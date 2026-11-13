@@ -55,8 +55,24 @@ in reverse order. Styles are applied with `!important`.
   fixed/sticky → expand scroll containers → unlock `<html>`/`<body>` → scroll to top → wait two
   animation frames.
 - Lazy content: `loading="lazy"` → `eager`; copy `data-src` / `data-lazy-src` / `data-original` into
-  empty or `data:` `src`, `data-srcset` into empty `srcset`; scroll the page in 85 %-viewport steps
-  (max 250 steps, 50 ms each), then wait up to 6 s for incomplete images.
+  empty or `data:` `src`, `data-srcset` into empty `srcset`; then scroll in 85 %-viewport steps from
+  the top to the bottom (with a root: one viewport past the root's bottom), in the real viewport.
+  - A page that can lazy-load holds each position 50 ms, the schedule `main` always used, so every
+    loader gets the time it got before. It can lazy-load when the document has an `img`,
+    `picture`, `iframe`, `video`, `canvas`, `embed`, `object` or SVG `image`, an element whose class
+    contains `lazy`, an inline style with `url(`, a `data-*` attribute whose name contains `src`,
+    `lazy`, `original`, `echo`, `bg`, `background`, `image`, `img` or `poster`, or a custom element
+    (its shadow root is not scanned). The whole document is checked before the scroll, then every
+    element the page adds or changes during it (a `MutationObserver`). Once true it stays true.
+  - Any other page moves one animation frame per position.
+  - The scroll stops at the end, or, once it has held 250 positions, when it has spent its 30 s
+    budget. Each position costs the budget at least 50 ms, so a frame-paced page stops after the
+    same 600 positions. 30 s is about twice what a 200,000 px page that can lazy-load needs
+    (about 294 positions at about 51 ms each).
+  - `ps:prepare` replies `lazy: { complete, reason }`: `reason` is `'end'`, or `'budget'` with
+    `complete: false`. `generate` then adds the `status_lazyIncomplete` warning to its reply, which
+    the popup and the preview overlay show. Shortcut and context-menu exports drop it.
+  - Then wait 150 ms at the bottom, scroll back, and wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors
   (`overflow: visible`, `height: auto`, no `max-height`, `position: static` if
@@ -281,19 +297,19 @@ handler directly inside the worker, without messaging.
 
 ### From the service worker
 
-| Type              | Target                                               | Payload                                                                                                      | Reply                                                                                                             |
-| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `ps:progress`     | broadcast (`runtime.sendMessage`; the popup listens) | `tabId`, `stage: 'prepare' \| 'measure' \| 'render' \| 'save' \| 'done'`, `message`                          | none                                                                                                              |
-| `ps:ping`         | content (`tabs.sendMessage`)                         | none                                                                                                         | `{ ok: true }`                                                                                                    |
-| `ps:state`        | content                                              | none                                                                                                         | `{ ok, removed, hasPicked, pickerActive, previewOpen }`                                                           |
-| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title }` or `{ ok: false, error }` (no article found / nothing picked)                               |
-| `ps:restore`      | content                                              | none                                                                                                         | `{ ok: true }`                                                                                                    |
-| `ps:measure`      | content                                              | none                                                                                                         | `{ ok, height, width }` (CSS px)                                                                                  |
-| `ps:start-picker` | content                                              | `mode` (anything other than `'remove'` means `'print'`), `strings`, `theme`                                  | `{ ok: true }` (also closes an open preview)                                                                      |
-| `ps:picked-rect`  | content                                              | none                                                                                                         | `{ ok, x, y, width, height, devicePixelRatio, description }` (document CSS px) or `{ ok: false, error }`          |
-| `ps:show-preview` | content                                              | `dataUrl`, `width`, `height`, `description`, `format`, `imageWarning`, `markdownEnabled`, `strings`, `theme` | `{ ok: true }`                                                                                                    |
-| `ps:to-markdown`  | content                                              | `prep: 'none' \| 'article' \| 'element'`                                                                     | `{ ok, markdown, title }` or `{ ok: false, error }`                                                               |
-| `ps:reset-page`   | content                                              | none                                                                                                         | `{ ok: true }` (stops picker, closes preview, runs `restore()`, un-hides all removals, clears the picked element) |
+| Type              | Target                                               | Payload                                                                                                      | Reply                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ps:progress`     | broadcast (`runtime.sendMessage`; the popup listens) | `tabId`, `stage: 'prepare' \| 'measure' \| 'render' \| 'save' \| 'done'`, `message`                          | none                                                                                                                                                  |
+| `ps:ping`         | content (`tabs.sendMessage`)                         | none                                                                                                         | `{ ok: true }`                                                                                                                                        |
+| `ps:state`        | content                                              | none                                                                                                         | `{ ok, removed, hasPicked, pickerActive, previewOpen }`                                                                                               |
+| `ps:prepare`      | content                                              | `prep: 'none' \| 'article' \| 'element'`, `hideFixed`, `loadLazy`, `expandScroll`                            | `{ ok: true, title, lazy }` (`lazy`: `{ complete, reason }`, `null` without `loadLazy`) or `{ ok: false, error }` (no article found / nothing picked) |
+| `ps:restore`      | content                                              | none                                                                                                         | `{ ok: true }`                                                                                                                                        |
+| `ps:measure`      | content                                              | none                                                                                                         | `{ ok, height, width }` (CSS px)                                                                                                                      |
+| `ps:start-picker` | content                                              | `mode` (anything other than `'remove'` means `'print'`), `strings`, `theme`                                  | `{ ok: true }` (also closes an open preview)                                                                                                          |
+| `ps:picked-rect`  | content                                              | none                                                                                                         | `{ ok, x, y, width, height, devicePixelRatio, description }` (document CSS px) or `{ ok: false, error }`                                              |
+| `ps:show-preview` | content                                              | `dataUrl`, `width`, `height`, `description`, `format`, `imageWarning`, `markdownEnabled`, `strings`, `theme` | `{ ok: true }`                                                                                                                                        |
+| `ps:to-markdown`  | content                                              | `prep: 'none' \| 'article' \| 'element'`                                                                     | `{ ok, markdown, title }` or `{ ok: false, error }`                                                                                                   |
+| `ps:reset-page`   | content                                              | none                                                                                                         | `{ ok: true }` (stops picker, closes preview, runs `restore()`, un-hides all removals, clears the picked element)                                     |
 
 `ps:stop-picker` no longer exists.
 

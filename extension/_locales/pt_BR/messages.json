@@ -383,6 +383,10 @@
     "message": "Não foi possível iniciar o seletor.",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "O tempo para carregar a página acabou, então pode faltar conteúdo perto do final.",
+    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"

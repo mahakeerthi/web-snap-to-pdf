@@ -383,6 +383,10 @@
     "message": "選択ツールを起動できませんでした。",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "ページの読み込み中に時間切れになったため、末尾付近の内容が欠けている可能性があります。",
+    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"

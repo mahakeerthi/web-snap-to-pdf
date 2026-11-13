@@ -26,6 +26,20 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
+  // The lazy pass. A page that can lazy-load gets main's schedule: LAZY_DWELL_MS at every position,
+  // so a scroll handler throttled or debounced below 50 ms runs at each one. A page with nothing
+  // that can lazy-load moves one frame per position. The pass stops at the end, or, once it has
+  // held LAZY_MIN_POSITIONS positions (main's old cap), when it has spent LAZY_BUDGET_MS, and then
+  // reports incomplete. A position costs the budget at least one dwell, so a frame-paced endless
+  // feed stops after the distance a lazy one covers instead of three times further.
+  const LAZY_DWELL_MS = 50;
+  const LAZY_BUDGET_MS = 30000;
+  const LAZY_MIN_POSITIONS = 250;
+  // What can lazy-load: media elements, lazy-loader markers, inline backgrounds, and custom
+  // elements, whose shadow roots this scan does not enter.
+  const LAZY_SELECTOR =
+    'img, picture, iframe, video, canvas, embed, object, svg image, [class*="lazy" i], [style*="url(" i]';
+  const LAZY_ATTR = /^data-.*(src|lazy|original|echo|bg|background|image|img|poster)/;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -114,7 +128,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    if (loadLazy) await loadLazyContent();
+    const lazy = loadLazy ? await loadLazyContent(root) : null;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -122,7 +136,7 @@
     scrollToInstant(0, 0);
     await nextFrame();
     await nextFrame();
-    return { ok: true, title: document.title };
+    return { ok: true, title: document.title, lazy };
   }
 
   // The element a prep mode works on: the detected article, the picked element, or null for the
@@ -394,7 +408,9 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  async function loadLazyContent() {
+  // Returns { complete, reason }: reason 'end' when the scroll reached the end (with a root, one
+  // viewport past the root's bottom), 'budget' when it stopped before.
+  async function loadLazyContent(root) {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
     // reverting them would only make the images disappear again.
@@ -412,21 +428,77 @@
 
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
+    const end = () => {
+      const pageEnd = document.documentElement.scrollHeight;
+      if (!root) return pageEnd;
+      return Math.min(pageEnd, root.getBoundingClientRect().bottom + window.scrollY + window.innerHeight);
+    };
+    const start = performance.now();
+    const spent = (positions) => Math.max(performance.now() - start, positions * LAZY_DWELL_MS);
+    const watch = watchLazyContent();
     let y = 0;
-    let iterations = 0;
-    while (y < document.documentElement.scrollHeight && iterations < 250) {
-      scrollToInstant(0, y);
-      await sleep(50);
-      y += step;
-      iterations++;
+    let positions = 0;
+    try {
+      while (y < end() && (positions < LAZY_MIN_POSITIONS || spent(positions) < LAZY_BUDGET_MS)) {
+        scrollToInstant(0, y);
+        const at = performance.now();
+        if (!watch.canLazyLoad()) await nextFrame();
+        if (watch.canLazyLoad()) await sleep(Math.ceil(LAZY_DWELL_MS - (performance.now() - at)));
+        y += step;
+        positions++;
+      }
+    } finally {
+      watch.stop();
     }
-    scrollToInstant(0, document.documentElement.scrollHeight);
+    const result = y >= end() ? { complete: true, reason: 'end' } : { complete: false, reason: 'budget' };
+    scrollToInstant(0, end());
     await sleep(150);
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
     await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
     await sleep(100);
+    return result;
+  }
+
+  // Whether the document holds anything that can lazy-load: the whole document now, then each
+  // element the page adds or changes. Once true it stays true.
+  function watchLazyContent() {
+    let found = hasLazyElement(document.documentElement);
+    const changes = [];
+    const observer = new MutationObserver((records) => changes.push(...records));
+    if (!found)
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    return {
+      canLazyLoad() {
+        if (found) return true;
+        changes.push(...observer.takeRecords());
+        found = changes
+          .splice(0)
+          .some((r) =>
+            r.type === 'attributes' ? isLazyElement(r.target) : [...r.addedNodes].some(hasLazyElement),
+          );
+        if (found) observer.disconnect();
+        return found;
+      },
+      stop: () => observer.disconnect(),
+    };
+  }
+
+  function hasLazyElement(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    if (isLazyElement(node) || node.querySelector(LAZY_SELECTOR)) return true;
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
+    while (walker.nextNode()) if (isLazyElement(walker.currentNode)) return true;
+    return false;
+  }
+
+  function isLazyElement(el) {
+    return (
+      el.matches(LAZY_SELECTOR) ||
+      el.localName.includes('-') ||
+      el.getAttributeNames().some((name) => LAZY_ATTR.test(name))
+    );
   }
 
   function imageSettled(img) {
