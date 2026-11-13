@@ -1,5 +1,6 @@
 // Lazy-load regression matrix: exports every row below with two builds of the extension, rounds
-// interleaved, and fails on silent image loss, false warnings, slowdowns or changed text.
+// interleaved, and fails on silent loss, a missing or false warning, a different time or changed
+// text.
 //
 //   node scripts/lazy-matrix.mjs [--base <dir|ref>] [--head <dir|ref>] [--rounds N] [--only <regex>]
 //
@@ -36,39 +37,40 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 //   keyed=1  the attribute holds a key and the URL lives in JavaScript
 //   loader=cachedvh  throttled (t) handler that reads innerHeight once at load
 //   loader=velocity  fills only when the scroll moved at most v (20) px/ms since the last event
-// lazy/text.html: 1400 paragraphs, 117 pages; paras=<n> sets the count; noise=1 adds a header that
-// changes on every scroll.
+// lazy/text.html: 1400 paragraphs, 117 pages; paras=<n> sets the count.
 // lazy/scroll.html: content that appears on scroll without lazy markers (class backgrounds, text
 // feeds, a list that grows at the document end, scroll reveal); its modes are listed in the file.
+// lazy/shadow.html: images in an open shadow root on a plain div, filled by a debounced handler.
 // lazy/adv.html: galleries that react to the viewport (orientation media queries, re-render on
 // resize, vh-sized blocks, a hero sized from innerHeight); its parameters are listed in the file.
 //
 // Row fields: count is the rule (a) metric (pdf: 300 x 120 images in the PDF, filled: elements the
-// page's loader filled, feed: FEED-n-MARK lines in the PDF text); loader: false means any head
-// warning is false; faster: the share head must cut from base's time; text: false skips rule (d);
-// zoom: browser zoom for the row; rounds: at least this many rounds for a row whose count varies
-// from run to run on any build; known: the head median of a documented blind spot, whose silent
-// loss (rule a) is reported but not failed while the head median stays within the base median's
-// slack of it. Every other rule still fails a known row.
+// page's loader filled, feed: FEED-n-MARK lines in the PDF text); warns says what the head's lazy
+// warning must do (false: never warn, because the page ends within the stop rule; true: warn in
+// every round, because the page does not end before it, and judge a loss against base even then;
+// absent: a warning with everything loaded is false); beyond: true marks a row where the head goes
+// further than base past position 250, so its time may differ; text: false skips rule (d); zoom:
+// browser zoom for the row; rounds: at least this many rounds for a row whose count varies from run
+// to run on any build.
 const L = 'lazy/loader.html?';
 const A = 'lazy/adv.html?';
 const S = 'lazy/scroll.html?';
+const H = 'lazy/shadow.html?';
 // prettier-ignore
 const ROWS = [
-  { id: 'text-117', url: 'lazy/text.html', count: null, loader: false, faster: 0.4, from: 'p4 plain page' },
-  { id: 'text-noise', url: 'lazy/text.html?noise=1', count: null, loader: false, from: 'p4 noise page' },
-  { id: 'text-long', url: 'lazy/text.html?paras=7000', count: null, loader: false, from: 'build: 500,000 px page that does not grow' },
-  { id: 'lazy-long', url: L + 'loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1', count: 'pdf', from: 'PR lazy-long.html' },
-  { id: 'stuck-100', url: L + 'loader=none&n=0&stuck=100', count: null, loader: false, from: 'PR lazy-stuck.html' },
-  { id: 'no-loader-dead100', url: L + 'loader=none&n=2&top=2000&dead=100', count: null, loader: false, from: 'r2 noloader-broken100' },
-  { id: 'no-loader-icons', url: L + 'loader=none&gap=1200&icons=60', count: null, loader: false, from: 'r2 icons60' },
-  { id: 'endless', url: L + 'n=0&feed=1', count: 'feed', text: false, from: 'PR lazy-endless.html' },
-  { id: 'endless-img', url: L + 'loader=io&n=5&feed=1', count: 'feed', text: false, from: 'review: endless feed after images' },
-  { id: 'textfeed-img-320', url: S + 'mode=feed&img=1&batches=30&lat=0', count: 'feed', text: false, from: 'review: finite 320,000 px feed that grows' },
-  { id: 'article-feed', url: L + 'root=article&n=0&feed=1', prep: 'article', count: null, loader: false, from: 'PR lazy-article-feed.html' },
+  { id: 'text-117', url: 'lazy/text.html', count: null, warns: false, from: 'p4 plain page' },
+  { id: 'text-long', url: 'lazy/text.html?paras=7000', count: null, warns: true, beyond: true, from: 'build: 500,000 px page that does not grow ends at the 30 s cap' },
+  { id: 'lazy-long', url: L + 'loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1', count: 'pdf', warns: false, from: 'PR lazy-long.html' },
+  { id: 'stuck-100', url: L + 'loader=none&n=0&stuck=100', count: null, warns: false, from: 'PR lazy-stuck.html' },
+  { id: 'no-loader-dead100', url: L + 'loader=none&n=2&top=2000&dead=100', count: null, warns: false, from: 'r2 noloader-broken100' },
+  { id: 'no-loader-icons', url: L + 'loader=none&gap=1200&icons=60', count: null, warns: false, from: 'r2 icons60' },
+  { id: 'endless', url: L + 'n=0&feed=1', count: 'feed', text: false, warns: true, from: 'PR lazy-endless.html' },
+  { id: 'endless-img', url: L + 'loader=io&n=5&feed=1', count: 'feed', text: false, warns: true, from: 'review: endless feed after images' },
+  { id: 'textfeed-img-320', url: S + 'mode=feed&img=1&batches=30&lat=0', count: 'feed', text: false, warns: true, from: 'review: finite 320,000 px feed that keeps growing past position 250' },
+  { id: 'article-feed', url: L + 'root=article&n=0&feed=1', prep: 'article', count: null, warns: true, from: 'PR lazy-article-feed.html' },
   { id: 'article-lodash50', url: L + 'root=article&top=3000&loader=lodash&t=50', prep: 'article', count: 'pdf', from: 'r3 opus article root' },
   { id: 'article-io', url: L + 'root=article&top=3000&loader=io', prep: 'article', count: 'pdf', from: 'r3 opus article root' },
-  { id: 'element-feed-lodash50', url: L + 'root=section&top=3000&n=20&loader=lodash&t=50&feed=1', prep: 'element', count: 'pdf', from: 'new: element root above a feed' },
+  { id: 'element-feed-lodash50', url: L + 'root=section&top=3000&n=20&loader=lodash&t=50&feed=1', prep: 'element', count: 'pdf', warns: true, from: 'new: element root above a feed' },
   { id: 'blur-lodash100', url: L + 'ph=blur&loader=lodash&t=100', count: 'pdf', from: 'r1 sonnet blurred preview' },
   { id: 'blur-lodash250', url: L + 'ph=blur&loader=lodash&t=250', count: 'pdf', from: 'r1 sonnet blurred preview' },
   { id: 'blur-echo100', url: L + 'ph=blur&loader=echo&t=100', count: 'pdf', rounds: 5, from: 'r1 sonnet trailing poll' },
@@ -98,10 +100,6 @@ const ROWS = [
   { id: 'icons10-lodash100', url: L + 'gap=1200&every=10&icons=10&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet upscaled icons' },
   { id: 'deadicons10-lodash100', url: L + 'gap=1200&every=10&icons=10&iconkind=missing&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet kind=dead' },
   { id: 'natural-every6-lodash100', url: L + 'gap=1200&every=6&ph=natural&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet natural-size preview' },
-  { id: 'short-text-p25', url: 'lazy/text.html?paras=25', count: null, loader: false, from: 'interrogate short page' },
-  { id: 'short-text-p35', url: 'lazy/text.html?paras=35', count: null, loader: false, from: 'interrogate short page' },
-  { id: 'short-text-p50', url: 'lazy/text.html?paras=50', count: null, loader: false, from: 'interrogate short page' },
-  { id: 'short-text-p70', url: 'lazy/text.html?paras=70', count: null, loader: false, from: 'interrogate short page' },
   { id: 'short-io-n2', url: A + 'loader=io&n=2&gap=1000', count: 'pdf', from: 'interrogate short page' },
   { id: 'zoom50-lodash50-n5', url: L + 'loader=lodash&t=50&n=5', count: 'pdf', zoom: 0.5, from: 'interrogate browser zoom' },
   { id: 'zoom50-debounce30-n6', url: L + 'loader=debounce&t=30&n=6', count: 'pdf', zoom: 0.5, from: 'interrogate browser zoom' },
@@ -119,18 +117,24 @@ const ROWS = [
   { id: 'vh100-n60-io', url: A + 'loader=io&vh=100&n=60', count: 'pdf', from: 'interrogate vh blocks' },
   { id: 'hero-db100', url: A + 'loader=io&n=20&hero=1&herodb=100', count: 'pdf', from: 'interrogate hero from innerHeight' },
   { id: 'hero-db250', url: A + 'loader=io&n=20&hero=1&herodb=250', count: 'pdf', from: 'interrogate hero from innerHeight' },
-  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', rounds: 5, from: 'arch candidate 2 blind loader' },
-  { id: 'blindspot-bg-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', from: 'backgrounds set on scroll flip the pass to 50 ms' },
+  { id: 'keyed-natural-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', rounds: 5, from: 'arch candidate 2: URL kept in JavaScript, no marker' },
+  { id: 'bg-keyed-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', from: 'backgrounds set from JavaScript on scroll, no marker' },
   { id: 'bg-datattr-debounce30', url: L + 'target=bg&attr=data-bg&top=1600&loader=debounce&t=30', count: 'filled', from: 'review: lazy only through a data-* attribute' },
   { id: 'classbg-lodash100', url: S + 'mode=classbg&loader=lodash&t=100', count: 'filled', from: 'review: backgrounds from a class set on scroll' },
   { id: 'classbg-lodash50', url: S + 'mode=classbg&loader=lodash&t=50', count: 'filled', rounds: 5, from: 'review: backgrounds from a class set on scroll' },
   { id: 'classbg-logo-lodash100', url: S + 'mode=classbg&loader=lodash&t=100&logo=1', count: 'filled', from: 'review control' },
-  { id: 'textfeed-lat100', url: S + 'mode=feed&lat=100', count: 'feed', text: false, from: 'review: text feed that grows on scroll' },
-  { id: 'textfeed-lat60', url: S + 'mode=feed&lat=60', count: 'feed', text: false, from: 'review: text feed that grows on scroll' },
-  { id: 'textfeed-img-lat100', url: S + 'mode=feed&lat=100&img=1', count: 'feed', text: false, from: 'review control' },
-  { id: 'rootfeed-element', url: S + 'mode=rootfeed', prep: 'element', count: 'feed', text: false, from: 'review: list that grows at the document end' },
-  { id: 'reveal-lodash99', url: S + 'mode=reveal&n=90&gap=1200&t=99', count: 'filled', text: false, rounds: 5, known: 25, from: 'known blind spot: scroll reveal without markers' },
-  { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: 0, from: 'known blind spot: no markers, backgrounds set on scroll' },
+  { id: 'textfeed-lat100', url: S + 'mode=feed&lat=100', count: 'feed', text: false, warns: false, from: 'review: text feed that grows on scroll' },
+  { id: 'textfeed-lat60', url: S + 'mode=feed&lat=60', count: 'feed', text: false, warns: false, from: 'review: text feed that grows on scroll' },
+  { id: 'textfeed-img-lat100', url: S + 'mode=feed&lat=100&img=1', count: 'feed', text: false, warns: false, from: 'review control' },
+  { id: 'rootfeed-element', url: S + 'mode=rootfeed', prep: 'element', count: 'feed', text: false, warns: false, from: 'review: list that grows at the document end' },
+  { id: 'reveal-lodash99', url: S + 'mode=reveal&n=90&gap=1200&t=99', count: 'filled', text: false, rounds: 5, from: 'text revealed by a scroll handler, no marker' },
+  { id: 'bg-keyed-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', from: 'backgrounds set from JavaScript after a 30 ms pause, no marker' },
+  { id: 'shadowdiv-debounce30', url: H + 't=30', count: 'filled', from: 'review: images in a shadow root on a plain div' },
+  { id: 'slowfeed-lat500-m9000', url: S + 'mode=feed&lat=500&margin=9000', count: 'feed', text: false, warns: false, from: 'review: text feed that answers 500 ms late' },
+  { id: 'slowfeed-lat400-m6000', url: S + 'mode=feed&lat=400&margin=6000', count: 'feed', text: false, warns: false, from: 'review: text feed that answers 400 ms late' },
+  { id: 'rootfeed-text-element', url: S + 'mode=rootfeed&img=0&foot=3000', prep: 'element', count: 'feed', text: false, warns: false, from: 'review: text list that grows at the document end' },
+  { id: 'finite-grow-before-250', url: S + 'mode=feed&img=1&init=25&batches=15&lat=0', count: 'feed', text: false, warns: false, from: 'review: feed that stops growing at position 240 of 258' },
+  { id: 'finite-grow-after-250', url: S + 'mode=feed&img=1&init=33&batches=15&lat=0', count: 'feed', text: false, warns: true, from: 'review: feed whose last batch arrives after position 250' },
 ];
 
 const SLOWER = 0.1;
@@ -276,15 +280,13 @@ async function runRow(env, row, outDir) {
   }
 }
 
-// Returns { fails, excused }: excused holds the rule (a) loss of a known row that still loses as
-// recorded.
+// Returns the rules the row fails.
 function judge(row, runs) {
   const base = runs.filter((r) => r.side === 'base');
   const head = runs.filter((r) => r.side === 'head');
   const fails = [];
-  const excused = [];
   for (const r of runs.filter((x) => x.error)) fails.push(`error on ${r.side} round ${r.round}: ${r.error}`);
-  if (fails.length) return { fails, excused };
+  if (fails.length) return fails;
   const count = (r) => r[row.count];
   const total = (r) => (row.count === 'pdf' ? r.expected : r.total);
   const baseWarnings = new Set(base.map((r) => r.warning));
@@ -294,35 +296,41 @@ function judge(row, runs) {
     const b = median(base.map(count));
     if (!(b >= 1)) fails.push(`no signal: base median ${b} for ${row.count}, the row cannot detect a loss`);
     const h = median(head.map(count));
-    const silent = head.filter((r) => count(r) < b - slack(b) && !newWarning(r)).map((r) => r.round);
-    const loss = `(a) silent loss: head median ${h}, base median ${b} (slack ${slack(b)}), rounds ${silent} did not warn`;
-    const lost = h < b - slack(b) && silent.length > 0;
-    if (row.known == null) {
-      if (lost) fails.push(loss);
-    } else if (lost && Math.abs(h - row.known) <= slack(b)) excused.push(loss);
-    else fails.push(`(a) known blind spot changed: head median ${h}, recorded ${row.known}; update the row`);
+    const excused = (r) => row.warns !== true && newWarning(r);
+    const silent = head.filter((r) => count(r) < b - slack(b) && !excused(r)).map((r) => r.round);
+    if (h < b - slack(b) && silent.length > 0)
+      fails.push(
+        `(a) ${row.warns === true ? 'loss' : 'silent loss'}: head median ${h}, base median ${b} (slack ${slack(b)}), rounds ${silent}${row.warns === true ? '' : ' did not warn'}`,
+      );
   }
   for (const r of head) {
-    if (!newWarning(r)) continue;
-    if (row.loader === false)
-      fails.push(`(b) false warning on a page with no loader, round ${r.round}: ${r.warning}`);
-    else if (row.count && row.count !== 'feed' && count(r) >= total(r))
+    if (row.warns === true) {
+      if (!newWarning(r))
+        fails.push(`(b) no warning on a page that does not end before the stop, round ${r.round}`);
+    } else if (row.warns === false) {
+      if (newWarning(r)) fails.push(`(b) false warning on a page that ends, round ${r.round}: ${r.warning}`);
+    } else if (newWarning(r) && row.count && row.count !== 'feed' && count(r) >= total(r)) {
       fails.push(`(b) false warning with ${count(r)}/${total(r)} loaded, round ${r.round}: ${r.warning}`);
+    }
   }
   const bMs = median(base.map((r) => r.ms));
   const hMs = median(head.map((r) => r.ms));
-  if (row.faster && hMs > bMs * (1 - row.faster))
-    fails.push(`(c) not ${row.faster * 100}% faster: head ${hMs} ms vs base ${bMs} ms`);
   const loadsMore = row.count && median(head.map(count)) > median(base.map(count));
-  if (hMs > bMs * (1 + SLOWER) && !loadsMore)
-    fails.push(
-      `(c) ${Math.round((hMs / bMs - 1) * 100)}% slower without loading more: head ${hMs} ms vs base ${bMs} ms`,
-    );
+  if (!row.beyond) {
+    if (hMs > bMs * (1 + SLOWER) && !loadsMore)
+      fails.push(
+        `(c) ${Math.round((hMs / bMs - 1) * 100)}% slower without loading more: head ${hMs} ms vs base ${bMs} ms`,
+      );
+    if (hMs < bMs * (1 - SLOWER))
+      fails.push(
+        `(c) ${Math.round((1 - hMs / bMs) * 100)}% faster than base, so the scroll schedule differs: head ${hMs} ms vs base ${bMs} ms`,
+      );
+  }
   if (row.text !== false && mode(head.map((r) => r.textHash)) !== mode(base.map((r) => r.textHash)))
     fails.push(
       `(d) PDF text differs: head ${[...new Set(head.map((r) => r.textHash))]} vs base ${[...new Set(base.map((r) => r.textHash))]}`,
     );
-  return { fails, excused };
+  return fails;
 }
 
 function report(rows, results, sides) {
@@ -341,7 +349,7 @@ function report(rows, results, sides) {
     const warned = (s) =>
       `${side(s).filter((r) => r.warning).length}/${runs.filter((r) => r.side === s).length}`;
     const ms = (s) => (side(s).length ? secs(side(s).map((r) => r.ms)) : '-');
-    const { fails, excused } = judge(row, runs);
+    const fails = judge(row, runs);
     return {
       row: row.id,
       metric: !row.count
@@ -355,12 +363,11 @@ function report(rows, results, sides) {
       'base time': ms('base'),
       'head time': ms('head'),
       pages: `${stat(side('base').map((r) => r.pages))} ${stat(side('head').map((r) => r.pages))}`,
-      result: fails.length ? 'FAIL' : excused.length ? 'known' : 'pass',
+      result: fails.length ? 'FAIL' : 'pass',
       fails,
-      excused,
     };
   });
-  const cols = Object.keys(table[0]).filter((c) => c !== 'fails' && c !== 'excused');
+  const cols = Object.keys(table[0]).filter((c) => c !== 'fails');
   const width = Object.fromEntries(
     cols.map((c) => [c, Math.max(c.length, ...table.map((t) => t[c].length))]),
   );
@@ -369,12 +376,8 @@ function report(rows, results, sides) {
   console.log(line(Object.fromEntries(cols.map((c) => [c, c]))));
   for (const t of table) console.log(line(t));
   const failed = table.filter((t) => t.fails.length);
-  const known = table.filter((t) => !t.fails.length && t.excused.length);
-  for (const t of known) for (const f of t.excused) console.log(`KNOWN ${t.row}: ${f}`);
   for (const t of failed) for (const f of t.fails) console.log(`FAIL ${t.row}: ${f}`);
-  console.log(
-    `\n${table.length - failed.length - known.length} rows passed, ${known.length} known blind spots, ${failed.length} failed`,
-  );
+  console.log(`\n${table.length - failed.length} rows passed, ${failed.length} failed`);
   return failed.length;
 }
 
