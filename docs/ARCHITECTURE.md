@@ -68,11 +68,12 @@ in reverse order. Styles are applied with `!important`.
     otherwise ends at its real end. The 30 s cap is about twice what a 200,000 px page needs (about
     294 positions at about 51 ms each).
   - `ps:prepare` replies `lazy: { complete }`. `complete` is false when the growth rule or the cap
-    stopped the scroll before the end of the page, and true otherwise. It is judged against the
-    whole page, also for an article or picked element, so an export of an article above an endless
-    feed warns. `generate` then adds the `status_lazyIncomplete` warning to its reply, which the
-    popup and the preview overlay show. Shortcut, context-menu and remove-bar **Save PDF** exports
-    drop it.
+    stopped the scroll before the end of the page, or, with a root, before one viewport past the
+    root's bottom. The scroll itself is the same with or without a root, so an export of an article
+    or picked element above an endless feed scrolls as long as on `main` and does not warn, because
+    the element was covered. `generate` adds the `status_lazyIncomplete` warning to its reply when
+    `complete` is false, and the popup and the preview overlay show it. Shortcut, context-menu and
+    remove-bar **Save PDF** exports drop it.
   - Then wait 150 ms at the bottom, scroll back, and wait up to 6 s for incomplete images.
 - Isolation: hide every sibling along the root's flat-tree ancestor chain (open shadow roots and
   slots included, skipping `script`, `style` etc. and the extension's own UI), and relax ancestors

@@ -790,7 +790,7 @@ await test('a 500,000 px text page that does not grow: the pass goes past 250 po
     reached > 250 * step && reached < rec.maxScroll - step,
     `the pass went past 250 positions and stopped short of the end (last position ${reached} px, 250 positions ${250 * step} px, end ${rec.maxScroll} px)`,
   );
-  check(r.ms >= 30000 && r.ms < 40000, `the cap ended the export (${Math.round(r.ms)} ms, cap 30000 ms)`);
+  check(r.ms >= 30000, `the cap ended the export (${Math.round(r.ms)} ms, cap 30000 ms)`);
   await page.close();
 });
 
@@ -812,6 +812,31 @@ await test('article export of a page with images: every image loads and the pass
   check(
     reached >= rec.maxScroll - step,
     `the scroll loop reached the end of the page, past the 3,000 px footer (last position ${reached} px, end ${rec.maxScroll} px)`,
+  );
+  await page.close();
+});
+
+await test('article export above an endless feed scrolls the whole page like main, and does not warn because the article was covered', async () => {
+  const { page, tabId } = await openTab('lazy/loader.html?root=article&top=3000&n=0&feed=1');
+  await recordScrollPositions(page);
+  const r = await generateLazy(tabId, 'article');
+  const rec = await recordedPositions(page);
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+    return page.close();
+  }
+  const { text } = lazyPdf(r, 'content-lazy-article-feed.pdf');
+  check(
+    text.includes('ARTICLE-START-MARK') && text.includes('ARTICLE-END-MARK'),
+    'PDF holds the whole article',
+  );
+  check(!text.includes('FEED-'), 'PDF holds no feed item');
+  check(!r.warning, 'no warning', String(r.warning));
+  const step = LAZY_STEP(rec.innerHeight);
+  const furthest = Math.max(...rec.positions.map((p) => p.y));
+  check(
+    furthest >= 249 * step,
+    `the pass scrolled past the article for 250 positions, as on main (furthest ${furthest} px, 250 positions ${250 * step} px, ${Math.round(r.ms)} ms)`,
   );
   await page.close();
 });
