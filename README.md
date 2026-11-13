@@ -172,10 +172,10 @@ also turns on Markdown export and resets all settings.
   has grown since step 250 (an endless feed), or after 30 seconds on a page that does not grow. The
   popup and the preview then warn that content near the end may be missing.
 - A page with no images, lazy-loading markers or background images scrolls fast, one frame per
-  step. If its own script shows content only as you scroll, that content can be missing from the
-  PDF: text that a scroll-reveal script fades in (24 of 90 sections where the old fixed 50 ms
-  scroll got 57), backgrounds set by a handler that waits for scrolling to pause, and a few of the
-  first backgrounds set by a fast handler before the scroll slows down.
+  step. If its own script shows content only as you scroll, some of that content can be missing
+  from the PDF: text that a scroll-reveal script fades in, backgrounds set by a handler that waits
+  for scrolling to pause, and the first few backgrounds a fast handler sets before the scroll slows
+  down.
 - Markdown export drops `data:` images larger than 2 KB, escapes Markdown punctuation everywhere
   (`snake_case` becomes `snake\_case`), and exports elements hidden with `visibility: hidden`. It
   has no support for rowspan, `sup`, `sub`, `mark`, `u`, task lists, or reversed lists. It merges

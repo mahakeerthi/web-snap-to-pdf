@@ -621,6 +621,12 @@ async function recordedPositions(page) {
 // The positions the pass held, in order (the first record is the time before it started).
 const passPositions = ({ positions }) => positions.slice(1);
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+// Whether every hold looks like a 50 ms dwell. The page notices each new position up to a few ms
+// late when the machine is busy, which shortens one recorded hold by as much as it lengthens the
+// previous one, so a single hold may read a little under 50 ms.
+const heldDwell = (holds) => holds.length > 3 && median(holds) >= 49 && Math.min(...holds) >= 45;
+const holdsNote = (holds) =>
+  `${holds.length}, median ${median(holds).toFixed(1)} ms, shortest ${Math.min(...holds).toFixed(1)} ms`;
 
 // Runs ps:prepare with loadLazy on an open tab and returns its reply with the recorded positions.
 async function lazyPass(page, tabId) {
@@ -646,8 +652,7 @@ await test('lazy pass: a page with images holds each 85 %-viewport position at l
     `got ${ys.slice(0, 6).join(',')}..., expected ${expected.slice(0, 6).join(',')}...`,
   );
   const dwell = seen.slice(0, expected.length).map((p) => p.ms);
-  const shortest = Math.min(...dwell);
-  check(shortest >= 48, `every position held at least 50 ms (shortest ${shortest.toFixed(1)} ms)`);
+  check(heldDwell(dwell), `every position held 50 ms (${holdsNote(dwell)})`);
   const [filled, total] = await page.evaluate(() => [window.__filled(), window.__total]);
   check(filled === total, `a scroll handler throttled to 50 ms filled every image (${filled}/${total})`);
   await page.close();
@@ -743,10 +748,7 @@ await test('lazy pass: a text-only page moves one frame per position until the p
       median(before) < 30,
       `${name}: before, one frame per position (median ${median(before).toFixed(1)} ms)`,
     );
-    check(
-      after.length > 3 && Math.min(...after) >= 48,
-      `${name}: after, every position held at least 50 ms (${after.length}, shortest ${Math.min(...after).toFixed(1)} ms)`,
-    );
+    check(heldDwell(after), `${name}: after, every position held 50 ms (${holdsNote(after)})`);
     await page.close();
   }
   // A pass that holds every position 50 ms, then waits 250 ms at the bottom and after scrolling back.
@@ -875,6 +877,23 @@ await test('element export of a list that grows near the end of the page loads e
   check(
     items === 60,
     `all 60 list items (10, then 5 batches of 10) are in the PDF (${items}, ${Math.round(r.ms)} ms)`,
+  );
+  check(!r.warning, 'no warning', String(r.warning));
+  await page.close();
+});
+
+await test('text feed that answers 100 ms after its end comes near: every batch reaches the PDF', async () => {
+  const { page, tabId } = await openTab('lazy/scroll.html?mode=feed&lat=100');
+  const r = await generateLazy(tabId);
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+    return page.close();
+  }
+  const { text } = lazyPdf(r, 'content-lazy-textfeed.pdf');
+  const items = (text.match(/FEED-\d+-MARK/g) || []).length;
+  check(
+    items === 100,
+    `all 100 feed items (20, then 8 batches of 10) are in the PDF (${items}, ${Math.round(r.ms)} ms)`,
   );
   check(!r.warning, 'no warning', String(r.warning));
   await page.close();
