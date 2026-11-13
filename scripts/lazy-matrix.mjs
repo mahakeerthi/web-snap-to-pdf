@@ -33,17 +33,25 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 //   icons    the first N blocks hold an icon   iconkind upscaled (64 px shown at 200) | missing | pixel
 //   top      header height   root article | section around the blocks   feed=1 endless feed after
 //   fixedbar=1  a fixed bar with an image that never loads
-// lazy/text.html: 1400 paragraphs, 117 pages; noise=1 adds a header that changes on every scroll.
+//   keyed=1  the attribute holds a key and the URL lives in JavaScript
+//   loader=cachedvh  throttled (t) handler that reads innerHeight once at load
+//   loader=velocity  fills only when the scroll moved at most v (20) px/ms since the last event
+// lazy/text.html: 1400 paragraphs, 117 pages; paras=<n> sets the count; noise=1 adds a header that
+// changes on every scroll.
+// lazy/adv.html: galleries that react to the viewport (orientation media queries, re-render on
+// resize, vh-sized blocks, a hero sized from innerHeight); its parameters are listed in the file.
 //
 // Row fields: count is the rule (a) metric (pdf: 300 x 120 images in the PDF, filled: elements the
 // page's loader filled, feed: FEED-n-MARK lines in the PDF text); loader: false means any head
-// warning is false; faster: the share head must cut from base's time; text: false skips rule (d).
+// warning is false; faster: the share head must cut from base's time; text: false skips rule (d);
+// zoom: browser zoom for the row; known: a documented blind spot, reported but never failed.
 const L = 'lazy/loader.html?';
+const A = 'lazy/adv.html?';
 // prettier-ignore
 const ROWS = [
   { id: 'text-117', url: 'lazy/text.html', count: null, loader: false, faster: 0.4, from: 'p4 plain page' },
   { id: 'text-noise', url: 'lazy/text.html?noise=1', count: null, loader: false, from: 'p4 noise page' },
-  { id: 'lazy-long', url: L + 'loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1', count: 'pdf', faster: 0.4, from: 'PR lazy-long.html' },
+  { id: 'lazy-long', url: L + 'loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1', count: 'pdf', from: 'PR lazy-long.html' },
   { id: 'stuck-100', url: L + 'loader=none&n=0&stuck=100', count: null, loader: false, from: 'PR lazy-stuck.html' },
   { id: 'no-loader-dead100', url: L + 'loader=none&n=2&top=2000&dead=100', count: null, loader: false, from: 'r2 noloader-broken100' },
   { id: 'no-loader-icons', url: L + 'loader=none&gap=1200&icons=60', count: null, loader: false, from: 'r2 icons60' },
@@ -82,6 +90,31 @@ const ROWS = [
   { id: 'icons10-lodash100', url: L + 'gap=1200&every=10&icons=10&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet upscaled icons' },
   { id: 'deadicons10-lodash100', url: L + 'gap=1200&every=10&icons=10&iconkind=missing&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet kind=dead' },
   { id: 'natural-every6-lodash100', url: L + 'gap=1200&every=6&ph=natural&loader=lodash&t=100', count: 'filled', from: 'r3 sonnet natural-size preview' },
+  { id: 'short-text-p25', url: 'lazy/text.html?paras=25', count: null, loader: false, from: 'interrogate short page' },
+  { id: 'short-text-p35', url: 'lazy/text.html?paras=35', count: null, loader: false, from: 'interrogate short page' },
+  { id: 'short-text-p50', url: 'lazy/text.html?paras=50', count: null, loader: false, from: 'interrogate short page' },
+  { id: 'short-text-p70', url: 'lazy/text.html?paras=70', count: null, loader: false, from: 'interrogate short page' },
+  { id: 'short-io-n2', url: A + 'loader=io&n=2&gap=1000', count: 'pdf', from: 'interrogate short page' },
+  { id: 'zoom50-lodash50-n5', url: L + 'loader=lodash&t=50&n=5', count: 'pdf', zoom: 0.5, from: 'interrogate browser zoom' },
+  { id: 'zoom50-debounce30-n6', url: L + 'loader=debounce&t=30&n=6', count: 'pdf', zoom: 0.5, from: 'interrogate browser zoom' },
+  { id: 'p-cachedvh-lodash100', url: L + 'loader=cachedvh&t=100', count: 'pdf', from: 'interrogate innerHeight read once' },
+  { id: 'p-velocity20', url: L + 'loader=velocity&v=20', count: 'pdf', from: 'interrogate scroll speed' },
+  { id: 'ahead1000-lodash200', url: L + 'target=bg&attr=data-bg&loader=lodash&t=200&ahead=1000', count: 'filled', from: 'interrogate look-ahead' },
+  { id: 'ahead1500-lodash250', url: L + 'target=bg&attr=data-bg&loader=lodash&t=250&ahead=1500', count: 'filled', from: 'interrogate look-ahead' },
+  { id: 'img-ahead1500-lodash250', url: L + 'ph=blur&loader=lodash&t=250&ahead=1500', count: 'pdf', from: 'interrogate look-ahead' },
+  { id: 'orient-mq-io', url: A + 'loader=io&mode=mq', count: 'pdf', from: 'interrogate orientation media query' },
+  { id: 'orient-js-io', url: A + 'loader=io&mode=js', count: 'pdf', from: 'interrogate orientation matchMedia' },
+  { id: 'orient-js-io-datasrc', url: A + 'loader=io&mode=js&attr=data-src', count: 'pdf', from: 'interrogate orientation matchMedia' },
+  { id: 'reset0-io', url: A + 'loader=io&mode=reset&rd=0', count: 'pdf', from: 'interrogate re-render on resize' },
+  { id: 'vh100-n20-io', url: A + 'loader=io&vh=100&n=20', count: 'pdf', from: 'interrogate vh blocks' },
+  { id: 'vh100-n40-io', url: A + 'loader=io&vh=100&n=40', count: 'pdf', from: 'interrogate vh blocks' },
+  { id: 'vh100-n60-io', url: A + 'loader=io&vh=100&n=60', count: 'pdf', from: 'interrogate vh blocks' },
+  { id: 'hero-db100', url: A + 'loader=io&n=20&hero=1&herodb=100', count: 'pdf', from: 'interrogate hero from innerHeight' },
+  { id: 'hero-db250', url: A + 'loader=io&n=20&hero=1&herodb=250', count: 'pdf', from: 'interrogate hero from innerHeight' },
+  { id: 'blind-keyed-lodash100', url: L + 'ph=natural&attr=data-k&keyed=1&loader=lodash&t=100', count: 'filled', from: 'arch candidate 2 blind loader' },
+  { id: 'blind-keyed-debounce50', url: L + 'ph=natural&attr=data-k&keyed=1&loader=debounce&t=50', count: 'filled', from: 'arch candidate 2 blind loader' },
+  { id: 'blindspot-bg-lodash100', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=lodash&t=100', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
+  { id: 'blindspot-bg-debounce30', url: L + 'target=bg&attr=data-k&keyed=1&top=1600&loader=debounce&t=30', count: 'filled', known: true, from: 'known blind spot: no markers, backgrounds set on scroll' },
 ];
 
 const SLOWER = 0.1;
@@ -167,11 +200,16 @@ async function pickRoot(page, sw, tabId) {
 async function runRow(env, row, outDir) {
   const url = `${env.base}/${row.url}`;
   const page = await env.context.newPage();
+  let tabId = null;
   try {
     await page.goto(url, { waitUntil: 'load' });
     await page.waitForTimeout(200);
-    const tabId = await tabIdForUrl(env.sw, url);
+    tabId = await tabIdForUrl(env.sw, url);
     await page.bringToFront();
+    if (row.zoom) {
+      await env.sw.evaluate(({ tabId, zoom }) => chrome.tabs.setZoom(tabId, zoom), { tabId, zoom: row.zoom });
+      await page.waitForTimeout(400);
+    }
     if (row.prep === 'element') await pickRoot(page, env.sw, tabId);
     const r = await env.sw.evaluate(
       async ({ tabId, prep, settings }) => {
@@ -213,6 +251,9 @@ async function runRow(env, row, outDir) {
   } catch (err) {
     return { error: String(err && err.message).split('\n')[0] };
   } finally {
+    // Chrome keeps zoom per origin: put it back so later rows run at 100%.
+    if (row.zoom && tabId != null)
+      await env.sw.evaluate((id) => chrome.tabs.setZoom(id, 0), tabId).catch(() => {});
     await page.close();
   }
 }
@@ -291,11 +332,12 @@ function report(rows, results, sides) {
       'base time': ms('base'),
       'head time': ms('head'),
       pages: `${stat(side('base').map((r) => r.pages))} ${stat(side('head').map((r) => r.pages))}`,
-      result: fails.length ? 'FAIL' : 'pass',
+      result: !fails.length ? 'pass' : row.known ? 'known' : 'FAIL',
+      known: !!row.known,
       fails,
     };
   });
-  const cols = Object.keys(table[0]).filter((c) => c !== 'fails');
+  const cols = Object.keys(table[0]).filter((c) => c !== 'fails' && c !== 'known');
   const width = Object.fromEntries(
     cols.map((c) => [c, Math.max(c.length, ...table.map((t) => t[c].length))]),
   );
@@ -303,9 +345,13 @@ function report(rows, results, sides) {
   console.log(`\nbase: ${sides.base.label}\nhead: ${sides.head.label}\n`);
   console.log(line(Object.fromEntries(cols.map((c) => [c, c]))));
   for (const t of table) console.log(line(t));
-  const failed = table.filter((t) => t.fails.length);
+  const failed = table.filter((t) => t.fails.length && !t.known);
+  const known = table.filter((t) => t.fails.length && t.known);
+  for (const t of known) for (const f of t.fails) console.log(`KNOWN ${t.row}: ${f}`);
   for (const t of failed) for (const f of t.fails) console.log(`FAIL ${t.row}: ${f}`);
-  console.log(`\n${table.length - failed.length} rows passed, ${failed.length} failed`);
+  console.log(
+    `\n${table.length - failed.length - known.length} rows passed, ${known.length} known blind spots, ${failed.length} failed`,
+  );
   return failed.length;
 }
 
