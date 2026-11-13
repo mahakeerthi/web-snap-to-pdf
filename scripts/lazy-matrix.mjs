@@ -133,7 +133,7 @@ const ROWS = [
   { id: 'slowfeed-lat500-m9000', url: S + 'mode=feed&lat=500&margin=9000', count: 'feed', text: false, warns: false, from: 'review: text feed that answers 500 ms late' },
   { id: 'slowfeed-lat400-m6000', url: S + 'mode=feed&lat=400&margin=6000', count: 'feed', text: false, warns: false, from: 'review: text feed that answers 400 ms late' },
   { id: 'rootfeed-text-element', url: S + 'mode=rootfeed&img=0&foot=3000', prep: 'element', count: 'feed', text: false, warns: false, from: 'review: text list that grows at the document end' },
-  { id: 'finite-grow-before-250', url: S + 'mode=feed&img=1&init=25&batches=15&lat=0', count: 'feed', text: false, warns: false, from: 'review: feed that stops growing at position 240 of 258' },
+  { id: 'finite-grow-before-250', url: S + 'mode=feed&img=1&init=25&batches=15&lat=0', count: 'feed', text: false, warns: false, beyond: true, from: 'review: feed that stops growing at position 240 of 258, scrolled to its end' },
   { id: 'finite-grow-after-250', url: S + 'mode=feed&img=1&init=33&batches=15&lat=0', count: 'feed', text: false, warns: true, from: 'review: feed whose last batch arrives after position 250' },
 ];
 
