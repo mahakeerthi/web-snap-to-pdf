@@ -384,8 +384,8 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "पेज लोड करने का समय खत्म हो गया, इसलिए अंत के पास की कुछ सामग्री छूट सकती है।",
-    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+    "message": "पेज के अंत से पहले स्क्रॉल रुक गया, इसलिए अंत के पास की कुछ सामग्री छूट सकती है।",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
   },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",

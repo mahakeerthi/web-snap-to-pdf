@@ -168,14 +168,10 @@ also turns on Markdown export and resets all settings.
   element**.
 - Canvas, WebGL, and video content prints as Chrome's print engine renders it.
 - On very long pages, page scans stop after 200,000 elements and the wait for slow images ends after
-  6 seconds. Auto-scroll always covers at least 250 steps. After that it stops as soon as the page
-  has grown since step 250 (an endless feed), or after 30 seconds on a page that does not grow. The
-  popup and the preview then warn that content near the end may be missing.
-- A page with no images, lazy-loading markers or background images scrolls fast, one frame per
-  step. If its own script shows content only as you scroll, some of that content can be missing
-  from the PDF: text that a scroll-reveal script fades in, backgrounds set by a handler that waits
-  for scrolling to pause, and the first few backgrounds a fast handler sets before the scroll slows
-  down.
+  6 seconds. Auto-scroll moves through every page the same way, 50 ms per step, and always covers at
+  least 250 steps. After that it stops as soon as the page has grown since step 250 (an endless
+  feed), or after 30 seconds on a page that does not grow. The popup and the preview then warn that
+  content near the end may be missing.
 - Markdown export drops `data:` images larger than 2 KB, escapes Markdown punctuation everywhere
   (`snake_case` becomes `snake\_case`), and exports elements hidden with `visibility: hidden`. It
   has no support for rowspan, `sup`, `sub`, `mark`, `u`, task lists, or reversed lists. It merges
@@ -194,7 +190,7 @@ also turns on Markdown export and resets all settings.
 | "Could not detect an article on this page."                                                                         | Use **Select element** instead.                                                                                                                                                                                                                         |
 | **Select an element to preview and save** or **Remove elements before saving** in the right-click menu does nothing | An export is still running on this tab. The extension refuses the entry and writes the reason only to the service worker console. While the export runs, the popup disables its cards and shows "Generating PDF…". Try again after the export finishes. |
 | Images are missing from the PDF                                                                                     | Keep **Scroll page to load lazy images** on. Slow images get up to 6 seconds.                                                                                                                                                                           |
-| "Ran out of time loading the page, so some content near the end may be missing."                                    | The page kept growing as it scrolled (an endless feed), or is too long to scroll in 30 seconds. Scroll down to load the part you need, then save again, or use **Select element** to save only that part.                                               |
+| "Stopped scrolling before the end of the page, so some content near the end may be missing."                        | The page kept growing as it scrolled past step 250 (an endless feed), or is too long to scroll in 30 seconds. Scroll down to load the part you need, then save again, or use **Select element** to save only that part.                                 |
 | The page looks like a phone layout, or very small                                                                   | Change the layout width, or choose **Fit to paper width** and set the scale.                                                                                                                                                                            |
 | The page looks wrong after a failed export                                                                          | Right-click the page and choose **Restore all removed elements**, or reload the tab. If you removed elements, **Reset page** in the popup does the same.                                                                                                |
 

@@ -384,8 +384,8 @@
     "description": "Status line error"
   },
   "status_lazyIncomplete": {
-    "message": "加载页面超时，末尾附近的部分内容可能缺失。",
-    "description": "Added after the saved status when the scroll that loads lazy content ran out of time before the end of the page"
+    "message": "在到达页面末尾之前已停止滚动，末尾附近的部分内容可能缺失。",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
   },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
