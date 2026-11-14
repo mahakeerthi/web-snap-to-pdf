@@ -195,8 +195,9 @@
       state.prepared = null;
     });
     // The preview overlay is a full-viewport fixed layer outside <body>: it must not end up in
-    // the PDF or in a screenshot. Shown again by restore().
-    if (state.preview) setStyle(state.preview.host, 'display', 'none');
+    // the PDF or in a screenshot. Shown again by restore(), which also puts focus back, because
+    // hiding the host drops it.
+    if (state.preview) hideOverlay(state.preview);
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -205,6 +206,14 @@
     await nextFrame();
     await nextFrame();
     return { ok: true, title: document.title, lazy, reused: reused || undefined };
+  }
+
+  function hideOverlay(m) {
+    const focused = m.shadow.activeElement;
+    state.undo.push(() => {
+      if (state.preview === m && focused && focused.isConnected) focused.focus();
+    });
+    setStyle(m.host, 'display', 'none');
   }
 
   // The element a prep mode works on: the page (null), the detected article or the picked element.
