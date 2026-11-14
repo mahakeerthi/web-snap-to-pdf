@@ -10,6 +10,10 @@
   .item { height: 1000px; box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
   .item img { display: block; width: 300px; height: 120px; }
   #root { padding: 16px 16px 16px 40px; }
+  .panel { width: 360px; height: 420px; box-sizing: border-box; background: #fff; border: 2px solid #333; }
+  .panel.fixed { position: fixed; top: 60px; right: 20px; }
+  .panel.sticky { position: sticky; top: 20px; flex: none; }
+  .block img.slot { display: block; width: 300px; height: 120px; background: #ddd; }
   .rv { opacity: 0; }
   .rv.in { opacity: 1; }
 </style>
@@ -17,24 +21,31 @@
 </head>
 <body>
 <script>
-  // Pages whose content appears on scroll without the markers the lazy pass looks for.
+  // Pages whose content appears on scroll, or after the window has stayed somewhere for a while.
   //   mode=classbg   n blocks of gap px, each with a div whose background-image comes from a
   //                  stylesheet rule for the class "shown", which a throttled (loader=lodash) or
   //                  debounced (loader=debounce) scroll handler (t ms) adds to visible divs. No img,
   //                  no lazy class, no inline url(, no matching data-* attribute. logo=1 adds an img.
   //   mode=feed      a text feed: init items, then batches of 10 appended lat ms after a sentinel
   //                  comes within margin px of the viewport, up to batches times. img=1 puts an img
-  //                  in every item.
+  //                  in every item. root=fixed|sticky|float adds a root for an element export that
+  //                  does not sit in the feed's flow: a fixed or sticky panel (aside#root with the
+  //                  text PANEL-START-MARK and PANEL-END-MARK) that stays in view, or a section#root
+  //                  of 32 px whose floated child holds the feed.
   //   mode=rootfeed  a 1,000 px header, a section#root list of init items with images (img=0: text
   //                  only), a footer of foot px, and an infinite-scroll handler that appends 10 items
   //                  to the list when the window is within 300 px of the document end, up to batches
   //                  times.
   //   mode=reveal    n sections of gap px whose text is transparent until a throttled scroll handler
   //                  (t ms) adds the class "in" to the visible ones, as scroll-reveal libraries do.
+  //   mode=bottom    n (6) sections of gap (1000) px, each with an image nothing has filled. Once the
+  //                  window has stayed at the end of the page for t (125) ms, a handler fills every
+  //                  image and appends a block of late (1000) px with the text LATE-BLOCK-MARK, which
+  //                  lengthens the page.
   // window.__filled() counts filled backgrounds, feed items or revealed sections.
   const q = new URLSearchParams(location.search);
   const num = (k, d) => Number(q.get(k) ?? d);
-  const MODE = ['classbg', 'feed', 'rootfeed', 'reveal'].includes(q.get('mode')) ? q.get('mode') : 'classbg';
+  const MODE = ['classbg', 'feed', 'rootfeed', 'reveal', 'bottom'].includes(q.get('mode')) ? q.get('mode') : 'classbg';
   const LOADER = q.get('loader') === 'debounce' ? 'debounce' : 'lodash';
   const T = num('t', 100);
   const N = num('n', 60);
@@ -101,9 +112,34 @@
     const LAT = num('lat', 100);
     const BATCHES = num('batches', 8);
     const IMG = q.get('img') === '1';
+    const ROOT = ['fixed', 'sticky', 'float'].includes(q.get('root')) ? q.get('root') : null;
     const feed = document.createElement('div');
     const sentinel = document.createElement('div');
-    document.body.append(feed, sentinel);
+    const panel = () => {
+      const aside = document.createElement('aside');
+      aside.id = 'root'; aside.className = `panel ${ROOT}`;
+      for (const text of ['PANEL-START-MARK', 'A panel beside the feed.', 'PANEL-END-MARK']) {
+        const p = document.createElement('p'); p.textContent = text; aside.appendChild(p);
+      }
+      return aside;
+    };
+    if (ROOT === 'fixed') {
+      document.body.append(feed, sentinel, panel());
+    } else if (ROOT === 'sticky') {
+      const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;align-items:flex-start';
+      const col = document.createElement('div'); col.style.flex = '1';
+      col.append(feed, sentinel);
+      wrap.append(col, panel());
+      document.body.append(wrap);
+    } else if (ROOT === 'float') {
+      const section = document.createElement('section'); section.id = 'root';
+      const floated = document.createElement('div'); floated.style.cssText = 'float:left;width:100%';
+      floated.append(feed, sentinel);
+      section.append(floated);
+      document.body.append(section);
+    } else {
+      document.body.append(feed, sentinel);
+    }
     let n = 0, batches = 0, loading = false;
     const add = (count) => { for (let i = 0; i < count; i++) feed.appendChild(feedItem(n++, IMG)); };
     add(num('init', 20));
@@ -129,6 +165,37 @@
     });
     window.__total = num('init', 10) + 10 * BATCHES;
     window.__filled = () => n;
+  } else if (MODE === 'bottom') {
+    const BN = num('n', 6), BGAP = num('gap', 1000), BT = num('t', 125);
+    const imgs = [];
+    for (let i = 0; i < BN; i++) {
+      const block = document.createElement('section');
+      block.className = 'block'; block.style.height = BGAP + 'px';
+      const p = document.createElement('p'); p.textContent = `BLOCK-${i}-MARK`;
+      const im = document.createElement('img'); im.className = 'slot'; im.alt = '';
+      block.append(p, im);
+      document.body.appendChild(block);
+      imgs.push(im);
+    }
+    let timer = null, filled = 0;
+    const atEnd = () => scrollY + innerHeight >= document.documentElement.scrollHeight - 1;
+    addEventListener('scroll', () => {
+      clearTimeout(timer);
+      if (filled || !atEnd()) return;
+      timer = setTimeout(() => {
+        if (filled || !atEnd()) return;
+        imgs.forEach((im, i) => { im.src = imageUrl(i, 300, 120, 'b '); });
+        filled = imgs.length;
+        const late = document.createElement('section');
+        late.className = 'block'; late.style.height = num('late', 1000) + 'px';
+        const p = document.createElement('p'); p.textContent = 'LATE-BLOCK-MARK';
+        late.appendChild(p);
+        document.body.appendChild(late);
+      }, BT);
+    });
+    window.__total = BN;
+    window.__expected = BN;
+    window.__filled = () => filled;
   } else {
     for (let i = 0; i < N; i++) {
       const section = document.createElement('section');

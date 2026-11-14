@@ -816,7 +816,7 @@ await test('article export of a page with images: every image loads and the pass
   await page.close();
 });
 
-await test('article export above an endless feed scrolls the whole page like main, and does not warn because the article was covered', async () => {
+await test('article export above an endless feed scrolls the whole page like main and warns, because the scroll stopped before the end of the page', async () => {
   const { page, tabId } = await openTab('lazy/loader.html?root=article&top=3000&n=0&feed=1');
   await recordScrollPositions(page);
   const r = await generateLazy(tabId, 'article');
@@ -831,7 +831,7 @@ await test('article export above an endless feed scrolls the whole page like mai
     'PDF holds the whole article',
   );
   check(!text.includes('FEED-'), 'PDF holds no feed item');
-  check(!r.warning, 'no warning', String(r.warning));
+  check(r.warning === lazyWarning(), `export carries the lazy-load warning (${r.warning})`);
   const step = LAZY_STEP(rec.innerHeight);
   const furthest = Math.max(...rec.positions.map((p) => p.y));
   check(
@@ -839,6 +839,52 @@ await test('article export above an endless feed scrolls the whole page like mai
     `the pass scrolled past the article for 250 positions, as on main (furthest ${furthest} px, 250 positions ${250 * step} px, ${Math.round(r.ms)} ms)`,
   );
   await page.close();
+});
+
+// The warning looks at the page, not at the root: an export of an element warns when the scroll
+// stopped before the end of the page, wherever the element is and whether or not its rectangle
+// says it was covered. A fixed or sticky panel stays in view for the whole scroll, and a section
+// whose only child is floated has a height of 32 px.
+await test('element export above an endless feed warns, for a root in the flow, fixed, sticky or holding the feed in a float', async () => {
+  const CASES = [
+    ['a list that grows at the page end', 'mode=rootfeed&img=0&batches=40', 'section', 'list'],
+    ['a fixed panel', 'mode=feed&lat=0&batches=40&root=fixed', 'aside', 'panel'],
+    ['a sticky sidebar beside the feed', 'mode=feed&lat=0&batches=40&root=sticky', 'aside', 'panel'],
+    [
+      'a 32 px section whose floated child holds the feed',
+      'mode=feed&lat=0&batches=40&root=float',
+      'section',
+      'list',
+      32,
+    ],
+  ];
+  for (const [name, query, tag, kind, height] of CASES) {
+    const { page, tabId } = await openTab(`lazy/scroll.html?${query}`);
+    if (height) {
+      const h = Math.round((await rectOf(page, '#root')).height);
+      check(h === height, `${name}: premise: the root is ${height} px high (${h})`);
+    }
+    await pickElement(page, tabId, '#root', { widenTo: tag });
+    const r = await generateLazy(tabId, 'element');
+    await closePreviewOverlay(page);
+    if (!r.base64) {
+      check(false, `${name}: PDF generated`, JSON.stringify({ error: r.error }));
+      await page.close();
+      continue;
+    }
+    const { text } = lazyPdf(r, 'content-lazy-root-feed.pdf');
+    const items = (text.match(/FEED-\d+-MARK/g) || []).length;
+    const [filled, total] = await page.evaluate(() => [window.__filled(), window.__total]);
+    check(filled < total, `${name}: premise: the feed still had batches left (${filled} of ${total} items)`);
+    check(
+      kind === 'panel'
+        ? text.includes('PANEL-START-MARK') && text.includes('PANEL-END-MARK') && items === 0
+        : items > 0,
+      `${name}: the PDF holds the picked element (${items} feed items)`,
+    );
+    check(r.warning === lazyWarning(), `${name}: export carries the lazy-load warning (${r.warning})`);
+    await page.close();
+  }
 });
 
 await test('element export of a list that grows near the end of the page loads every batch, with images or text only', async () => {
@@ -864,6 +910,35 @@ await test('element export of a list that grows near the end of the page loads e
     check(!r.warning, `${name}: no warning`, String(r.warning));
     await page.close();
   }
+});
+
+// The pass holds the bottom of the page for 150 ms before it scrolls back. A loader that fills its
+// images only once the window has rested at the end for 125 ms (and then appends a block, as a late
+// banner or an image without a size does) gets that time: the last loop position holds the bottom
+// for 50 ms, so without the wait the loader never fires. The late block lengthens the page after the
+// loop ended, which the export must not report as a stop.
+await test('a loader that waits for the page to rest at its end: the 150 ms bottom wait lets it fill every image, and its late growth does not warn', async () => {
+  const { page, tabId } = await openTab('lazy/scroll.html?mode=bottom&n=6&gap=1000&t=125');
+  const { height: before, innerHeight } = await page.evaluate(() => ({
+    height: document.documentElement.scrollHeight,
+    innerHeight,
+  }));
+  const step = LAZY_STEP(innerHeight);
+  let atEnd = 0;
+  for (let y = 0; y < before; y += step) if (y >= before - innerHeight) atEnd++;
+  check(atEnd === 1, `premise: one loop position reaches the end of the page (${atEnd}, page ${before} px)`);
+  const r = await generateLazy(tabId);
+  if (!r.base64) {
+    check(false, 'PDF generated', JSON.stringify({ error: r.error }));
+    return page.close();
+  }
+  const { images, text } = lazyPdf(r, 'content-lazy-bottom.pdf');
+  const after = await page.evaluate(() => document.documentElement.scrollHeight);
+  check(after > before, `premise: the page grew after the loop ended (${before} to ${after} px)`);
+  check(images === 6, `the loader filled every image and all 6 are in the PDF (${images})`);
+  check(text.includes('LATE-BLOCK-MARK'), 'the late block is in the PDF');
+  check(!r.warning, 'no warning for growth during the bottom wait', String(r.warning));
+  await page.close();
 });
 
 await test('text feed that answers 100 ms after its end comes near: every batch reaches the PDF', async () => {

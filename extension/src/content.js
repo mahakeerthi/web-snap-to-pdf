@@ -121,7 +121,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    const lazy = loadLazy ? await loadLazyContent(root) : null;
+    const lazy = loadLazy ? await loadLazyContent() : null;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -401,10 +401,9 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  // Scrolls the whole page for every export. Returns { complete }: false when the pass stopped
-  // before the end of the page, or with a root, before one viewport past the root's bottom, so an
-  // export of an element above an endless feed does not warn when the element itself was covered.
-  async function loadLazyContent(root) {
+  // Scrolls the whole page for every export, with or without a root. Returns { complete }: false
+  // when the pass stopped before the end of the page.
+  async function loadLazyContent() {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
     // reverting them would only make the images disappear again.
@@ -423,10 +422,6 @@
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
     const pageEnd = () => document.documentElement.scrollHeight;
-    const rootEnd = () =>
-      root
-        ? Math.min(pageEnd(), root.getBoundingClientRect().bottom + window.scrollY + window.innerHeight)
-        : pageEnd();
     const start = performance.now();
     let y = 0;
     let positions = 0;
@@ -443,7 +438,9 @@
       positions++;
       if (positions === LAZY_MIN_POSITIONS) heightAtMin = pageEnd();
     }
-    const complete = y >= rootEnd();
+    // Judged before the jump: a late image or banner that lengthens the page during the bottom
+    // wait is not a stop.
+    const complete = y >= pageEnd();
     scrollToInstant(0, pageEnd());
     await sleep(150);
     scrollToInstant(0, startY);
