@@ -19,6 +19,26 @@
     "message": "Nur den Hauptartikel der aktuellen Seite als PDF speichern",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "Seite als PDF speichern",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Nur Artikel als PDF speichern",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Element auswählen, Vorschau anzeigen und speichern",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Elemente vor dem Speichern entfernen",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Alle entfernten Elemente wiederherstellen",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "Seite wird gelesen…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Für jedes PDF fragen, wo es gespeichert werden soll",
+    "message": "Für jede Datei fragen, wo sie gespeichert werden soll",
     "description": "Checkbox"
   },
   "options_pageHandling": {

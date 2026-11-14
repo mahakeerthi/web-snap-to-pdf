@@ -19,6 +19,26 @@
     "message": "仅将当前页面的正文保存为 PDF",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "将页面保存为 PDF",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "仅将正文保存为 PDF",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "选择元素以预览并保存",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "保存前移除元素",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "恢复所有已移除的元素",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "正在读取页面…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "每次保存 PDF 前询问保存位置",
+    "message": "每次保存文件前询问保存位置",
     "description": "Checkbox"
   },
   "options_pageHandling": {
