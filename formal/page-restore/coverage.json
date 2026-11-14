@@ -33,10 +33,10 @@
       "handleMessage"
     ]
   },
-  "syncCommit": "4bf3ecd",
+  "syncCommit": "ea13924",
   "hashes": {
     "extension/src/content.js#handle": "b54032da6451a06a",
-    "extension/src/content.js#prepare": "66ffb6719105c7f2",
+    "extension/src/content.js#prepare": "7f97735a6ea6f893",
     "extension/src/content.js#restore": "3269c38786eae6b4",
     "extension/src/content.js#setStyle": "086cd427e5e3a363",
     "extension/src/content.js#isolate": "76a7a0afad633084",
