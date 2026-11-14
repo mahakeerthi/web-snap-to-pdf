@@ -536,7 +536,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Perguntar onde salvar cada PDF",
+    "message": "Perguntar onde salvar cada arquivo",
     "description": "Checkbox"
   },
   "options_pageHandling": {

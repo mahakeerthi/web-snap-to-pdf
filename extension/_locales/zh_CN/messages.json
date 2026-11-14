@@ -536,7 +536,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "每次保存 PDF 前询问保存位置",
+    "message": "每次保存文件前询问保存位置",
     "description": "Checkbox"
   },
   "options_pageHandling": {
