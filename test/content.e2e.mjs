@@ -190,7 +190,8 @@ async function previewInfo(page) {
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
     };
     const canvases = [...sr.querySelectorAll('.stage canvas')];
-    const seg = [...sr.querySelectorAll('.seg button')];
+    const select = q('select.format');
+    const options = select ? [...select.options] : [];
     return {
       hostDisplay: getComputedStyle(host).display,
       title: q('h2').textContent,
@@ -212,14 +213,18 @@ async function previewInfo(page) {
         ? { width: canvases[0].width, height: canvases[0].height, cssWidth: canvases[0].style.width }
         : null,
       canvases: canvases.map((c) => ({ width: c.width, height: c.height, cssWidth: c.style.width })),
+      partHeads: [...sr.querySelectorAll('.part-head')].map(shown),
+      partsGap: q('.parts') ? getComputedStyle(q('.parts')).rowGap : null,
       parts: [...sr.querySelectorAll('.part')].map((p) => ({
         label: p.querySelector('.part-label') ? p.querySelector('.part-label').textContent : '',
         copy: shown(p.querySelector('.part-copy')),
         download: shown(p.querySelector('.part-download')),
       })),
-      formats: seg.map((b) => b.dataset.format),
-      labels: seg.map((b) => b.textContent),
-      checked: (seg.find((b) => b.getAttribute('aria-checked') === 'true') || {}).dataset?.format || null,
+      formats: options.map((o) => o.value),
+      labels: options.map((o) => o.textContent),
+      checked: select && options.length ? select.value : null,
+      formatLabel: select && select.labels[0] ? select.labels[0].textContent : '',
+      formatShown: shown(select),
       copyVisible: shown(q('.copy')),
       copyTitle: q('.copy').title,
       downloadLabel: q('.download').textContent,
@@ -229,11 +234,11 @@ async function previewInfo(page) {
         .filter(shown)
         .map((b) => b.getAttribute('aria-label') || b.textContent),
       actionsRight: Math.max(
-        ...[...sr.querySelectorAll('.toolbar .btn, .seg')]
+        ...[...sr.querySelectorAll('.toolbar .btn, .format-box')]
           .filter(shown)
           .map((b) => b.getBoundingClientRect().right),
       ),
-      focused: sr.activeElement ? sr.activeElement.className || sr.activeElement.dataset.format : null,
+      focused: sr.activeElement ? sr.activeElement.className : null,
     };
   });
 }
@@ -266,6 +271,10 @@ async function clickPreview(page, selector) {
   }, selector);
   await page.mouse.move(r.x, r.y);
   await page.mouse.click(r.x, r.y);
+}
+// Pick a format in the overlay's Format dropdown.
+async function chooseFormat(page, format) {
+  await page.locator('[data-websnap-ui="preview"] select.format').selectOption(format);
 }
 async function closePreviewOverlay(page) {
   await clickPreview(page, '.close');
@@ -1522,18 +1531,19 @@ await test('preview: picker click opens the full-page overlay with a preview of 
     info.buttons.join('|') === 'Download|Reselect|Toggle light / dark|Close',
     `toolbar actions with PDF (${info.buttons.join('|')})`,
   );
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   let now = await previewInfo(page);
   check(now.checked === 'png' && now.copyVisible, 'choosing PNG selects it and shows "Copy image"');
   check(
     now.buttons.join('|') === 'Copy image|Download|Reselect|Toggle light / dark|Close',
     `toolbar actions with PNG (${now.buttons.join('|')})`,
   );
-  await page.keyboard.press('ArrowRight');
+  await page.locator('[data-websnap-ui="preview"] select.format').focus();
+  await page.keyboard.press('j');
   now = await previewInfo(page);
   check(
     now.checked === 'jpeg' && now.copyVisible && !now.downloadDisabled,
-    `arrow keys move to JPEG; Copy image stays available for JPEG (${now.checked})`,
+    `type-ahead moves to JPEG; Copy image stays available for JPEG (${now.checked})`,
   );
   // The page is already back to normal while the overlay is open.
   const st = await pageState(tabId);
@@ -1579,7 +1589,7 @@ await test('preview: Copy image puts a PNG on the clipboard for PNG and JPEG', a
     });
   for (const format of ['png', 'jpeg']) {
     await page.evaluate(() => navigator.clipboard.writeText('-')); // clear
-    await clickPreview(page, `.seg [data-format="${format}"]`);
+    await chooseFormat(page, format);
     await clickPreview(page, '.copy');
     const clip = await waitFor(
       async () => {
@@ -1648,7 +1658,7 @@ await test('preview: toolbar wraps at 360 px and keeps keyboard focus inside the
   // emulation (the window itself cannot be narrower than 500 px).
   await page.setViewportSize({ width: 360, height: 740 });
   await wait(100);
-  await clickPreview(page, '.seg [data-format="jpeg"]');
+  await chooseFormat(page, 'jpeg');
   const now = await previewInfo(page);
   check(now.viewport.width === 360, `viewport is 360 px wide (${now.viewport.width})`);
   await page.screenshot({ path: path.join(outDir, 'preview-overlay-360.png') }); // for visual review
@@ -1690,7 +1700,7 @@ await test('preview: Download PNG saves the element at settings.imageScale; JPEG
   await setSettings({ imageScale: 2, filenameTemplate: '{title} {time}' });
   const { page, tabId } = await openTab('element.html');
   await pickElement(page, tabId, '#red');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.png$/.test(i.filename));
   check(
@@ -1738,7 +1748,7 @@ await test('preview: Download PDF saves a PDF with only the element (overlay not
   await page.evaluate(() => window.scrollTo({ top: 4700, behavior: 'instant' }));
   const before = await snapshot(page);
   await pickElement(page, tabId, '#red', { scroll: false });
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.pdf$/.test(i.filename), 60000);
   const text = execFileSync('pdftotext', ['-layout', item.filename, '-'], { encoding: 'utf8' });
@@ -1794,7 +1804,12 @@ await test('split: a 400×3700 element is shown and saved as 3 parts (1600 / 160
     info.parts.map((p) => p.label).join('|') === 'Part 1 of 3|Part 2 of 3|Part 3 of 3',
     `part headers (${info.parts.map((p) => p.label).join('|')})`,
   );
-  check(info.splitNote === 'Split into 3 parts for easier viewing', `split note (${info.splitNote})`);
+  check(info.checked === 'pdf', `PDF is selected by default (${info.checked})`);
+  check(
+    info.splitNote === '' && info.partHeads.length === 3 && info.partHeads.every((h) => !h),
+    `PDF selected: no split note and no part headers (${JSON.stringify([info.splitNote, info.partHeads])})`,
+  );
+  check(info.partsGap === '0px', `PDF selected: the parts touch (gap ${info.partsGap})`);
   // Each canvas shows its own slice of the element (stripes 0, 16 and 32 at the top).
   const tops = [];
   for (const [i, first] of [
@@ -1808,17 +1823,23 @@ await test('split: a 400×3700 element is shown and saved as 3 parts (1600 / 160
   }
   check(tops.every(Boolean), `each part starts at its own stripe (${tops})`);
   // PDF selected: parts have no per-part actions; the toolbar says Download.
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   let now = await previewInfo(page);
   check(
     now.parts.every((p) => !p.copy && !p.download) && now.downloadLabel === 'Download',
     `PDF: no per-part buttons, "${now.downloadLabel}"`,
   );
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   now = await previewInfo(page);
   check(
     now.parts.every((p) => p.copy && p.download) && now.downloadLabel === 'Download all parts',
     `PNG: per-part Copy / Download, toolbar "${now.downloadLabel}"`,
+  );
+  check(
+    now.splitNote === 'Split into 3 parts for easier viewing' &&
+      now.partHeads.every(Boolean) &&
+      now.partsGap === '24px',
+    `PNG selected: split note, part headers and the 24 px gap (${now.splitNote}, ${now.partsGap})`,
   );
   check(/Part 1 of 3/.test(now.copyTitle), `toolbar Copy tooltip names part 1 (${now.copyTitle})`);
 
@@ -1933,7 +1954,7 @@ await test('capture: 20000 px tall element needs no reduction once split (13 par
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#huge');
   check(info.ready && info.parts.length === 13, `preview in 13 parts (${info.parts.length})`);
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const withPng = await previewInfo(page);
   check(!withPng.warning, `no size warning (${withPng.warning})`);
   await closePreviewOverlay(page);
@@ -1968,10 +1989,10 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
   await setSettings({ imageScale: 2 });
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#wide');
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   const withPdf = await previewInfo(page);
   check(info.ready && !withPdf.warning, 'preview shown, no warning while PDF is selected');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const withPng = await previewInfo(page);
   check(
     /16,384|16384/.test(withPng.warning) && /1\.82/.test(withPng.warning),
@@ -2004,7 +2025,7 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
   check(/16,384|16384/.test(res.warning || ''), `export returns a warning (${res.warning})`);
   // Through the overlay: a download that comes back with a warning keeps the overlay open to show it.
   await pickElement(page, tabId, '#wide');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const t0 = new Date().toISOString();
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.png$/.test(i.filename) && i.startTime >= t0);
@@ -2113,7 +2134,7 @@ await test('markdown: preview overlay offers Markdown only when enabled; downloa
     info.formats.includes('markdown') && info.labels.includes('Markdown'),
     `Markdown option shown when enabled (${info.labels})`,
   );
-  await clickPreview(page, '.seg [data-format="markdown"]');
+  await chooseFormat(page, 'markdown');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /\.md$/.test(i.filename));
   const md = fs.readFileSync(item.filename, 'utf8');

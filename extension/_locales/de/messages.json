@@ -12,11 +12,11 @@
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "Aktuelle Seite mit den gespeicherten Einstellungen als PDF speichern",
+    "message": "Aktuelle Seite vor dem Speichern in der Vorschau ansehen",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "Nur den Hauptartikel der aktuellen Seite als PDF speichern",
+    "message": "Nur den Hauptartikel vor dem Speichern in der Vorschau ansehen",
     "description": "Keyboard shortcut description"
   },
   "popup_pageTitleLoading": {
@@ -332,11 +332,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "Ganze Seite speichert alles auf der Seite als PDF, mit funktionierenden Links.",
+    "message": "Ganze Seite zeigt eine Vorschau der gesamten Seite. Wählen Sie PDF, PNG oder JPEG und laden Sie sie dann herunter.",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "Nur Artikel behält Haupttext und Bilder und lässt Menüs, Seitenleisten und Werbung weg.",
+    "message": "Nur Artikel zeigt eine Vorschau von Haupttext und Bildern, ohne Menüs, Seitenleisten und Werbung.",
     "description": "Help panel text"
   },
   "help_select": {
@@ -680,7 +680,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "PDF speichern",
+    "message": "Vorschau",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -699,9 +699,17 @@
     "message": "Dieses Element exportieren",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "Diese Seite exportieren",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "Diesen Artikel exportieren",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "Format",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -725,7 +733,7 @@
   },
   "preview_copyImage": {
     "message": "Bild kopieren",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "Alle Teile herunterladen",
@@ -759,6 +767,10 @@
     "message": "Neu auswählen",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "Teil auswählen",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "Schließen",
     "description": "Preview modal button"
@@ -779,8 +791,16 @@
     "message": "Vorschau des ausgewählten Elements",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "Vorschau der Seite",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "Vorschau des Artikels",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "Dieses Element konnte nicht erfasst werden.",
+    "message": "Die Vorschau konnte nicht erstellt werden.",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -788,16 +808,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "Etwas ist schiefgelaufen. Versuchen Sie es erneut oder wählen Sie das Element neu aus.",
+    "message": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "Die Seite wurde geschlossen, neu geladen oder unterbrochen, bevor der Export fertig war. Versuchen Sie es erneut.",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "Dieses Element ist sehr groß, daher wird das Bild auf $1× verkleinert, um Chromes Grenze von 16.384 px einzuhalten.",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "Das Bild ist sehr groß, daher wird es auf $1× verkleinert, um Chromes Grenze von 16.384 px einzuhalten.",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "Bildauflösung (PNG / JPEG)",

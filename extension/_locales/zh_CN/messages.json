@@ -12,11 +12,11 @@
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "按已保存的设置将当前页面保存为 PDF",
+    "message": "保存前先预览当前页面",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "仅将当前页面的正文保存为 PDF",
+    "message": "保存前先预览当前页面的正文",
     "description": "Keyboard shortcut description"
   },
   "popup_pageTitleLoading": {
@@ -332,11 +332,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "“整个页面”会将页面上的全部内容保存为 PDF，链接可正常点击。",
+    "message": "“整个页面”会显示整个页面的预览。选择 PDF、PNG 或 JPEG 后即可下载。",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "“仅正文”只保留主要文字和图片，去掉菜单、侧边栏和广告。",
+    "message": "“仅正文”会预览主要文字和图片，不含菜单、侧边栏和广告。",
     "description": "Help panel text"
   },
   "help_select": {
@@ -680,7 +680,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "保存 PDF",
+    "message": "预览",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -699,9 +699,17 @@
     "message": "导出此元素",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "导出此页面",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "导出此文章",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "格式",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -725,7 +733,7 @@
   },
   "preview_copyImage": {
     "message": "复制图片",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "下载所有部分",
@@ -759,6 +767,10 @@
     "message": "重新选择",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "选择部分",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "关闭",
     "description": "Preview modal button"
@@ -779,8 +791,16 @@
     "message": "所选元素的预览",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "页面预览",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "文章预览",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "无法截取此元素。",
+    "message": "无法生成预览。",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -788,16 +808,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "出了点问题。请重试或重新选择元素。",
+    "message": "出了点问题。请重试。",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "导出完成前，页面已关闭、重新加载或被中断。请重试。",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "此元素过大，图片已缩小至 $1×，以符合 Chrome 16,384 px 的上限。",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "图片过大，已缩小至 $1×，以符合 Chrome 16,384 px 的上限。",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "图片分辨率（PNG / JPEG）",

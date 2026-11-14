@@ -189,12 +189,12 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
       if (!host) return null;
       const sr = host.shadowRoot;
       const canvas = sr.querySelector('.stage canvas');
-      const checked = sr.querySelector('.seg [aria-checked="true"]');
+      const select = sr.querySelector('select.format');
       const d = sr.querySelector('.download').getBoundingClientRect();
       return {
         ready: !!(canvas && canvas.dataset.ready),
         toolbarTop: sr.querySelector('.toolbar').getBoundingClientRect().top,
-        format: checked && checked.dataset.format,
+        format: select && select.value,
         download: { x: d.left + d.width / 2, y: d.top + d.height / 2 },
       };
     });

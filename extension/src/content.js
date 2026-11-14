@@ -37,13 +37,24 @@
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
     removed: [], // { el, prev, prio } user removals (persist until reset / reload)
-    picked: null, // element chosen with the "print element" picker
+    target: null, // what the preview overlay exports: { kind: 'page' | 'article' | 'element', el }
+    prepared: null, // { prep, root } while an export has the page prepared (see pickedRect)
+    prepareAbort: null, // AbortController of the running prepare
+    passRecord: null, // the last finished lazy pass, for the next export of the same overlay
+    previewSeq: 0, // ids for overlays and Downloads on this page, never reused
     picker: null, // active picker instance
-    preview: null, // open element preview overlay
-    ignoreNextPreview: false, // the overlay was closed while its preview was still being captured
+    preview: null, // open preview overlay
     strings: {}, // UI strings from the background (English fallbacks merged with translations)
     theme: 'system', // light | dark | system
   };
+
+  // The prep vocabulary of the messages to the background, per kind of target.
+  const PREP_BY_KIND = { page: 'none', article: 'article', element: 'element' };
+  const TARGET_GONE = 'The selected element is gone. Select it again.';
+  // What Chrome rejects a message with when the worker restarted or this page went into the
+  // back/forward cache.
+  const PAGE_GONE_RE =
+    /message channel closed|message port closed|Receiving end does not exist|back\/forward cache|Extension context invalidated/i;
 
   // ---------------------------------------------------------------------------
   // Messaging
@@ -66,7 +77,7 @@
         return {
           ok: true,
           removed: state.removed.filter((r) => r.el.isConnected).length,
-          hasPicked: !!(state.picked && state.picked.isConnected),
+          hasPicked: !!(state.target && state.target.kind === 'element' && state.target.el.isConnected),
           pickerActive: !!state.picker,
           previewOpen: !!state.preview,
         };
@@ -74,15 +85,20 @@
         return prepare(msg);
       case 'ps:restore':
         restore();
+        armPassRecord();
+        return { ok: true };
+      case 'ps:abort-prepare':
+        if (state.prepareAbort) state.prepareAbort.abort();
         return { ok: true };
       case 'ps:measure':
         return { ok: true, height: measureHeight(), width: measureWidth() };
       case 'ps:start-picker':
         setUi(msg);
         closePreview();
-        state.ignoreNextPreview = false;
         startPicker(msg.mode === 'remove' ? 'remove' : 'print');
         return { ok: true };
+      case 'ps:set-target':
+        return openTarget(msg);
       case 'ps:picked-rect':
         return pickedRect();
       case 'ps:show-preview':
@@ -96,7 +112,8 @@
         closePreview();
         restore();
         resetRemovals();
-        state.picked = null;
+        state.target = null;
+        dropPassRecord();
         return { ok: true };
       default:
         return { ok: false, error: 'Unknown message ' + msg.type };
@@ -107,21 +124,79 @@
   // Preparation & restoration
   // ---------------------------------------------------------------------------
 
-  async function prepare({ prep, hideFixed, loadLazy, expandScroll }) {
+  // Prepares the page for one export. Replies { ok, title, lazy, reused } or, when Close or Esc (or a
+  // dismissed debugging bar, through ps:abort-prepare) cancels it, { ok: false, aborted: true }. The
+  // worker restores the page afterwards in every case, never while this is still running.
+  async function prepare(msg) {
     stopPicker();
     restore();
+    pausePassRecord();
+    const own = new AbortController();
+    state.prepareAbort = own;
+    try {
+      return await prepareStages(msg, own);
+    } finally {
+      if (state.prepareAbort === own) state.prepareAbort = null;
+    }
+  }
+
+  async function prepareStages({ prep, hideFixed, loadLazy, expandScroll, requestId }, own) {
+    const overlaySignal = previewSignal(requestId);
+    const signal = overlaySignal ? AbortSignal.any([own.signal, overlaySignal]) : own.signal;
+    const cancelled = () => ({ ok: false, aborted: true, error: 'Cancelled.' });
+    // The overlay stays on screen over the lazy scroll, so nothing in it may start a picker or an
+    // export until the worker restores the page.
+    const m = state.preview;
+    if (m) {
+      const was = m.busy;
+      setBusy(m, true);
+      state.undo.push(() => {
+        if (state.preview === m) setBusy(m, was);
+      });
+    }
+    if (signal.aborted) return cancelled();
 
     const { root, error } = prepRoot(prep);
     if (error) return { ok: false, error };
+    const reuse = loadLazy ? usablePassRecord(prep, root) : null;
 
     // First undo entry => runs last: the scroll position is put back only after every style
     // change has been reverted and the page has its original height again.
     rememberScroll();
+    if (root) setAttr(root, ROOT_ATTR, '');
+    let lazy = null;
+    let reused = false;
+    if (loadLazy) {
+      if (reuse) {
+        prepareLazyAttributes();
+        lazy = { complete: reuse.complete };
+        reused = true;
+      } else {
+        lazy = await loadLazyContent(signal);
+        if (!signal.aborted && state.preview) {
+          state.passRecord = {
+            overlay: state.preview,
+            prep,
+            root,
+            scrollHeight: document.documentElement.scrollHeight,
+            complete: lazy.complete,
+            dirty: false,
+            observer: null,
+          };
+        }
+      }
+    }
+    if (signal.aborted) {
+      dropPassRecord();
+      return cancelled();
+    }
+    state.prepared = { prep, root };
+    state.undo.push(() => {
+      state.prepared = null;
+    });
     // The preview overlay is a full-viewport fixed layer outside <body>: it must not end up in
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
-    if (root) setAttr(root, ROOT_ATTR, '');
-    const lazy = loadLazy ? await loadLazyContent() : null;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -129,20 +204,25 @@
     scrollToInstant(0, 0);
     await nextFrame();
     await nextFrame();
-    return { ok: true, title: document.title, lazy };
+    return { ok: true, title: document.title, lazy, reused: reused || undefined };
   }
 
-  // The element a prep mode works on: the detected article, the picked element, or null for the
-  // whole page. Returns { error } when there is none.
+  // The element a prep mode works on: the page (null), the detected article or the picked element.
+  // While the overlay is open its article target is the one it showed, so the export cannot pick
+  // another article than the preview did. Returns { error } when there is none.
   function prepRoot(prep) {
+    const target = state.target;
     if (prep === 'article') {
+      if (state.preview && target && target.kind === 'article') {
+        return target.el.isConnected ? { root: target.el } : { error: TARGET_GONE };
+      }
       const root = findArticle();
       return root
         ? { root }
         : { error: 'Could not detect an article on this page. Try "Select element" instead.' };
     }
     if (prep === 'element') {
-      const root = state.picked;
+      const root = target && target.kind === 'element' ? target.el : null;
       return root && root.isConnected
         ? { root }
         : { error: 'No element is selected. Use "Select element" first.' };
@@ -401,12 +481,10 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
-  // Scrolls the whole page for every export, with or without a root. Returns { complete }: false
-  // when the pass stopped before the end of the page.
-  async function loadLazyContent() {
-    // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
-    // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
-    // reverting them would only make the images disappear again.
+  // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
+  // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
+  // reverting them would only make the images disappear again.
+  function prepareLazyAttributes() {
     for (const el of document.querySelectorAll('img[loading="lazy"], iframe[loading="lazy"]')) {
       setAttr(el, 'loading', 'eager');
     }
@@ -418,6 +496,14 @@
     for (const img of document.querySelectorAll('img[data-srcset]')) {
       if (!img.getAttribute('srcset')) img.srcset = img.dataset.srcset;
     }
+  }
+
+  // Scrolls the whole page for every export, with or without a root. Returns { complete }: false
+  // when the pass stopped before the end of the page. Every wait races `signal`: once it aborts the
+  // pass returns at once, without scrolling back (the worker's restore does that), and the caller
+  // reads the abort from the signal.
+  async function loadLazyContent(signal) {
+    prepareLazyAttributes();
 
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
@@ -433,7 +519,8 @@
       )
         break;
       scrollToInstant(0, y);
-      await sleep(50);
+      await wait(50, signal);
+      if (signal.aborted) return { complete: false };
       y += step;
       positions++;
       if (positions === LAZY_MIN_POSITIONS) heightAtMin = pageEnd();
@@ -442,12 +529,13 @@
     // wait is not a stop.
     const complete = y >= pageEnd();
     scrollToInstant(0, pageEnd());
-    await sleep(150);
+    await wait(150, signal);
+    if (signal.aborted) return { complete: false };
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
-    await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
-    await sleep(100);
+    await Promise.race([Promise.all(pending.map(imageSettled)), wait(6000, signal)]);
+    await wait(100, signal);
     return { complete };
   }
 
@@ -457,6 +545,68 @@
       img.addEventListener('load', resolve, { once: true });
       img.addEventListener('error', resolve, { once: true });
     });
+  }
+
+  // The shared pass. A pass that ran to its end while an overlay was open is kept as state.passRecord,
+  // so the export after a preview (same overlay, prep and root) does not scroll the page again. A
+  // record is used only while the page is as the pass left it: the same real-viewport height, and no
+  // DOM change since the worker's restore (a MutationObserver armed there). Any doubt means a full
+  // pass, which is slower and never less complete.
+  function usablePassRecord(prep, root) {
+    const r = state.passRecord;
+    if (!r) return null;
+    if (
+      r.overlay === state.preview &&
+      r.prep === prep &&
+      r.root === root &&
+      !r.dirty &&
+      document.documentElement.scrollHeight === r.scrollHeight
+    )
+      return r;
+    dropPassRecord();
+    return null;
+  }
+
+  function dropPassRecord() {
+    pausePassRecord();
+    state.passRecord = null;
+  }
+
+  // A prepare writes to the page itself, so the record's observer stays off until the next restore.
+  function pausePassRecord() {
+    const r = state.passRecord;
+    if (r && r.observer) {
+      r.observer.disconnect();
+      r.observer = null;
+    }
+  }
+
+  function armPassRecord() {
+    const r = state.passRecord;
+    if (!r || r.dirty) return;
+    pausePassRecord();
+    const observer = new MutationObserver((records) => {
+      if (records.every(isOurMutation)) return;
+      r.dirty = true;
+      observer.disconnect();
+      r.observer = null;
+    });
+    observer.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    r.observer = observer;
+  }
+
+  // Changes to our own UI (the overlay host, the picker) say nothing about the page.
+  function isOurMutation(rec) {
+    const target = rec.target.nodeType === 1 ? rec.target : rec.target.parentElement;
+    if (target && isOurUi(target)) return true;
+    if (rec.type !== 'childList') return false;
+    const nodes = [...rec.addedNodes, ...rec.removedNodes];
+    return nodes.length > 0 && nodes.every((n) => n.nodeType === 1 && n.hasAttribute(UI_ATTR));
   }
 
   // ---------------------------------------------------------------------------
@@ -617,11 +767,11 @@
   // data-theme="light" | "dark" (settings.theme, with 'system' resolved through matchMedia).
   const THEME_CSS = `
     .themed { --bg: #ffffff; --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --stage: #f3f4f6; --check: #e5e7eb;
-              --seg: #f3f4f6; --seg-on: #ffffff; --ghost: #f3f4f6; --ghost-hover: #e5e7eb; --accent: #2563eb;
+              --ghost: #f3f4f6; --ghost-hover: #e5e7eb; --accent: #2563eb;
               --accent-hover: #1d4ed8; --danger: #dc2626; --warn: #92400e; --warn-bg: #fef3c7; --error: #b91c1c;
               --ok: #15803d; --shadow: rgba(15, 23, 42, 0.12); color-scheme: light; }
     .themed[data-theme="dark"] { --bg: #1f2937; --fg: #f9fafb; --muted: #9ca3af; --border: #374151; --stage: #111827;
-              --check: #1a2332; --seg: #111827; --seg-on: #374151; --ghost: #374151; --ghost-hover: #4b5563;
+              --check: #1a2332; --ghost: #374151; --ghost-hover: #4b5563;
               --accent: #3b82f6; --accent-hover: #2563eb; --danger: #ef4444; --warn: #fcd34d; --warn-bg: #422006;
               --error: #fca5a5; --ok: #86efac; --shadow: rgba(0, 0, 0, 0.45); color-scheme: dark; }
   `;
@@ -856,7 +1006,7 @@
       bar.appendChild(
         btn(str('picker_savePdf'), 'primary', () => {
           stopPicker();
-          chrome.runtime.sendMessage({ type: 'ps:generate-from-content', prep: 'none' }).catch(() => {});
+          setTarget('page');
         }),
       );
       bar.appendChild(btn(str('picker_done'), '', () => stopPicker()));
@@ -881,7 +1031,7 @@
       p.hl.style.display = 'none';
       renderBar(p);
     } else {
-      state.picked = el;
+      state.target = { kind: 'element', el };
       stopPicker();
       requestPreview();
     }
@@ -929,11 +1079,26 @@
     }
   }
 
-  // Document-relative box of the picked element, rounded outwards to whole CSS pixels
-  // (Page.captureScreenshot clip coordinates are document-relative with captureBeyondViewport).
+  // Document-relative box of the root the running export prepared (the page, the article or the
+  // picked element), rounded outwards to whole CSS pixels (Page.captureScreenshot clip coordinates
+  // are document-relative with captureBeyondViewport). The page is measured here, after
+  // preparation: before it, <html> can be 0 px tall while the body overflows.
   function pickedRect() {
-    const el = state.picked;
-    if (!el || !el.isConnected) return { ok: false, error: str('picker_errorNoElement') };
+    const prepared = state.prepared;
+    if (!prepared) return { ok: false, error: str('picker_errorNoElement') };
+    const el = prepared.root;
+    if (!el) {
+      return {
+        ok: true,
+        x: 0,
+        y: 0,
+        width: measureWidth(),
+        height: measureHeight(),
+        devicePixelRatio: window.devicePixelRatio || 1,
+        description: '',
+      };
+    }
+    if (!el.isConnected) return { ok: false, error: str('picker_errorNoElement') };
     const r = el.getBoundingClientRect();
     const left = Math.floor(r.left + window.scrollX);
     const top = Math.floor(r.top + window.scrollY);
@@ -946,7 +1111,7 @@
       width: right - Math.max(0, left),
       height: bottom - Math.max(0, top),
       devicePixelRatio: window.devicePixelRatio || 1,
-      description: describeTag(el),
+      description: prepared.prep === 'element' ? describeTag(el) : '',
     };
   }
 
@@ -978,6 +1143,7 @@
              background-size: 16px 16px; }
     .stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .parts { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .parts.joined { gap: 0; }
     .part { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; }
     .part-head { align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; box-sizing: border-box;
                  padding: 4px 4px 4px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -986,9 +1152,10 @@
     .shot { display: block; max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0,0,0,0.25); background: #fff; }
     .placeholder { color: var(--muted); padding: 48px 8px; text-align: center; }
     .placeholder.error { color: var(--error); }
-    .seg { display: inline-flex; flex: none; background: var(--seg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
-    .seg button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; color: var(--muted); }
-    .seg button[aria-checked="true"] { background: var(--seg-on); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+    .format-box { display: flex; flex: none; align-items: center; gap: 8px; }
+    .format-box label { color: var(--muted); font-size: 12px; font-weight: 600; }
+    select.format { font-family: inherit; font-weight: 600; font-size: 13px; line-height: 1.3; box-sizing: border-box; cursor: pointer; padding: 7px 10px;
+                    border-radius: 8px; border: 1px solid var(--border); background: var(--ghost); color: var(--fg); }
     .btn { all: unset; box-sizing: border-box; cursor: pointer; font-weight: 600; font-size: 13px; padding: 8px 14px;
            border-radius: 8px; background: var(--ghost); color: var(--fg); white-space: nowrap; }
     .btn:hover { background: var(--ghost-hover); }
@@ -1000,8 +1167,8 @@
     .btn.icon:hover { background: var(--ghost); color: var(--fg); }
     .btn.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;
                     stroke-linecap: round; stroke-linejoin: round; }
-    .btn[disabled], .seg button[disabled] { opacity: 0.5; cursor: default; pointer-events: none; }
-    .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn[disabled], select.format[disabled] { opacity: 0.5; cursor: default; pointer-events: none; }
+    .btn:focus-visible, select.format:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [hidden] { display: none !important; }
     @media (max-width: 520px) {
       .toolbar { padding: 8px 12px; }
@@ -1059,14 +1226,30 @@
     return svg;
   }
 
-  // Build (or reuse) the overlay; a new one shows a loading placeholder until ps:show-preview arrives.
+  // Title and image label per kind of target.
+  const KIND_STRINGS = {
+    page: { title: 'preview_titlePage', alt: 'preview_imageAltPage' },
+    article: { title: 'preview_titleArticle', alt: 'preview_imageAltArticle' },
+    element: { title: 'preview_title', alt: 'preview_imageAlt' },
+  };
+
+  // Build (or reuse) the overlay for state.target; a new one shows a loading placeholder until
+  // ps:show-preview arrives.
   function openPreview() {
     if (state.preview) return state.preview;
+    const kind = state.target ? state.target.kind : 'element';
+    const labels = KIND_STRINGS[kind];
     const { host, shadow } = createUiHost('preview', PREVIEW_CSS);
 
-    const title = make('h2', { id: 'ps-title', text: str('preview_title') });
+    const title = make('h2', { id: 'ps-title', text: str(labels.title) });
     const caption = make('div', { className: 'caption' });
-    const seg = make('div', { className: 'seg', role: 'radiogroup', 'aria-label': str('preview_format') });
+    const formatSelect = make('select', { id: 'ps-format', className: 'format' });
+    const formatBox = make(
+      'div',
+      { className: 'format-box' },
+      make('label', { for: 'ps-format', text: str('preview_format') }),
+      formatSelect,
+    );
     const copy = make('button', { className: 'btn copy', type: 'button', text: str('preview_copyImage') });
     const download = make('button', {
       className: 'btn primary download',
@@ -1076,7 +1259,7 @@
     const reselect = make('button', {
       className: 'btn reselect',
       type: 'button',
-      text: str('preview_reselect'),
+      text: str(kind === 'element' ? 'preview_reselect' : 'preview_selectPart'),
     });
     const theme = make('button', {
       className: 'btn icon theme',
@@ -1095,7 +1278,7 @@
       'header',
       { className: 'toolbar' },
       make('div', { className: 'heading' }, title, caption),
-      seg,
+      formatBox,
       make('div', { className: 'actions' }, copy, download, reselect, theme, close),
     );
     const splitNote = make('div', { className: 'split-note' });
@@ -1103,7 +1286,7 @@
     const status = make('div', { className: 'status', role: 'status', 'aria-live': 'polite' });
     const notes = make('div', { className: 'notes' }, splitNote, warning, status);
     // Focusable so the preview can be scrolled with the keyboard.
-    const stage = make('div', { className: 'stage', tabindex: '0', 'aria-label': str('preview_imageAlt') });
+    const stage = make('div', { className: 'stage', tabindex: '0', 'aria-label': str(labels.alt) });
     const overlay = make(
       'div',
       { className: 'overlay themed', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ps-title' },
@@ -1119,19 +1302,28 @@
       overlay,
       toolbar,
       stage,
+      title,
       caption,
       notes,
       splitNote,
       warning,
-      seg,
+      formatBox,
+      formatSelect,
       status,
       copy,
       download,
       reselect,
       theme,
-      busy: false,
+      kind,
+      busy: false, // an export (a Download, or any export's pass) is running
+      loading: false, // the capture for the preview is running
+      requestId: null, // id of the capture this overlay asked for (ps:show-preview must echo it)
+      abort: null, // AbortController of that capture
+      downloadId: null, // id of the running cancellable Download
+      downloadAbort: null,
       data: null,
-      parts: [], // { canvas, copy, download } per rendered part
+      parts: [], // { canvas, head, copy, download } per rendered part
+      list: null,
       format: 'pdf',
     };
     state.preview = m;
@@ -1140,12 +1332,14 @@
 
     close.addEventListener('click', () => closePreview());
     reselect.addEventListener('click', () => {
+      if (m.busy || m.loading || state.prepareAbort) return;
       closePreview();
       startPicker('print');
     });
     download.addEventListener('click', () => previewDownload(m));
     copy.addEventListener('click', () => previewCopy(m, 0));
     theme.addEventListener('click', () => toggleTheme(m));
+    formatSelect.addEventListener('change', () => selectFormat(m, formatSelect.value));
     // Escape and Tab are caught on window in the capture phase, before any page handler can
     // swallow them; Tab cycles through the overlay's controls only.
     m.onKey = (ev) => {
@@ -1158,8 +1352,8 @@
       }
     };
     window.addEventListener('keydown', m.onKey, true);
-    // Other keys typed in the overlay (arrows in the format control, Enter/Space on buttons) are not
-    // passed on to the page's own bubbling key handlers.
+    // Other keys typed in the overlay (type-ahead in the format control, Enter/Space on buttons) are
+    // not passed on to the page's own bubbling key handlers.
     for (const type of PREVIEW_KEY_EVENTS) overlay.addEventListener(type, (ev) => ev.stopPropagation());
     // Only the preview scrolls; the wheel over the toolbar must not scroll the page underneath.
     overlay.addEventListener(
@@ -1171,20 +1365,46 @@
     );
     document.documentElement.appendChild(host);
     setPreviewLoading(m);
+    // Close is the one control that works while the preview loads, so focus starts inside the dialog.
+    close.focus();
     return m;
   }
 
+  // Close or Esc while the capture or a Download is still running cancels it: the worker stops
+  // the job, restores the page and saves nothing.
   function closePreview() {
     const m = state.preview;
     if (!m) return;
-    if (m.loading) state.ignoreNextPreview = true;
+    if (m.loading) {
+      m.abort.abort();
+      cancelExport(m.requestId);
+    } else if (m.busy && m.downloadId != null) {
+      m.downloadAbort.abort();
+      cancelExport(m.downloadId);
+    }
+    dropPassRecord();
     window.removeEventListener('keydown', m.onKey, true);
     m.host.remove();
     state.preview = null;
   }
 
+  function cancelExport(requestId) {
+    chrome.runtime.sendMessage({ type: 'ps:cancel-export', requestId }).catch(() => {});
+  }
+
+  // The signal that cancels the export `requestId` names: the overlay's capture, its running
+  // Download, or, when that overlay is gone or replaced, one that is already aborted. No id (a test
+  // or a caller that cannot be cancelled) means no signal.
+  function previewSignal(requestId) {
+    if (requestId == null) return null;
+    const m = state.preview;
+    if (m && m.loading && m.requestId === requestId) return m.abort.signal;
+    if (m && m.busy && m.downloadId === requestId) return m.downloadAbort.signal;
+    return AbortSignal.abort();
+  }
+
   function focusables(m) {
-    return Array.from(m.overlay.querySelectorAll('button, [tabindex]')).filter(
+    return Array.from(m.overlay.querySelectorAll('button, select, [tabindex]')).filter(
       (el) => el.tabIndex >= 0 && !el.disabled && el.getClientRects().length > 0,
     );
   }
@@ -1220,52 +1440,102 @@
   // Replace the preview with a message; nothing can be exported meanwhile.
   function showPlaceholder(m, className, text) {
     m.parts = [];
+    m.list = null;
+    m.data = null;
     m.stage.replaceChildren(make('div', { className, text }));
     m.splitNote.hidden = true;
     renderFormats(m, { formats: [] });
-    m.download.disabled = true;
     m.copy.hidden = true;
     updateNotes(m);
+    syncControls(m);
   }
 
   function setPreviewLoading(m) {
+    m.loading = true;
     showPlaceholder(m, 'placeholder', str('preview_loading'));
     m.caption.textContent = '';
-    m.data = null;
-    m.loading = true;
   }
 
   function showPreviewError(message) {
-    const m = openPreview();
+    const m = state.preview;
+    if (!m) return;
     m.loading = false;
     showPlaceholder(m, 'placeholder error', message || str('preview_errorCapture'));
     m.reselect.focus();
   }
 
-  // Click in "select element" mode: open the overlay in its loading state and ask the background
-  // to capture the element (it answers with ps:show-preview).
-  function requestPreview() {
-    state.ignoreNextPreview = false;
-    const m = openPreview();
-    const fail = (error) => {
-      if (state.preview === m && m.loading) showPreviewError(error || str('preview_errorCapture'));
-    };
-    chrome.runtime
-      .sendMessage({ type: 'ps:preview-element' })
-      .then((res) => {
-        if (!res || !res.ok) fail(res && res.error);
-      })
-      .catch((err) => fail(errorText(err)));
+  // What the user sees for a failed message: Chrome's text about a closed message channel (the
+  // worker restarted, the page went into the back/forward cache) is not one of them.
+  function failureText(err) {
+    const text = errorText(err);
+    return PAGE_GONE_RE.test(text) ? str('preview_errorInterrupted') : text;
   }
 
-  // ps:show-preview: { parts: [{ dataUrl, width, height }], width, height, description, format,
-  // imageWarning, markdownEnabled }. More than one part: the element was split for easier viewing.
-  function showPreview(msg) {
-    if (!state.preview && state.ignoreNextPreview) {
-      state.ignoreNextPreview = false;
-      return;
+  // The element a kind of target exports, or { error } (no article on the page).
+  function resolveTarget(kind) {
+    if (kind !== 'article') return { el: document.documentElement };
+    const el = findArticle();
+    return el ? { el } : { error: 'Could not detect an article on this page. Try "Select element" instead.' };
+  }
+
+  // Makes (kind, el) the overlay's target and opens the overlay in its loading state.
+  function applyTarget(kind, el) {
+    closePreview();
+    state.target = { kind, el };
+    requestPreview();
+    return { ok: true };
+  }
+
+  // The remove bar's Preview button.
+  function setTarget(kind) {
+    const { el, error } = resolveTarget(kind);
+    return error ? { ok: false, error } : applyTarget(kind, el);
+  }
+
+  // ps:set-target from the popup cards, the shortcuts and the menu.
+  function openTarget(msg) {
+    const m = state.preview;
+    // Only the short gap before the capture registers in the worker: from then on the worker's own
+    // check (startPreview) answers a repeat request.
+    if (m && m.loading) {
+      if (state.target && state.target.kind === msg.kind) return { ok: true };
+      return { ok: false, error: 'A preview is already being prepared.' };
     }
+    if (m && m.busy) return { ok: false, error: 'Wait for the current export to finish before previewing.' };
+    if (msg.kind !== 'page' && msg.kind !== 'article') return { ok: false, error: 'Unknown export target.' };
+    const { el, error } = resolveTarget(msg.kind);
+    if (error) return { ok: false, error };
+    setUi(msg);
+    stopPicker();
+    return applyTarget(msg.kind, el);
+  }
+
+  // Open the overlay in its loading state and ask the background to capture state.target (it
+  // answers with ps:show-preview, tagged with this request's id).
+  function requestPreview() {
     const m = openPreview();
+    const requestId = ++state.previewSeq;
+    m.requestId = requestId;
+    m.abort = new AbortController();
+    const fail = (error) => {
+      if (state.preview === m && m.requestId === requestId && m.loading) {
+        showPreviewError(error || str('preview_errorCapture'));
+      }
+    };
+    chrome.runtime
+      .sendMessage({ type: 'ps:preview-element', prep: PREP_BY_KIND[m.kind], requestId })
+      .then((res) => {
+        if (!res || (!res.ok && !res.aborted)) fail(res && res.error);
+      })
+      .catch((err) => fail(failureText(err)));
+  }
+
+  // ps:show-preview: { requestId, parts: [{ dataUrl, width, height }], width, height, description,
+  // format, imageWarning, markdownEnabled }. More than one part: the target was split for easier
+  // viewing. Dropped unless it answers the capture the open overlay asked for.
+  function showPreview(msg) {
+    const m = state.preview;
+    if (!m || msg.requestId !== m.requestId) return;
     m.loading = false;
     applyPreviewTheme(m);
     const parts =
@@ -1273,43 +1543,43 @@
         ? msg.parts
         : [{ dataUrl: msg.dataUrl, width: msg.width, height: msg.height }];
     m.data = { ...msg, parts };
-    m.busy = false;
     const n = parts.length;
-    const list = make('div', { className: 'parts' });
-    m.parts = parts.map((part, i) => renderPart(m, list, part, i, n));
-    m.stage.replaceChildren(list);
+    m.list = make('div', { className: 'parts' });
+    m.parts = parts.map((part, i) => renderPart(m, m.list, part, i, n));
+    m.stage.replaceChildren(m.list);
     m.stage.scrollTop = 0;
-    m.caption.textContent = str('preview_caption', [
-      msg.description || 'element',
-      Math.round(msg.width),
-      Math.round(msg.height),
-    ]);
+    m.caption.textContent =
+      m.kind === 'element'
+        ? str('preview_caption', [
+            msg.description || 'element',
+            Math.round(msg.width),
+            Math.round(msg.height),
+          ])
+        : str('preview_captionSize', [Math.round(msg.width), Math.round(msg.height)]);
     m.splitNote.textContent = n > 1 ? str('preview_splitNote', [n]) : '';
-    m.splitNote.hidden = n < 2;
     m.copy.title = n > 1 ? `${str('preview_copyImage')} (${str('preview_part', [1, n])})` : '';
     const formats = ['pdf', 'png', 'jpeg'];
     if (msg.markdownEnabled) formats.push('markdown');
     renderFormats(m, { formats, selected: formats.includes(msg.format) ? msg.format : 'pdf' });
-    m.download.disabled = false;
     setStatus(m, '');
-    m.download.focus();
+    syncControls(m);
   }
 
   // One part: a header ("Part 2 of 4" + Copy / Download, only when split) and its canvas.
   function renderPart(m, list, part, i, n) {
     // Drawn on a canvas rather than an <img src="data:...">: the image element would be subject
     // to the page's Content-Security-Policy (img-src), createImageBitmap is not.
+    const alt = str(KIND_STRINGS[m.kind].alt);
     const canvas = make('canvas', {
       className: 'shot',
       role: 'img',
-      'aria-label':
-        n > 1 ? `${str('preview_imageAlt')} (${str('preview_part', [i + 1, n])})` : str('preview_imageAlt'),
+      'aria-label': n > 1 ? `${alt} (${str('preview_part', [i + 1, n])})` : alt,
     });
-    // Displayed at the element's CSS size (the capture is at screen resolution), shrunk to fit.
+    // Displayed at the target's CSS size (the capture is at screen resolution), shrunk to fit.
     const cssWidth = Math.max(1, Math.round(part.width));
     canvas.style.width = cssWidth + 'px';
     const section = make('section', { className: 'part', 'data-part': String(i + 1) });
-    const entry = { canvas, copy: null, download: null };
+    const entry = { canvas, head: null, copy: null, download: null };
     if (n > 1) {
       const labelId = `ps-part-${i + 1}`;
       const label = make('span', {
@@ -1332,7 +1602,8 @@
       entry.copy.addEventListener('click', () => previewCopy(m, i));
       entry.download.addEventListener('click', () => previewDownload(m, i + 1));
       section.style.width = `max(${cssWidth}px, 240px)`;
-      section.append(make('div', { className: 'part-head' }, label, entry.copy, entry.download));
+      entry.head = make('div', { className: 'part-head' }, label, entry.copy, entry.download);
+      section.append(entry.head);
     }
     section.append(canvas);
     list.append(section);
@@ -1356,25 +1627,10 @@
   };
 
   function renderFormats(m, { formats, selected = 'pdf' }) {
-    m.seg.replaceChildren();
-    m.seg.hidden = !formats.length;
-    for (const f of formats) {
-      const b = make('button', {
-        type: 'button',
-        role: 'radio',
-        'data-format': f,
-        text: str(FORMAT_LABELS[f]),
-      });
-      b.addEventListener('click', () => selectFormat(m, f));
-      b.addEventListener('keydown', (ev) => {
-        if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
-        ev.preventDefault();
-        const i = formats.indexOf(m.format) + (ev.key === 'ArrowRight' ? 1 : -1);
-        selectFormat(m, formats[(i + formats.length) % formats.length]);
-        m.seg.querySelector(`[data-format="${m.format}"]`).focus();
-      });
-      m.seg.appendChild(b);
-    }
+    m.formatSelect.replaceChildren(
+      ...formats.map((f) => make('option', { value: f, text: str(FORMAT_LABELS[f]) })),
+    );
+    m.formatBox.hidden = !formats.length;
     if (formats.length) selectFormat(m, selected);
   }
 
@@ -1384,20 +1640,20 @@
 
   function selectFormat(m, format) {
     m.format = format;
-    for (const b of m.seg.querySelectorAll('button')) {
-      const on = b.dataset.format === format;
-      b.setAttribute('aria-checked', String(on));
-      b.tabIndex = on ? 0 : -1;
-    }
+    m.formatSelect.value = format;
     // Copy always puts a PNG on the clipboard (the only image type it accepts), so it is offered
     // for PNG and JPEG alike; PDF and Markdown are not split and have nothing to copy.
     const image = isImageFormat(format) && !!m.data;
     const split = m.parts.length > 1;
     m.copy.hidden = !image;
+    // Parts only mean something for image files: for a PDF or Markdown the slices read as one image.
+    if (m.list) m.list.classList.toggle('joined', !isImageFormat(format));
     for (const p of m.parts) {
+      if (p.head) p.head.hidden = !image;
       if (p.copy) p.copy.hidden = !image;
       if (p.download) p.download.hidden = !image;
     }
+    m.splitNote.hidden = !(image && split);
     m.download.textContent = str(image && split ? 'preview_downloadAll' : 'preview_download');
     const warn = image && m.data.imageWarning;
     m.warning.hidden = !warn;
@@ -1417,48 +1673,67 @@
     m.notes.hidden = m.splitNote.hidden && m.warning.hidden && m.status.hidden;
   }
 
-  function setBusy(m, busy) {
-    m.busy = busy;
-    m.download.disabled = busy;
-    m.reselect.disabled = busy;
-    m.copy.disabled = busy;
-    for (const b of m.seg.querySelectorAll('button')) b.disabled = busy;
+  // Close stays enabled in every state: it is the cancel.
+  function syncControls(m) {
+    const idle = !m.busy && !m.loading;
+    const ready = idle && !!m.data;
+    m.download.disabled = !ready;
+    m.copy.disabled = !ready;
+    m.formatSelect.disabled = !ready;
+    m.reselect.disabled = !idle;
     for (const p of m.parts) {
-      if (p.copy) p.copy.disabled = busy;
-      if (p.download) p.download.disabled = busy;
+      if (p.copy) p.copy.disabled = !ready;
+      if (p.download) p.download.disabled = !ready;
     }
   }
 
-  // Toolbar Download (`part` null: the whole element, every part of a split image) or a part's
-  // own Download button (`part`: 1-based, images only). The overlay closes after a successful
-  // whole-element export without warnings; a single part keeps it open for the other parts.
+  function setBusy(m, busy) {
+    m.busy = busy;
+    syncControls(m);
+  }
+
+  // Toolbar Download (`part` null: the whole target, every part of a split image) or a part's own
+  // Download button (`part`: 1-based, images only). The overlay closes after a successful
+  // whole-target export without warnings; a single part keeps it open for the other parts. Close or
+  // Esc while a PDF or image Download runs cancels it (ps:cancel-export with its downloadId).
   async function previewDownload(m, part = null) {
-    if (m.busy || !m.data) return;
+    if (m.busy || m.loading || !m.data) return;
     const format = m.format;
     if (part != null && !isImageFormat(format)) return;
+    const prep = PREP_BY_KIND[m.kind];
     setBusy(m, true);
     setStatus(m, str('preview_saving'));
+    if (format !== 'markdown') {
+      m.downloadId = ++state.previewSeq;
+      m.downloadAbort = new AbortController();
+    }
+    const requestId = m.downloadId;
     let res;
     try {
       if (format === 'pdf') {
         res = await chrome.runtime.sendMessage({
           type: 'ps:generate-from-content',
-          prep: 'element',
+          prep,
           format: 'pdf',
+          requestId,
         });
       } else if (format === 'markdown') {
-        res = await chrome.runtime.sendMessage({ type: 'ps:export-markdown-from-content', prep: 'element' });
+        res = await chrome.runtime.sendMessage({ type: 'ps:export-markdown-from-content', prep });
       } else {
-        const msg = { type: 'ps:export-element', format };
+        const msg = { type: 'ps:export-element', format, prep, requestId };
         if (part != null) msg.part = part;
         res = await chrome.runtime.sendMessage(msg);
       }
     } catch (err) {
-      res = { ok: false, error: errorText(err) };
+      res = { ok: false, error: failureText(err) };
     }
     if (state.preview !== m) return; // closed meanwhile
+    m.downloadId = null;
+    m.downloadAbort = null;
     setBusy(m, false);
-    if (res && res.ok) {
+    if (res && res.aborted) {
+      setStatus(m, '');
+    } else if (res && res.ok) {
       if (res.warning || part != null) {
         // Keep the overlay open so the warning can be read / the other parts saved.
         const names = res.filenames && res.filenames.length ? res.filenames.join(', ') : res.filename || '';
@@ -1485,20 +1760,23 @@
     return new Blob([bytes], { type: mime });
   }
 
-  // Copies part `index` of the preview (a PNG at screen resolution, whatever format is selected:
-  // the async clipboard only accepts image/png). Must run synchronously inside the click so the
-  // clipboard write keeps the user activation: the PNG bytes are decoded from the data URL in place.
+  // Copies part `index` of the preview as a PNG (the async clipboard only accepts image/png), drawn
+  // from the part's canvas because the preview itself is JPEG. The write call runs synchronously
+  // inside the click so it keeps the user activation; the PNG is encoded while it waits. The copy is
+  // the decoded JPEG at screen resolution, not a lossless capture.
   function previewCopy(m, index) {
-    const part = m.data && m.data.parts[index];
-    if (!part || !part.dataUrl) return;
+    const entry = m.parts[index];
+    if (!entry || entry.canvas.dataset.ready !== 'true') return;
     if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
       setStatus(m, str('preview_errorCopy'), 'error');
       return;
     }
     try {
-      const blob = dataUrlToBlob(part.dataUrl);
+      const png = new Promise((resolve, reject) =>
+        entry.canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('empty image'))), 'image/png'),
+      );
       navigator.clipboard
-        .write([new ClipboardItem({ 'image/png': blob })])
+        .write([new ClipboardItem({ 'image/png': png })])
         .then(() => state.preview === m && setStatus(m, str('preview_copied'), 'ok'))
         .catch(() => state.preview === m && setStatus(m, str('preview_errorCopy'), 'error'));
     } catch {
@@ -1868,8 +2146,18 @@
     return String((err && err.message) || err);
   }
 
-  function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
+  // Resolves after `ms`, or at once when `signal` is already aborted or aborts meanwhile.
+  function wait(ms, signal) {
+    return new Promise((resolve) => {
+      if (signal.aborted) return resolve();
+      const done = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal.addEventListener('abort', done, { once: true });
+    });
   }
 
   function nextFrame() {

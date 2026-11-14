@@ -249,20 +249,14 @@ try {
       await page.keyboard.press('Enter');
       await page.waitForTimeout(150);
       let msgs = await sent(page);
-      if (
-        msgs.length !== 1 ||
-        msgs[0].type !== 'ps:generate' ||
-        msgs[0].prep !== 'none' ||
-        msgs[0].output !== 'download' ||
-        !msgs[0].settings
-      ) {
+      if (msgs.length !== 1 || msgs[0].type !== 'ps:open-preview' || msgs[0].kind !== 'page') {
         problems.push(
-          `[${label}] Enter on Full page sent ${JSON.stringify(msgs.map((m) => [m.type, m.prep, m.output]))}, expected one ps:generate none/download`,
+          `[${label}] Enter on Full page sent ${JSON.stringify(msgs.map((m) => [m.type, m.kind]))}, expected one ps:open-preview page`,
         );
       }
       await clearSent(page);
       for (const [sel, expect] of [
-        ['#act-article', ['ps:generate', 'article', 'download']],
+        ['#act-article', ['ps:open-preview', 'article']],
         ['#act-select', ['ps:start-picker', 'print']],
         ['#act-remove', ['ps:start-picker', 'remove']],
       ]) {
@@ -271,7 +265,9 @@ try {
         msgs = await sent(page);
         const got =
           msgs.length === 1
-            ? [msgs[0].type, msgs[0].prep ?? msgs[0].mode, msgs[0].output].filter((x) => x !== undefined)
+            ? [msgs[0].type, msgs[0].prep ?? msgs[0].mode ?? msgs[0].kind, msgs[0].output].filter(
+                (x) => x !== undefined,
+              )
             : msgs.map((m) => m.type);
         if (JSON.stringify(got) !== JSON.stringify(expect))
           problems.push(`[${label}] ${sel} sent ${JSON.stringify(got)}, expected ${JSON.stringify(expect)}`);

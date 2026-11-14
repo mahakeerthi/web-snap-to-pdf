@@ -12,11 +12,11 @@
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "मौजूदा पेज को अपनी सेव की गई सेटिंग के साथ PDF के रूप में सेव करें",
+    "message": "मौजूदा पेज को सेव करने से पहले उसकी झलक देखें",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "मौजूदा पेज का सिर्फ़ मुख्य लेख PDF के रूप में सेव करें",
+    "message": "सेव करने से पहले मौजूदा पेज के सिर्फ़ मुख्य लेख की झलक देखें",
     "description": "Keyboard shortcut description"
   },
   "popup_pageTitleLoading": {
@@ -332,11 +332,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "“पूरा पेज” पेज की हर चीज़ को काम करने वाले लिंक के साथ PDF के रूप में सेव करता है।",
+    "message": "“पूरा पेज” पूरे पेज की झलक दिखाता है। PDF, PNG या JPEG चुनें और फिर उसे डाउनलोड करें।",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "“सिर्फ़ लेख” मुख्य टेक्स्ट और इमेज रखता है और मेन्यू, साइडबार और विज्ञापन हटा देता है।",
+    "message": "“सिर्फ़ लेख” मुख्य टेक्स्ट और इमेज की झलक दिखाता है, मेन्यू, साइडबार और विज्ञापनों के बिना।",
     "description": "Help panel text"
   },
   "help_select": {
@@ -680,7 +680,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "PDF सेव करें",
+    "message": "झलक",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -699,9 +699,17 @@
     "message": "यह हिस्सा एक्सपोर्ट करें",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "यह पेज एक्सपोर्ट करें",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "यह लेख एक्सपोर्ट करें",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "फ़ॉर्मैट",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -725,7 +733,7 @@
   },
   "preview_copyImage": {
     "message": "इमेज कॉपी करें",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "सभी हिस्से डाउनलोड करें",
@@ -759,6 +767,10 @@
     "message": "फिर से चुनें",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "हिस्सा चुनें",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "बंद करें",
     "description": "Preview modal button"
@@ -779,8 +791,16 @@
     "message": "चुने गए हिस्से की झलक",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "पेज की झलक",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "लेख की झलक",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "यह हिस्सा कैप्चर नहीं हो सका।",
+    "message": "झलक नहीं बन सकी।",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -788,16 +808,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें या हिस्सा दोबारा चुनें।",
+    "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें।",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "एक्सपोर्ट पूरा होने से पहले पेज बंद हो गया, फिर से लोड हुआ या बीच में रुक गया। फिर से कोशिश करें।",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "यह हिस्सा बहुत बड़ा है, इसलिए Chrome की 16,384 px की सीमा में रहने के लिए इमेज को $1× तक छोटा किया गया है।",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "इमेज बहुत बड़ी है, इसलिए Chrome की 16,384 px की सीमा में रहने के लिए उसे $1× तक छोटा किया गया है।",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "इमेज रिज़ॉल्यूशन (PNG / JPEG)",
