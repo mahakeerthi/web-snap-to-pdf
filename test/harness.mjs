@@ -82,7 +82,9 @@ export async function launchExtension({
         ...(deviceScaleFactor ? [`--force-device-scale-factor=${deviceScaleFactor}`] : []),
       ],
       ...(viewport && { viewport }),
-      ...(recordVideoDir && { recordVideo: { dir: recordVideoDir, size: viewport || { width: 1280, height: 800 } } }),
+      ...(recordVideoDir && {
+        recordVideo: { dir: recordVideoDir, size: viewport || { width: 1280, height: 800 } },
+      }),
     });
     // Playwright intercepts downloads (Browser.setDownloadBehavior 'allowAndName'), saving every file
     // as <playwright-artifacts>/<GUID> and discarding the filename the extension asked for. Hand
