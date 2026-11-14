@@ -280,19 +280,19 @@ async function closePreviewOverlay(page) {
   await clickPreview(page, '.close');
   await waitFor(async () => !(await previewInfo(page)), { label: 'preview overlay closed' });
 }
-async function waitForPreview(page) {
+async function waitForPreview(page, timeout = 15000) {
   return waitFor(
     async () => {
       const info = await previewInfo(page);
       return info && (info.ready || info.error) ? info : null;
     },
-    { label: 'preview overlay' },
+    { label: 'preview overlay', timeout },
   );
 }
 // Start the select-element picker, hover `selector` (scrolled into view unless `scroll: false`),
 // widen the highlight with ArrowUp until it names `widenTo` (e.g. 'table' when the pointer is over
 // a cell) and click: the real user flow up to the preview overlay.
-async function pickElement(page, tabId, selector, { scroll = true, widenTo = null } = {}) {
+async function pickElement(page, tabId, selector, { scroll = true, widenTo = null, timeout = 15000 } = {}) {
   if (scroll) {
     await page.evaluate(
       (s) => document.querySelector(s).scrollIntoView({ block: 'center', behavior: 'instant' }),
@@ -313,7 +313,7 @@ async function pickElement(page, tabId, selector, { scroll = true, widenTo = nul
     await page.keyboard.press('ArrowUp');
   await page.mouse.down();
   await page.mouse.up();
-  return waitForPreview(page);
+  return waitForPreview(page, timeout);
 }
 // The `n` most recent completed downloads matching `pred` (oldest first).
 async function waitForDownloads(pred, n, timeoutMs = 30000) {
@@ -358,6 +358,10 @@ async function instrumentWorker() {
     globalThis.__tabMsgs = [];
     globalThis.__holdPrepareMs = 0;
     globalThis.__cdp = { shots: 0, hold: null, onShot: null };
+    globalThis.__rt = [];
+    chrome.runtime.onMessage.addListener((m) => {
+      if (m && typeof m.type === 'string') globalThis.__rt.push({ type: m.type, requestId: m.requestId });
+    });
     const send = chrome.tabs.sendMessage.bind(chrome.tabs);
     chrome.tabs.sendMessage = async (tabId, msg, ...rest) => {
       const rec = { type: msg.type, requestId: msg.requestId, t: Date.now() };
@@ -383,7 +387,7 @@ async function instrumentWorker() {
     chrome.debugger.sendCommand = async (target, method, params) => {
       if (method === 'Page.captureScreenshot' && params && params.captureBeyondViewport) {
         globalThis.__cdp.shots++;
-        if (globalThis.__cdp.onShot) globalThis.__cdp.onShot(globalThis.__cdp.shots, target);
+        if (globalThis.__cdp.onShot) await globalThis.__cdp.onShot(globalThis.__cdp.shots, target);
       }
       const hold = globalThis.__cdp.hold;
       if (hold && hold.method === method) {
@@ -398,12 +402,14 @@ async function resetWorkerLog() {
   await instrumentWorker();
   await sw.evaluate(() => {
     globalThis.__tabMsgs.length = 0;
+    globalThis.__rt.length = 0;
     globalThis.__holdPrepareMs = 0;
     globalThis.__cdp.shots = 0;
     globalThis.__cdp.hold = null;
     globalThis.__cdp.onShot = null;
   });
 }
+const received = (type) => sw.evaluate((type) => globalThis.__rt.filter((m) => m.type === type), type);
 const workerMsgs = (type) =>
   sw.evaluate((type) => globalThis.__tabMsgs.filter((m) => !type || m.type === type), type);
 // Records scrollY (and the overlay host's display) on every scroll event of the page.
@@ -2893,6 +2899,483 @@ await test('preview: an unknown prep is refused', async () => {
   );
   check((await downloadCount()) === downloadsBefore, 'no download starts');
   await page.close();
+});
+
+// --- 9. cancelling a capture or a Download ---------------------------------------------------
+
+const hostShown = (page) =>
+  page.evaluate(() => {
+    const h = document.querySelector('[data-websnap-ui="preview"]');
+    return !!h && getComputedStyle(h).display !== 'none';
+  });
+// Presses Esc in the page and returns performance.now() of the page at that moment.
+async function pressEsc(page) {
+  await page.evaluate(() =>
+    addEventListener('keydown', (e) => e.key === 'Escape' && (window.__escAt = performance.now()), true),
+  );
+  await page.keyboard.press('Escape');
+  return page.evaluate(() => window.__escAt);
+}
+// Polls until the page matches `before` and the tab is released; returns the ms it took.
+async function restoredWithin(page, tabId, before, limit = 1000, { overlay = false } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < limit + 2000) {
+    const same = diffSnapshots(before, await snapshot(page)).length === 0;
+    if (same && (overlay || !(await overlayOpen(page))) && !(await workerState(tabId)).busy)
+      return Date.now() - t0;
+    await wait(25);
+  }
+  return null;
+}
+const noNewPassScroll = async (page, escAt) => {
+  const { sc } = await scrollLog(page);
+  const late = sc.filter((e) => e.t > escAt + 100);
+  return { ok: late.length <= 1 && late.every((e) => e.y === 0), late: late.length, total: sc.length };
+};
+
+await test('preview: Esc while loading cancels the capture and restores the page', async () => {
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await recordScrolls(page);
+  const downloadsBefore = await downloadCount();
+  // (a) Esc during the scroll of a ~200,000 px page.
+  for (const round of ['first', 'second']) {
+    await command('save-pdf', tabId);
+    await waitFor(async () => (await hostShown(page)) && (await page.evaluate(() => scrollY)) > 0, {
+      interval: 20,
+      label: `the ${round} pass to scroll under the overlay`,
+    });
+    const escAt = await pressEsc(page);
+    const took = await restoredWithin(page, tabId, before);
+    check(took !== null && took <= 1000, `(a) ${round}: the page is restored ${took} ms after Esc`);
+    const late = await noNewPassScroll(page, escAt);
+    check(
+      late.ok,
+      `(a) ${round}: no pass scroll later than 100 ms after Esc (${late.late} of ${late.total})`,
+    );
+    check((await badge(tabId)) !== '!', `(a) ${round}: no error badge`);
+  }
+  check((await downloadCount()) === downloadsBefore, '(a) no download exists');
+  const prepares = await workerMsgs('ps:prepare');
+  check(
+    prepares.length === 2 && prepares.every((p) => p.aborted === true),
+    `(a) both prepares came back aborted (${prepares.length})`,
+  );
+  await page.close();
+
+  // (b) Esc during the bottom wait for an image that never loads.
+  const art = await openTab('article.html');
+  await art.page.evaluate(() => {
+    const img = document.createElement('img');
+    img.src = '/__hang';
+    document.body.append(img);
+  });
+  const artBefore = await snapshot(art.page);
+  await recordScrolls(art.page);
+  await command('save-pdf', art.tabId);
+  await waitFor(
+    async () => {
+      const { sc } = await scrollLog(art.page);
+      const max = await art.page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      return sc.some((e) => e.y >= max - 2) && sc[sc.length - 1].y <= 10;
+    },
+    { interval: 20, label: 'the pass to reach the bottom and come back' },
+  );
+  await wait(300);
+  await pressEsc(art.page);
+  const tookB = await restoredWithin(art.page, art.tabId, artBefore);
+  check(tookB !== null && tookB <= 1000, `(b) the bottom wait is cut short: restored ${tookB} ms after Esc`);
+  await art.page.close();
+
+  // (c) Esc while ps:prepare is held back: the signal is fired when it arrives.
+  const held = await openTab('article.html');
+  await resetWorkerLog();
+  await recordScrolls(held.page);
+  await sw.evaluate(() => (globalThis.__holdPrepareMs = 500));
+  await command('save-pdf', held.tabId);
+  await waitFor(async () => (await workerMsgs('ps:prepare')).length === 1, {
+    interval: 10,
+    label: 'ps:prepare to be held',
+  });
+  await wait(100);
+  await held.page.keyboard.press('Escape');
+  await waitFor(async () => (await workerMsgs('ps:prepare'))[0].repliedAt, { label: 'the prepare reply' });
+  const [prep] = await workerMsgs('ps:prepare');
+  const { sc: heldScrolls } = await scrollLog(held.page);
+  check(
+    prep.aborted === true && prep.repliedAt - prep.sentAt <= 50,
+    `(c) the held prepare is answered "aborted" ${prep.repliedAt - prep.sentAt} ms after it is released`,
+  );
+  check(heldScrolls.length === 0, `(c) the page saw no scroll from that prepare (${heldScrolls.length})`);
+  await resetWorkerLog();
+  await held.page.close();
+});
+
+await test('preview: Esc during the screenshots cancels the capture', async () => {
+  await setSettings({ loadLazy: false });
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await sw.evaluate(() => {
+    globalThis.__cdp.onShot = (n, target) =>
+      n === 2
+        ? chrome.scripting.executeScript({
+            target: { tabId: target.tabId },
+            func: () =>
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })),
+          })
+        : undefined;
+  });
+  await command('save-pdf', tabId);
+  await waitFor(() => sw.evaluate(() => globalThis.__cdp.shots >= 2), {
+    interval: 10,
+    label: 'the second screenshot',
+  });
+  const took = await restoredWithin(page, tabId, before);
+  await wait(500);
+  const shots = await sw.evaluate(() => globalThis.__cdp.shots);
+  check(shots <= 4, `the capture stops within two screenshots of the Esc (${shots} taken)`);
+  check(took !== null && took <= 1000, `the page is restored ${took} ms after the Esc`);
+  check((await workerMsgs('ps:show-preview')).length === 0, 'no ps:show-preview reaches the page');
+  check((await badge(tabId)) !== '!', 'no error badge');
+  await resetWorkerLog();
+  await setSettings({});
+  await page.close();
+});
+
+await test('preview: a second request while loading', async () => {
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), tabId);
+  await command('save-pdf', tabId);
+  await waitFor(async () => (await workerState(tabId)).busy === true, {
+    interval: 10,
+    label: 'the capture to hold the tab',
+  });
+  await command('save-pdf', tabId);
+  check((await badge(tabId)) !== '!', `a repeat of the same kind sets no badge (${await badge(tabId)})`);
+  check(
+    (await received('ps:preview-element')).length === 1,
+    'exactly one ps:preview-element reaches the worker',
+  );
+  await command('save-article', tabId);
+  check((await badge(tabId)) === '!', 'another kind is refused with the badge');
+  const info = await previewInfo(page);
+  check(
+    info.title === 'Export this page' && info.loading,
+    `the page overlay is still loading (${info.title})`,
+  );
+  await page.keyboard.press('Escape');
+  check((await restoredWithin(page, tabId, before)) !== null, 'Esc restores the page');
+  await resetWorkerLog();
+  await page.close();
+});
+
+await test('preview: a new preview is refused while the overlay downloads', async () => {
+  const { page, tabId } = await openTab('element.html');
+  await pickElement(page, tabId, '#red');
+  await sw.evaluate(async (id) => {
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      func: () => {
+        chrome.runtime.sendMessage = () => new Promise(() => {});
+      },
+    });
+    await chrome.action.setBadgeText({ tabId: id, text: '' });
+  }, tabId);
+  await clickPreview(page, '.download');
+  await waitFor(async () => (await previewInfo(page)).downloadDisabled, {
+    label: 'the overlay to turn busy',
+  });
+  await command('save-pdf', tabId);
+  check((await badge(tabId)) === '!', 'the new preview is refused with the badge');
+  const info = await previewInfo(page);
+  check(
+    info.title === 'Export this element' && info.downloadDisabled && /Saving/.test(info.status),
+    `the element overlay is still there and busy (${info.title}, ${info.status})`,
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: Esc or Close during a Download cancels it and saves nothing', async () => {
+  const P6 = 'lazy/loader.html?root=section&top=500&n=100&gap=2000&loader=lodash&t=50';
+  const savedFiles = () => sw.evaluate(async () => (await chrome.downloads.search({})).length);
+  const cancelDuringPass = async (label, how) => {
+    const { page, tabId } = await openTab(P6);
+    const before = await snapshot(page);
+    await pickElement(page, tabId, 'section', { scroll: false, timeout: 90000 });
+    await chooseFormat(page, 'pdf');
+    await recordScrolls(page);
+    const files = await savedFiles();
+    await clickPreview(page, '.download');
+    await waitFor(async () => (await page.evaluate(() => scrollY)) > 0, {
+      interval: 20,
+      label: 'the Download pass to scroll',
+    });
+    let escAt;
+    if (how === 'Close') {
+      escAt = await page.evaluate(() => performance.now());
+      await clickPreview(page, '.close');
+    } else escAt = await pressEsc(page);
+    const took = await restoredWithin(page, tabId, before);
+    const late = await noNewPassScroll(page, escAt);
+    check(took !== null && took <= 1000, `${label}: restored ${took} ms after ${how}`);
+    check(late.ok, `${label}: no pass scroll later than 100 ms after ${how} (${late.late})`);
+    check((await badge(tabId)) !== '!', `${label}: no error badge`);
+    await wait(5000);
+    check((await savedFiles()) === files, `${label}: no file is saved`);
+    return { page, tabId };
+  };
+  let r = await cancelDuringPass('PDF, Esc', 'Esc');
+  await r.page.close();
+  r = await cancelDuringPass('PDF, Close', 'Close');
+  await r.page.close();
+
+  await resetWorkerLog();
+  const png = await openTab('lazy/loader.html?root=section&top=500&n=100&gap=2000&loader=lodash&t=50');
+  const pngBefore = await snapshot(png.page);
+  await pickElement(png.page, png.tabId, 'section', { scroll: false, timeout: 90000 });
+  await chooseFormat(png.page, 'png');
+  const files = await savedFiles();
+  await sw.evaluate(() => {
+    globalThis.__cdp.shots = 0;
+    globalThis.__cdp.onShot = (n, target) =>
+      n === 3
+        ? chrome.scripting.executeScript({
+            target: { tabId: target.tabId },
+            func: () =>
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })),
+          })
+        : undefined;
+  });
+  await clickPreview(png.page, '.download');
+  const tookPng = await restoredWithin(png.page, png.tabId, pngBefore);
+  await wait(3000);
+  check(tookPng !== null && tookPng <= 1000, `PNG, Esc: restored ${tookPng} ms after Esc`);
+  check((await savedFiles()) === files, 'PNG, Esc: no file is saved');
+  await resetWorkerLog();
+  await png.page.close();
+
+  const held = await openTab('article.html');
+  await pickElement(held.page, held.tabId, '#story');
+  const heldBefore = await snapshot(held.page);
+  await chooseFormat(held.page, 'pdf');
+  const filesHeld = await savedFiles();
+  await sw.evaluate(() => (globalThis.__cdp.hold = { method: 'Page.printToPDF', ms: 2500, hit: false }));
+  await clickPreview(held.page, '.download');
+  await waitFor(() => sw.evaluate(() => globalThis.__cdp.hold.hit), {
+    interval: 10,
+    label: 'printToPDF to start',
+  });
+  await held.page.keyboard.press('Escape');
+  const tookHeld = await restoredWithin(held.page, held.tabId, heldBefore, 4000);
+  await wait(1500);
+  check(tookHeld !== null, 'PDF held at printToPDF: the page is restored after Esc');
+  check((await savedFiles()) === filesHeld, 'PDF held at printToPDF: no file is saved after the hold');
+  await resetWorkerLog();
+  await command('save-pdf', held.tabId);
+  check((await waitForPreview(held.page)).ready, 'a new preview opens and loads afterwards');
+  await held.page.keyboard.press('Escape');
+  await held.page.close();
+});
+
+await test('preview: the overlay is busy during any pass', async () => {
+  const { page, tabId } = await openTab('adv/lazyroot.html?n=60');
+  await pickElement(page, tabId, '#root', { timeout: 90000 });
+  await page.evaluate(() => (window.__scrolls = 0));
+  await sw.evaluate((id) => {
+    globalThis.__held = globalThis.__websnap.generate({ tabId: id, prep: 'none', output: 'return' }).then(
+      (r) => ({ ok: r.ok, base64: r.base64 }),
+      (e) => ({ error: e.message }),
+    );
+  }, tabId);
+  await waitFor(() => page.evaluate(() => window.__scrolls > 3), {
+    interval: 20,
+    label: 'the export pass to scroll',
+  });
+  const states = () =>
+    page.evaluate(() => {
+      const sr = document.querySelector('[data-websnap-ui="preview"]').shadowRoot;
+      const dis = (s) => [...sr.querySelectorAll(s)].map((b) => b.disabled);
+      return {
+        download: dis('.download'),
+        reselect: dis('.reselect'),
+        copy: dis('.copy'),
+        format: dis('select.format'),
+        parts: dis('.part-copy, .part-download'),
+        close: dis('.close'),
+      };
+    });
+  const mid = await states();
+  check(
+    mid.download[0] &&
+      mid.reselect[0] &&
+      mid.copy[0] &&
+      mid.format[0] &&
+      mid.parts.length > 0 &&
+      mid.parts.every(Boolean) &&
+      !mid.close[0],
+    `(a) every control but Close is disabled during the pass (${JSON.stringify(mid)})`,
+  );
+  await page.evaluate(() =>
+    document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('.reselect').click(),
+  );
+  await wait(200);
+  const st = await send(tabId, { type: 'ps:state' });
+  check(
+    !st.pickerActive && st.previewOpen,
+    `(a) a dispatched click on Reselect starts no picker (${JSON.stringify(st)})`,
+  );
+  const done = await sw.evaluate(() => globalThis.__held);
+  const pdf = lazyPdf(done, 'busy-pass.pdf');
+  check(
+    pdf.images === 60 && pdf.text.includes('ROOT-START-MARK'),
+    `(a) the export holds ${pdf.images} of 60 images and the root`,
+  );
+  const after = await states();
+  check(
+    !after.download[0] &&
+      !after.reselect[0] &&
+      !after.copy[0] &&
+      !after.format[0] &&
+      after.parts.every((d) => !d),
+    '(a) every control is enabled again after the export',
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+
+  const pv = await openTab('adv/lazyroot.html?n=60');
+  const pvBefore = await snapshot(pv.page);
+  await command('save-pdf', pv.tabId);
+  await waitFor(() => pv.page.evaluate(() => window.__scrolls > 3), {
+    interval: 20,
+    label: 'the preview pass to scroll',
+  });
+  const sel = await pv.page.evaluate(() => {
+    const b = document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('.reselect');
+    const wasDisabled = b.disabled;
+    b.click();
+    return wasDisabled;
+  });
+  await wait(200);
+  const st2 = await send(pv.tabId, { type: 'ps:state' });
+  check(
+    sel && !st2.pickerActive,
+    `(b) Select part is disabled during the preview's own pass and starts no picker`,
+  );
+  await pv.page.keyboard.press('Escape');
+  await restoredWithin(pv.page, pv.tabId, pvBefore);
+  await pv.page.close();
+});
+
+await test('preview: a dismissed debugging bar stops the export with a plain message', async () => {
+  const CLOSED = "The export stopped because Chrome's debugging bar was closed. Try again.";
+  const raw = (t) => /tab with (given )?id/.test(t) || /\d{6,}/.test(t);
+  await sw.evaluate(() => {
+    globalThis.__dismiss = async (tabId, withEvent) => {
+      await chrome.debugger.detach({ tabId }).catch(() => {});
+      if (withEvent) globalThis.__websnap.debuggerDetached({ tabId }, 'canceled_by_user');
+    };
+  });
+  const dismiss = (tabId, withEvent) =>
+    sw.evaluate(({ tabId, withEvent }) => globalThis.__dismiss(tabId, withEvent), { tabId, withEvent });
+  const arm = (withEvent, nth) =>
+    sw.evaluate(
+      ({ withEvent, nth }) => {
+        globalThis.__cdp.onShot = (n, target) =>
+          n === nth ? globalThis.__dismiss(target.tabId, withEvent) : undefined;
+      },
+      { withEvent, nth },
+    );
+  const errorText = async (page) => {
+    const i = await waitFor(
+      async () => {
+        const x = await previewInfo(page);
+        return x && (x.error || /bar/.test(x.status)) ? x : null;
+      },
+      { label: 'the plain message' },
+    );
+    return i.error || i.status;
+  };
+  // (a) during the lazy pass.
+  await resetWorkerLog();
+  const a = await openTab(LAZY_LONG);
+  const aBefore = await snapshot(a.page);
+  await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), a.tabId);
+  const filesA = await downloadCount();
+  await command('save-pdf', a.tabId);
+  await waitFor(async () => (await hostShown(a.page)) && (await a.page.evaluate(() => scrollY)) > 0, {
+    interval: 20,
+    label: 'the pass to scroll',
+  });
+  await dismiss(a.tabId, true);
+  const tookA = await restoredWithin(a.page, a.tabId, aBefore, 1000, { overlay: true });
+  const textA = await errorText(a.page);
+  check(textA === CLOSED && !raw(textA), `(a) the overlay says the bar was closed (${textA})`);
+  check((await badge(a.tabId)) === '!', '(a) the badge is !');
+  check((await downloadCount()) === filesA, '(a) no file is saved');
+  check(tookA !== null && tookA <= 1000, `(a) the page is restored ${tookA} ms after the bar was dismissed`);
+  await setSettings({ loadLazy: false });
+  await a.page.keyboard.press('Escape');
+  await command('save-pdf', a.tabId);
+  check((await waitForPreview(a.page, 120000)).ready, '(a) the next preview on the tab loads');
+  await a.page.keyboard.press('Escape');
+  await a.page.close();
+
+  // (b) during the screenshots, with the event and with the detach alone.
+  for (const withEvent of [true, false]) {
+    await resetWorkerLog();
+    const b = await openTab(LAZY_LONG);
+    const bBefore = await snapshot(b.page);
+    await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), b.tabId);
+    await arm(withEvent, 2);
+    await command('save-pdf', b.tabId);
+    const t = await errorText(b.page);
+    const took = await restoredWithin(b.page, b.tabId, bBefore, 1000, { overlay: true });
+    check(
+      t === CLOSED && !raw(t),
+      `(b${withEvent ? '' : ', detach only'}) the overlay says the bar was closed (${t})`,
+    );
+    check(
+      (await badge(b.tabId)) === '!' && took !== null,
+      `(b${withEvent ? '' : ', detach only'}) badge ! and the page is restored`,
+    );
+    await b.page.close();
+  }
+
+  // (c) at the start of printToPDF, with the event and with the detach alone.
+  for (const withEvent of [true, false]) {
+    await resetWorkerLog();
+    const c = await openTab('article.html');
+    await pickElement(c.page, c.tabId, '#story');
+    const cBefore = await snapshot(c.page);
+    await chooseFormat(c.page, 'pdf');
+    await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), c.tabId);
+    const filesC = await downloadCount();
+    await sw.evaluate(() => (globalThis.__cdp.hold = { method: 'Page.printToPDF', ms: 1500, hit: false }));
+    await clickPreview(c.page, '.download');
+    await waitFor(() => sw.evaluate(() => globalThis.__cdp.hold.hit), {
+      interval: 10,
+      label: 'printToPDF to start',
+    });
+    await dismiss(c.tabId, withEvent);
+    const t = await errorText(c.page);
+    const took = await restoredWithin(c.page, c.tabId, cBefore, 4000, { overlay: true });
+    check(
+      t === CLOSED && !raw(t),
+      `(c${withEvent ? '' : ', detach only'}) the status says the bar was closed (${t})`,
+    );
+    check(
+      (await badge(c.tabId)) === '!' && took !== null && (await downloadCount()) === filesC,
+      `(c${withEvent ? '' : ', detach only'}) badge !, page restored, no file`,
+    );
+    await c.page.close();
+  }
+  await resetWorkerLog();
+  await setSettings({});
 });
 
 const failures = summary();
