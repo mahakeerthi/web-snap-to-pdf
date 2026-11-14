@@ -33,10 +33,10 @@
       "handleMessage"
     ]
   },
-  "syncCommit": "a9bdf36",
+  "syncCommit": "ea13924",
   "hashes": {
     "extension/src/content.js#handle": "b54032da6451a06a",
-    "extension/src/content.js#prepare": "22a2f5d90b645006",
+    "extension/src/content.js#prepare": "7f97735a6ea6f893",
     "extension/src/content.js#restore": "3269c38786eae6b4",
     "extension/src/content.js#setStyle": "086cd427e5e3a363",
     "extension/src/content.js#isolate": "76a7a0afad633084",
@@ -52,7 +52,7 @@
     "extension/src/content.js#setCurrent": "62ba77a7a3fba28f",
     "extension/src/content.js#renderBar": "f4906702f72780f9",
     "extension/src/background.js#claimTab": "136633d75875929b",
-    "extension/src/background.js#generate": "c8f4fda702a3d10a",
+    "extension/src/background.js#generate": "45544065c30bfd3b",
     "extension/src/background.js#captureElement": "c499f7b093ac8a3f",
     "extension/src/background.js#withPreparedPage": "eb8411e0f13ff0b3",
     "extension/src/background.js#startPicker": "b59f51e368887592",

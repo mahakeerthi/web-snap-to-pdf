@@ -26,6 +26,13 @@
   const MAX_SCAN = 200000;
   const MIN_ARTICLE_SCORE = 150;
   const OUT_OF_FLOW = /^(fixed|sticky|absolute)$/; // positions taken out of the printable flow
+  // The lazy pass scrolls every page the way the extension always has: from the top in steps of
+  // 85 % of the viewport, 50 ms at each position. A page that is 250 positions long or shorter is
+  // scrolled to its end. Past LAZY_MIN_POSITIONS the pass stops, and reports incomplete, as soon as
+  // the page has grown since that position (an endless feed), or once it has run LAZY_TIME_CAP_MS,
+  // which bounds the export on an enormous page that does not grow.
+  const LAZY_MIN_POSITIONS = 250;
+  const LAZY_TIME_CAP_MS = 30000;
 
   const state = {
     undo: [], // functions that revert temporary changes (LIFO)
@@ -114,7 +121,7 @@
     // the PDF or in a screenshot. Shown again by restore().
     if (state.preview) setStyle(state.preview.host, 'display', 'none');
     if (root) setAttr(root, ROOT_ATTR, '');
-    if (loadLazy) await loadLazyContent();
+    const lazy = loadLazy ? await loadLazyContent() : null;
     if (root) isolate(root);
     if (hideFixed) neutralizeFixed(root);
     if (expandScroll) expandScrollContainers(root);
@@ -122,7 +129,7 @@
     scrollToInstant(0, 0);
     await nextFrame();
     await nextFrame();
-    return { ok: true, title: document.title };
+    return { ok: true, title: document.title, lazy };
   }
 
   // The element a prep mode works on: the detected article, the picked element, or null for the
@@ -394,6 +401,8 @@
   // Lazy content
   // ---------------------------------------------------------------------------
 
+  // Scrolls the whole page for every export, with or without a root. Returns { complete }: false
+  // when the pass stopped before the end of the page.
   async function loadLazyContent() {
     // loading="lazy" -> "eager" is on the undo log (restored). Sources copied from data-src /
     // data-srcset are intentionally kept: the page's own lazy loader would do the same, and
@@ -412,21 +421,34 @@
 
     const startY = window.scrollY;
     const step = Math.max(200, Math.floor(window.innerHeight * 0.85));
+    const pageEnd = () => document.documentElement.scrollHeight;
+    const start = performance.now();
     let y = 0;
-    let iterations = 0;
-    while (y < document.documentElement.scrollHeight && iterations < 250) {
+    let positions = 0;
+    let heightAtMin;
+    while (y < pageEnd()) {
+      if (
+        positions >= LAZY_MIN_POSITIONS &&
+        (pageEnd() > heightAtMin || performance.now() - start >= LAZY_TIME_CAP_MS)
+      )
+        break;
       scrollToInstant(0, y);
       await sleep(50);
       y += step;
-      iterations++;
+      positions++;
+      if (positions === LAZY_MIN_POSITIONS) heightAtMin = pageEnd();
     }
-    scrollToInstant(0, document.documentElement.scrollHeight);
+    // Judged before the jump: a late image or banner that lengthens the page during the bottom
+    // wait is not a stop.
+    const complete = y >= pageEnd();
+    scrollToInstant(0, pageEnd());
     await sleep(150);
     scrollToInstant(0, startY);
 
     const pending = Array.from(document.images).filter((i) => !i.complete);
     await Promise.race([Promise.all(pending.map(imageSettled)), sleep(6000)]);
     await sleep(100);
+    return { complete };
   }
 
   function imageSettled(img) {

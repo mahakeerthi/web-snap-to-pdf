@@ -18,7 +18,7 @@ agree on the approach first.
 ## Set up
 
 You need Node.js 20 or newer (CI uses Node.js 22), Playwright's Chromium, and poppler. The tests
-use poppler's `pdfinfo` and `pdftotext` to read the PDFs they generate.
+use poppler's `pdfinfo`, `pdftotext` and `pdfimages` to read the PDFs they generate.
 
 ```sh
 npm install
@@ -47,6 +47,17 @@ The tests load the extension into Chromium through `test/harness.mjs` and serve 
 `test/fixtures/` from a local port. In `npm test` and `npm run test:content`, set `HEADED=1` to watch
 the run in a visible browser window, and set `ONLY='<regex>'` to run only the tests whose names
 match. `npm run test:ui` always runs headless.
+
+`npm run test:lazy` compares lazy loading in two builds of the extension. It exports every row of
+the table in `scripts/lazy-matrix.mjs` (pages in `test/fixtures/lazy/`) with `origin/main` and with
+your working tree, in three interleaved rounds (five for the rows whose counts vary most). The
+working tree scrolls every page the way `main` does, so a row fails when the working tree's median
+loses content without a warning, warns on a page that ends, does not warn on a page that does not,
+takes more or less time than `main` (except where it goes further past 250 positions), or changes
+the PDF text. Run it before asking for review of a change to lazy loading. After `--`, `--base` and
+`--head` take an extension folder or a git ref, `--only '<regex>'` picks rows, and `--rounds N` sets
+the rounds. It needs poppler's `pdfimages`. A full run takes about 45 minutes, so CI does not run
+it.
 
 ## Make a change
 

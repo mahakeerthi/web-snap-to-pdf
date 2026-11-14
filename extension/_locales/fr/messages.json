@@ -383,6 +383,10 @@
     "message": "Impossible de lancer le sélecteur.",
     "description": "Status line error"
   },
+  "status_lazyIncomplete": {
+    "message": "Le défilement s’est arrêté avant la fin de la page : du contenu peut manquer vers la fin.",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
+  },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
     "description": "Paper size"
