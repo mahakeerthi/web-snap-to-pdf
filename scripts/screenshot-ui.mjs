@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkContextMenus } from './ui-checks/context-menu.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const extDir = path.join(root, 'extension');
@@ -666,6 +667,8 @@ try {
     }
     await sw.evaluate(() => chrome.storage.sync.clear());
   }
+
+  await checkContextMenus({ extDir, outDir, problems });
 } catch (err) {
   problems.push(`script error: ${err.stack || err}`);
 } finally {

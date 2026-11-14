@@ -19,6 +19,26 @@
     "message": "Salvar só o artigo principal da página atual em PDF",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "Salvar a página como PDF",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Salvar só o artigo como PDF",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Escolher um elemento para visualizar e salvar",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Remover elementos antes de salvar",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Restaurar todos os elementos removidos",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "Lendo a página…",
     "description": "Popup subtitle while the active tab is queried"

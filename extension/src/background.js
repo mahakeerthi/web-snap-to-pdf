@@ -910,18 +910,18 @@ async function handleMessage(msg, sender) {
 // ---------------------------------------------------------------------------
 
 const MENU_CONTEXTS = ['page', 'frame', 'action'];
-const MENU = {
-  page: 'Save page as PDF',
-  article: 'Save article only as PDF',
-  selectElement: 'Select an element to preview and save',
-  removeElements: 'Remove elements before saving',
-  reset: 'Restore all removed elements',
+const MENU_TITLE_KEYS = {
+  page: 'menu_page',
+  article: 'menu_article',
+  selectElement: 'menu_selectElement',
+  removeElements: 'menu_removeElements',
+  reset: 'menu_reset',
 };
 
 function installMenus() {
   chrome.contextMenus.removeAll(() => {
-    for (const [id, title] of Object.entries(MENU)) {
-      chrome.contextMenus.create({ id, title, contexts: MENU_CONTEXTS });
+    for (const [id, key] of Object.entries(MENU_TITLE_KEYS)) {
+      chrome.contextMenus.create({ id, title: chrome.i18n.getMessage(key), contexts: MENU_CONTEXTS });
     }
   });
 }

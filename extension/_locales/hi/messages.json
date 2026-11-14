@@ -19,6 +19,26 @@
     "message": "मौजूदा पेज का सिर्फ़ मुख्य लेख PDF के रूप में सेव करें",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "पेज को PDF के रूप में सेव करें",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "सिर्फ़ लेख को PDF के रूप में सेव करें",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "कोई हिस्सा चुनें, झलक देखें और सेव करें",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "सेव करने से पहले हिस्से हटाएं",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "हटाए गए सभी हिस्से वापस लाएं",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "पेज पढ़ा जा रहा है…",
     "description": "Popup subtitle while the active tab is queried"
