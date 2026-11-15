@@ -514,8 +514,9 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `data-websnap-root`, removed on restore.
 - `test/harness.mjs` — shared by both suites, `scripts/screenshot-preview.mjs`,
   `scripts/verify-popup.mjs` and `formal/page-restore/replay-finding.mjs`:
-  `launchExtension({ extDir, viewport, headless })` starts the fixture server and Chromium with a
-  temp copy of the extension and a temp download folder, and returns
+  `launchExtension({ extDir, viewport, headless, deviceScaleFactor, recordVideoDir })` starts the
+  fixture server (`/__hang` never answers) and Chromium with a temp copy of the extension and a temp
+  download folder, and returns
   `{ context, sw, extensionId, base, downloadDir, close }`; `tabIdForUrl(sw, url)` finds the tab a
   page was opened in; `waitForDownload(sw, pred, timeoutMs)` waits for a completed download
   (`test/e2e.mjs`); `createReporter()` returns `{ check, test, summary }` (`ONLY=<regex>` runs
@@ -534,3 +535,6 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `test/out/ui/context-menu-titles.json`).
 - `scripts/check-locales.mjs` (`npm run check:locales`) — locale key / placeholder parity.
 - `scripts/screenshot-preview.mjs` — preview-overlay screenshots for the docs and the store.
+- `scripts/preview-perf.mjs` — timing gate for the page and article previews at device scale 2, against
+  `test/fixtures/preview-perf.html`: the pass against main's schedule, the rest of the preview, the
+  largest `ps:show-preview` message and the Download time. `HEADED=1` adds Chrome's debugging bar.
