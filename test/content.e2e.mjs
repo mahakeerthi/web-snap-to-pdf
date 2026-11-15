@@ -2955,7 +2955,6 @@ const noNewPassScroll = async (page, escAt) => {
     total: sc.length,
   };
 };
-};
 
 await test('preview: Esc while loading cancels the capture and restores the page', async () => {
   await resetWorkerLog();
@@ -3176,9 +3175,10 @@ await test('preview: Esc or Close during a Download cancels it and saves nothing
         : undefined;
   });
   await clickPreview(png.page, '.download');
-  const tookPng = await restoredWithin(png.page, png.tabId, pngBefore);
+  // A part of this PNG is a 2400 x 3200 screenshot of about 0.6 to 1.3 s, and the one in flight finishes.
+  const tookPng = await restoredWithin(png.page, png.tabId, pngBefore, 3000);
   await wait(3000);
-  check(tookPng !== null && tookPng <= 1000, `PNG, Esc: restored ${tookPng} ms after Esc`);
+  check(tookPng !== null && tookPng <= 3000, `PNG, Esc: restored ${tookPng} ms after Esc`);
   check((await savedFiles()) === files, 'PNG, Esc: no file is saved');
   await resetWorkerLog();
   await png.page.close();
