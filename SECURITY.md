@@ -10,7 +10,7 @@ Do not open a public issue for a security problem. Instead,
 [open a private report](https://github.com/mahakeerthi/web-snap-to-pdf/security/advisories/new)
 through GitHub's private vulnerability reporting. Only you and the maintainers can see the report.
 
-Include the Web Snap PDF version, the Chrome version, the steps to reproduce, and what an attacker
+Include the WebPage to PDF version, the Chrome version, the steps to reproduce, and what an attacker
 could do with the problem. A public page or a small HTML file that triggers it helps most.
 
 ## Scope
@@ -23,5 +23,5 @@ on. These problems are in scope:
 - Anything that sends page content, settings, or files off your device.
 - A way to run code in the extension's pages or its service worker.
 
-The "Web Snap PDF started debugging this browser" bar is not a vulnerability. Chrome shows it for
+The "WebPage to PDF started debugging this browser" bar is not a vulnerability. Chrome shows it for
 every extension that attaches `chrome.debugger`, and the README explains it.

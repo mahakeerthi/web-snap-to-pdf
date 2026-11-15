@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Web Snap PDF does not work the way the README describes.
+description: Something in WebPage to PDF does not work the way the README describes.
 labels: ['bug']
 body:
   - type: markdown
@@ -50,7 +50,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Web Snap PDF version
+      label: WebPage to PDF version
       description: The version at the bottom right of the popup, or on the extension's card in chrome://extensions. If you loaded it from source, add the output of `git rev-parse --short HEAD`.
     validations:
       required: true
@@ -76,7 +76,7 @@ body:
     id: console
     attributes:
       label: Service worker errors
-      description: In chrome://extensions, click "service worker" next to "Inspect views" on the Web Snap PDF card, open the Console tab, and paste any errors.
+      description: In chrome://extensions, click "service worker" next to "Inspect views" on the WebPage to PDF card, open the Console tab, and paste any errors.
       render: text
   - type: checkboxes
     id: searched

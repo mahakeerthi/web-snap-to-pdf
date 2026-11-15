@@ -1,4 +1,4 @@
-# Web Snap PDF
+# WebPage to PDF
 
 Chrome MV3 extension that saves the current page, its article, or a picked element as PDF, PNG,
 JPEG or (opt-in) Markdown, using Chrome's own print engine through `chrome.debugger`. No build

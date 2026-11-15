@@ -1,4 +1,4 @@
-// Web Snap PDF - content script.
+// WebPage to PDF - content script.
 // Injected on demand. Provides page preparation (lazy-load, hide fixed/sticky, isolate an
 // element or the article), an element picker for "select element" / "remove elements",
 // the element preview overlay (PDF / PNG / JPEG / Markdown export), an HTML -> Markdown converter,

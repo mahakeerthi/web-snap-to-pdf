@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Web Snap PDF",
+    "message": "WebPage to PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,7 +8,7 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "Web Snap PDF - यह पेज PDF के रूप में सेव करें",
+    "message": "WebPage to PDF - यह पेज PDF के रूप में सेव करें",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
@@ -520,7 +520,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "Web Snap PDF सेटिंग",
+    "message": "WebPage to PDF सेटिंग",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -592,11 +592,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "Web Snap PDF, Chrome के बिल्ट-इन प्रिंट इंजन से पेज बनाता है, पूरी तरह आपके डिवाइस पर। कुछ भी कहीं अपलोड नहीं होता।",
+    "message": "WebPage to PDF, Chrome के बिल्ट-इन प्रिंट इंजन से पेज बनाता है, पूरी तरह आपके डिवाइस पर। कुछ भी कहीं अपलोड नहीं होता।",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "PDF बनते समय Chrome एक बार दिखाता है: “Web Snap PDF ने इस ब्राउज़र को डीबग करना शुरू किया”। Chrome इसी तरह एक्सटेंशन को अपना PDF इंजन देता है; PDF तैयार होते ही यह बार गायब हो जाता है।",
+    "message": "PDF बनते समय Chrome एक बार दिखाता है: “WebPage to PDF ने इस ब्राउज़र को डीबग करना शुरू किया”। Chrome इसी तरह एक्सटेंशन को अपना PDF इंजन देता है; PDF तैयार होते ही यह बार गायब हो जाता है।",
     "description": "About text"
   },
   "options_reset": {

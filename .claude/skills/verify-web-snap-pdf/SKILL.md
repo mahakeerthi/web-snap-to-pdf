@@ -1,9 +1,9 @@
 ---
 name: verify-web-snap-pdf
-description: Drive the Web Snap PDF Chrome extension the way a user does (the toolbar popup, the on-page element picker and preview overlay, the options page) and prove an export by checking the downloaded PDF, PNG, JPEG or Markdown file. Use before reporting a user-visible change as working, before starting a feature to confirm the baseline, and whenever an export, the picker, the overlay or the Markdown opt-in behaves unexpectedly.
+description: Drive the WebPage to PDF Chrome extension the way a user does (the toolbar popup, the on-page element picker and preview overlay, the options page) and prove an export by checking the downloaded PDF, PNG, JPEG or Markdown file. Use before reporting a user-visible change as working, before starting a feature to confirm the baseline, and whenever an export, the picker, the overlay or the Markdown opt-in behaves unexpectedly.
 ---
 
-# Verify Web Snap PDF
+# Verify WebPage to PDF
 
 The extension has no server and no build step. Every run loads `extension/` into a fresh headless Chromium through `test/harness.mjs` and drives it against the fixture pages in `test/fixtures/`. The helper `scripts/verify-popup.mjs` does that for each mapped journey and keeps the proof.
 
@@ -26,7 +26,7 @@ Ready means the service worker answered and the fixture tab is printable, which 
 node scripts/verify-popup.mjs doctor
 ```
 
-Launches, opens `article.html`, asks the worker for `__websnap.pageState(tabId)`, and prints JSON. Exit 0 means `ok: true`: the extension loaded (`name` "Web Snap PDF", `version` from `extension/manifest.json`, `extensionId`), the fixture tab is `printable: true`, and `pdfinfo` and `pdftotext` are on PATH. Exit 1 prints the failing field or `error`. Run it first, and again whenever a journey fails before its first click.
+Launches, opens `article.html`, asks the worker for `__websnap.pageState(tabId)`, and prints JSON. Exit 0 means `ok: true`: the extension loaded (`name` "WebPage to PDF", `version` from `extension/manifest.json`, `extensionId`), the fixture tab is `printable: true`, and `pdfinfo` and `pdftotext` are on PATH. Exit 1 prints the failing field or `error`. Run it first, and again whenever a journey fails before its first click.
 
 ## Drive
 

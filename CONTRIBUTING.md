@@ -1,6 +1,6 @@
-# Contributing to Web Snap PDF
+# Contributing to WebPage to PDF
 
-Thanks for helping. Web Snap PDF is a Chrome extension with no build step. Chrome loads the
+Thanks for helping. WebPage to PDF is a Chrome extension with no build step. Chrome loads the
 `extension/` folder as it is, and the rest of the repository is tests, scripts, and docs. Everyone
 who takes part agrees to the [code of conduct](CODE_OF_CONDUCT.md).
 

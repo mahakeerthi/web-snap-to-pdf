@@ -1,14 +1,14 @@
-# Web Snap PDF
+# WebPage to PDF
 
 [![CI](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml)
 
-Web Snap PDF is a Chrome extension that saves the page you are reading as a PDF. It prints with
+WebPage to PDF (formerly Web Snap PDF) is a Chrome extension that saves the page you are reading as a PDF. It prints with
 Chrome's own engine (`Page.printToPDF` through `chrome.debugger`), so the PDF keeps the page's
 styles, the text stays selectable, and links stay clickable. You can save the whole page, only the
 article, or one element you pick, and you can save that element as a PNG or JPEG image too. The
 extension makes no network requests and needs no account.
 
-Web Snap PDF is not on the Chrome Web Store. To use it, [install it from source](#install-from-source).
+WebPage to PDF is not on the Chrome Web Store. To use it, [install it from source](#install-from-source).
 It needs Chrome 128 or newer.
 
 | Popup                                                                                                       | Popup, dark theme                                                       |
@@ -69,7 +69,7 @@ toolbar button, a menu entry, or a shortcut on that tab.
 
 ### Why Chrome says "started debugging this browser"
 
-While the extension prints a PDF or captures an element, Chrome shows a bar that says _Web Snap PDF
+While the extension prints a PDF or captures an element, Chrome shows a bar that says _WebPage to PDF
 started debugging this browser_. Chrome shows this bar for every extension that attaches
 `chrome.debugger`, and no extension can hide it. The bar goes away when the export finishes. If you
 click **Cancel** on the bar, the export stops. Markdown export does not use the debugger and shows
@@ -81,7 +81,7 @@ no bar.
 2. Open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and select the `extension/` folder, the one that contains
    `manifest.json`. Do not select the repository root.
-4. Pin Web Snap PDF from the extensions menu so its toolbar button stays visible.
+4. Pin WebPage to PDF from the extensions menu so its toolbar button stays visible.
 
 After you pull new changes, click the reload button on the extension's card in
 `chrome://extensions`, then reload the tabs you want to save.
@@ -231,7 +231,7 @@ are the commands you use most:
 | `npm run test:ui`      | Renders the extension's pages in both themes and fails on errors. |
 | `npm run package`      | Builds the ZIP file for the Chrome Web Store in `dist/`.          |
 
-`npm run package` writes `dist/web-snap-pdf-<version>.zip` with `manifest.json` at the root of the
+`npm run package` writes `dist/webpage-to-pdf-<version>.zip` with `manifest.json` at the root of the
 archive. It stops if `package.json` and `extension/manifest.json` have different versions, and it
 needs the `zip` command. The release checklist is in [docs/RELEASE.md](docs/RELEASE.md).
 
@@ -252,4 +252,4 @@ and what a good pull request contains. These open tasks need an owner:
 
 ## License
 
-Web Snap PDF is free software under the [MIT License](LICENSE).
+WebPage to PDF is free software under the [MIT License](LICENSE).

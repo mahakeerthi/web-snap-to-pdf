@@ -1,6 +1,6 @@
 ---
 name: verify-page-restore
-description: Model-check Web Snap PDF's page-restore promise with TLA+ (formal/page-restore). Use when a change touches how content.js mutates or restores the page (setStyle, restore, prepare, isolate, neutralizeFixed, the picker's hover, remove and undo, ps:reset-page) or how background.js serialises exports (claimTab, withPreparedPage, startPicker, ps:reset-page), and before claiming such a change is safe.
+description: Model-check WebPage to PDF's page-restore promise with TLA+ (formal/page-restore). Use when a change touches how content.js mutates or restores the page (setStyle, restore, prepare, isolate, neutralizeFixed, the picker's hover, remove and undo, ps:reset-page) or how background.js serialises exports (claimTab, withPreparedPage, startPicker, ps:reset-page), and before claiming such a change is safe.
 ---
 
 # Verify the page-restore promise

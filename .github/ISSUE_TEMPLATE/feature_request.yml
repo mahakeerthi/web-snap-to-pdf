@@ -17,7 +17,7 @@ body:
     id: proposal
     attributes:
       label: Proposal
-      description: What should Web Snap PDF do? Describe what you would click and what file you would get.
+      description: What should WebPage to PDF do? Describe what you would click and what file you would get.
     validations:
       required: true
   - type: textarea

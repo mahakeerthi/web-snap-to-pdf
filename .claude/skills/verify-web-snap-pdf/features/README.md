@@ -1,12 +1,12 @@
-# Web Snap PDF verification map
+# WebPage to PDF verification map
 
-This directory is the maintained source for verifying the user-facing behavior of Web Snap PDF. Read the index before driving the extension, then use the matching feature file as the recipe.
+This directory is the maintained source for verifying the user-facing behavior of WebPage to PDF. Read the index before driving the extension, then use the matching feature file as the recipe.
 
 ## Baseline preconditions
 
 - `npm install` has run and `npx playwright install chromium` has installed Chromium.
 - `pdfinfo` and `pdftotext` (poppler) are on PATH.
-- `node scripts/verify-popup.mjs doctor` exits 0 and prints `"name": "Web Snap PDF"`, the version in `extension/manifest.json`, and `"printable": true`.
+- `node scripts/verify-popup.mjs doctor` exits 0 and prints `"name": "WebPage to PDF"`, the version in `extension/manifest.json`, and `"printable": true`.
 - Every journey starts from a fresh profile with default settings: image scale 2, filename template `{title}`, Save As off, Markdown off, hide fixed elements on.
 - Fixture pages come from `test/fixtures/`. `article.html` contains `ARTICLE-MARK` (in `#story`), `SIDEBAR-MARK` (in `#sidebar`), `FIXED-HEADER-MARK` and `FOOTER-MARK`. `element.html` has `#red`, a 400x300 element far below the fold, plus `#tall` and `#split` for split exports.
 

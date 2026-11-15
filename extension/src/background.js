@@ -1,4 +1,4 @@
-// Web Snap PDF - background service worker.
+// WebPage to PDF - background service worker.
 // Runs the export pipelines on the active tab and routes the ps:* messages from the popup and the
 // content script (plus context menus and keyboard shortcuts):
 //   startPreview()    ps:set-target -> the content script opens the preview overlay
@@ -126,7 +126,7 @@ async function uiStrings(settings) {
   try {
     messages = await getMessages(settings && settings.language);
   } catch (err) {
-    console.warn('Web Snap: could not load translations', err);
+    console.warn('WebPage to PDF: could not load translations', err);
   }
   const out = { ...PICKER_STRINGS_EN };
   for (const [k, v] of Object.entries(messages || {})) {
@@ -665,7 +665,7 @@ async function captureRatio(target) {
       0;
     return w > 0 ? w / 100 : 1;
   } catch (err) {
-    console.warn('Web Snap: could not measure the capture scale', err);
+    console.warn('WebPage to PDF: could not measure the capture scale', err);
     return 1;
   }
 }
@@ -849,7 +849,7 @@ async function blobUrl(blob) {
     if (!reply || !reply.ok) throw new Error((reply && reply.error) || 'No blob: URL came back.');
     return reply.url;
   } catch (err) {
-    console.warn('Web Snap: could not make a blob: URL for the PDF', err);
+    console.warn('WebPage to PDF: could not make a blob: URL for the PDF', err);
     throw new UserError('Could not save the PDF.');
   }
 }
@@ -1205,7 +1205,7 @@ function installMenus() {
 
 /** Menu and shortcut actions have no caller to report to: log failures instead. */
 function runLogged(promise) {
-  return promise.catch((err) => console.warn('Web Snap:', err.message));
+  return promise.catch((err) => console.warn('WebPage to PDF:', err.message));
 }
 
 chrome.runtime.onInstalled.addListener(installMenus);

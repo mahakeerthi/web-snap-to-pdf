@@ -51,12 +51,12 @@ dot-separated integers, so there are no prerelease versions.
 
 ## 3. Package
 
-The release workflow runs `npm run package` and attaches `web-snap-pdf-<version>.zip` and its
+The release workflow runs `npm run package` and attaches `webpage-to-pdf-<version>.zip` and its
 `.sha256` to the GitHub release. To build the same ZIP locally:
 
 ```sh
 npm run package
-unzip -l dist/web-snap-pdf-*.zip | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
+unzip -l dist/webpage-to-pdf-*.zip | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
 ```
 
 The ZIP holds the contents of `extension/` only, with `manifest.json` and `_locales/` at its root.
@@ -65,7 +65,7 @@ The ZIP holds the contents of `extension/` only, with `manifest.json` and `_loca
 
 Paste from [store/listing.md](store/listing.md):
 
-- **Name:** Web Snap PDF.
+- **Name:** WebPage to PDF.
 - **Summary:** comes from the manifest description (`extDescription` in
   `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
   the summary for other store languages automatically.
@@ -129,8 +129,8 @@ downloads through `downloads`).
 
 ## 6. Branding
 
-- [ ] Name, icon, screenshots, promo tiles and description are Web Snap PDF's own. Do not reuse
-      another extension's name, logo, screenshots or listing text, and do not describe Web Snap PDF
+- [ ] Name, icon, screenshots, promo tiles and description are WebPage to PDF's own. Do not reuse
+      another extension's name, logo, screenshots or listing text, and do not describe WebPage to PDF
       as affiliated with another extension. The store can reject or remove a listing that copies
       another listing's branding.
 
@@ -178,11 +178,11 @@ on top of it, which changes only the version in `package.json`, `package-lock.js
 
 Uploading is always by hand, from the GitHub release.
 
-1. Download `web-snap-pdf-X.Y.Z.zip` from the release page.
+1. Download `webpage-to-pdf-X.Y.Z.zip` from the release page.
 2. Check that it is the file this repository built:
 
    ```sh
-   gh attestation verify web-snap-pdf-X.Y.Z.zip --repo mahakeerthi/web-snap-to-pdf \
+   gh attestation verify webpage-to-pdf-X.Y.Z.zip --repo mahakeerthi/web-snap-to-pdf \
      --signer-workflow mahakeerthi/web-snap-to-pdf/.github/workflows/release.yml \
      --source-ref refs/heads/main
    ```
