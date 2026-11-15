@@ -3481,6 +3481,23 @@ await test('preview: Download runs a new pass when the page grew', async () => {
   await page.close();
 });
 
+await test('preview: Download runs a new pass when the page grew without a DOM change', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => document.styleSheets[0].insertRule('.block { height: 2200px !important; }'));
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(
+    prep.reused === undefined,
+    `a taller page, no mutation record: the Download runs a full pass (${prep.reused})`,
+  );
+  check((await scrolls(page)) > 2, `the page scrolls again (${await scrolls(page)} scroll events)`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+});
+
 await test('preview: Download runs a new pass when the page re-rendered its images', async () => {
   const { page } = await previewReady(20);
   await page.evaluate(() => {
