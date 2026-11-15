@@ -32,9 +32,10 @@ const SEGMENT_PX = 1600;
 
 const activeJobs = new Set(); // tabIds currently generating
 
-// The offscreen document holds the PDF's blob: URL while a save starts its download. Chrome allows
-// one per extension, so overlapping saves share it and the last one to finish closes it.
-let savesPending = 0; // saves between "URL wanted" and "download() settled"
+// The offscreen document holds the PDF's blob: URL while a save starts its download. An export that
+// will save opens it when it starts printing, so its creation overlaps the print. Chrome allows one
+// per extension, so overlapping exports share it and the last one to finish closes it.
+let savesPending = 0; // exports between "will save" and "download() settled"
 let offscreenReady = null; // single-flight createDocument, reset on error and on close
 let offscreenClosing = null; // in-flight closeDocument, awaited before a new document is created
 
@@ -115,9 +116,14 @@ async function uiStrings(settings) {
 async function generate({ tabId, settings, prep = 'none', output }) {
   settings = normalizeSettings(settings || (await loadSettings()));
   claimTab(tabId, 'A PDF is already being generated for this tab.');
+  let holding = false;
   try {
     progress(tabId, 'prepare', 'Preparing page…');
     const tab = await readyTab(tabId);
+    if (output !== 'return') {
+      holdOffscreen();
+      holding = true;
+    }
     const prepMsg = { prep, loadLazy: settings.loadLazy, ...scanOptions(settings) };
     const { pdf, title, printWarning, lazy } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
       withDebugger(tabId, async (target) => {
@@ -140,6 +146,7 @@ async function generate({ tabId, settings, prep = 'none', output }) {
   } catch (err) {
     throw failed(tabId, err);
   } finally {
+    if (holding) releaseOffscreen();
     activeJobs.delete(tabId);
     progress(tabId, 'done', '');
   }
@@ -192,14 +199,9 @@ function fitSinglePage(params, contentHeightPx, { paper, margins, scale }) {
   return `The page is longer than PDF viewers allow for a single page (${MAX_PAGE_INCHES} in), so it was split into ${Math.ceil(heightIn / MAX_PAGE_INCHES)} tall pages.`;
 }
 
-/** Saves the PDF through a blob: URL made by the offscreen document, then closes the document. */
+/** Saves the PDF through a blob: URL made by the offscreen document that generate holds open. */
 async function savePdf(pdf, filename, saveAs) {
-  savesPending++;
-  try {
-    return await downloadUrl(await blobUrl(pdf), filename, saveAs);
-  } finally {
-    if (!--savesPending) closeOffscreen();
-  }
+  return downloadUrl(await blobUrl(pdf), filename, saveAs);
 }
 
 // ---------------------------------------------------------------------------
@@ -785,8 +787,19 @@ function askOffscreen(client, msg) {
   });
 }
 
-// Decides and starts the close in the same synchronous stretch as the savesPending check, so a
-// save that starts later sees offscreenClosing and waits for it.
+// Starts the document's creation early. A failure is not final: blobUrl asks again when the save
+// needs the URL.
+function holdOffscreen() {
+  savesPending++;
+  ensureOffscreen().catch(() => {});
+}
+
+function releaseOffscreen() {
+  if (!--savesPending) closeOffscreen();
+}
+
+// Decides and starts the close in the same synchronous stretch as the savesPending check, so an
+// export that starts later sees offscreenClosing and waits for it.
 function closeOffscreen() {
   offscreenReady = null;
   offscreenClosing = chrome.offscreen

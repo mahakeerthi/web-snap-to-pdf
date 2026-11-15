@@ -426,7 +426,6 @@ await test('a failed PDF save shows an error and opens nothing', async () => {
     () => {
       const orig = chrome.offscreen.createDocument;
       chrome.offscreen.createDocument = async () => {
-        chrome.offscreen.createDocument = orig;
         throw new Error('simulated createDocument failure');
       };
       (globalThis.__restore ||= []).push(() => {
@@ -467,6 +466,89 @@ await test('a failed PDF save shows an error and opens nothing', async () => {
     },
   );
   const res = await saveToDisk(tabId, 'p2-fail-c');
+  const [item] = await waitForFiles([res.filename]);
+  check(res.ok && item.state === 'complete', 'a next save on the same tab succeeds');
+  await page.close();
+});
+
+await test('the offscreen document is created while the page prints', async () => {
+  const { page, tabId } = await openTab(`${articleUrl}?warm=1`);
+  await withWrapped(
+    () => {
+      const orig = chrome.debugger.sendCommand;
+      globalThis.__docBeforePrint = null;
+      chrome.debugger.sendCommand = async function (target, method, params) {
+        if (method === 'Page.printToPDF') {
+          for (let i = 0; i < 100 && globalThis.__docBeforePrint !== true; i++) {
+            const docs = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+            globalThis.__docBeforePrint = docs.length > 0;
+            if (!globalThis.__docBeforePrint) await new Promise((r) => setTimeout(r, 50));
+          }
+        }
+        return orig.call(this, target, method, params);
+      };
+      (globalThis.__restore ||= []).push(() => {
+        chrome.debugger.sendCommand = orig;
+      });
+    },
+    async () => {
+      const res = await saveToDisk(tabId, 'p2-warm');
+      const [item] = await waitForFiles([res.filename]);
+      check(
+        (await sw.evaluate(() => globalThis.__docBeforePrint)) === true,
+        'an offscreen document is open before Page.printToPDF starts',
+      );
+      check(
+        res.ok && item.url.startsWith(`blob:chrome-extension://${extensionId}/`),
+        'the save completes through a blob: URL',
+      );
+      check(await offscreenClosed(), 'no offscreen document is left open');
+    },
+  );
+  await page.close();
+});
+
+await test('a failed warm-up does not fail the save, and a failed export leaves no document', async () => {
+  const { page, tabId } = await openTab(`${articleUrl}?warmfail=1`);
+  await withWrapped(
+    () => {
+      const orig = chrome.offscreen.createDocument;
+      chrome.offscreen.createDocument = async () => {
+        chrome.offscreen.createDocument = orig;
+        throw new Error('simulated createDocument failure');
+      };
+      (globalThis.__restore ||= []).push(() => {
+        chrome.offscreen.createDocument = orig;
+      });
+    },
+    async () => {
+      const res = await saveToDisk(tabId, 'p2-warmfail');
+      const [item] = await waitForFiles([res.filename]);
+      check(res.ok && item.state === 'complete', 'the save asks for the document again and completes');
+    },
+  );
+  check(await offscreenClosed(), 'no offscreen document is left open after the save');
+  await withWrapped(
+    () => {
+      const orig = chrome.debugger.sendCommand;
+      chrome.debugger.sendCommand = async function (target, method, params) {
+        if (method === 'Page.printToPDF') {
+          chrome.debugger.sendCommand = orig;
+          throw new Error('simulated print failure');
+        }
+        return orig.call(this, target, method, params);
+      };
+      (globalThis.__restore ||= []).push(() => {
+        chrome.debugger.sendCommand = orig;
+      });
+    },
+    async () => {
+      const error = await failureOf(saveToDisk(tabId, 'p2-printfail'));
+      check(error === 'simulated print failure', `the print failure is reported (${error})`);
+      check(await offscreenClosed(), 'an export that failed before saving leaves no offscreen document');
+    },
+  );
+  const res = await saveToDisk(tabId, 'p2-afterfail');
   const [item] = await waitForFiles([res.filename]);
   check(res.ok && item.state === 'complete', 'a next save on the same tab succeeds');
   await page.close();

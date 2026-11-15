@@ -94,7 +94,7 @@ Saves the generated PDF, PNG/JPEG image or Markdown file to the user's Downloads
 `offscreen`
 
 ```text
-Saves a generated PDF quickly. A Manifest V3 service worker cannot create a blob: URL, so while a PDF is being saved the extension opens one hidden page of its own (reason BLOBS). That page turns the PDF the extension just printed into a local blob: URL, which chrome.downloads saves. This is much faster than passing a large PDF as a data: URL and uses far less memory. The page loads no web content, uses no other permission, and is closed as soon as the download has started.
+Saves a generated PDF quickly. A Manifest V3 service worker cannot create a blob: URL, so while a PDF is being generated and saved the extension opens one hidden page of its own (reason BLOBS). That page turns the PDF the extension just printed into a local blob: URL, which chrome.downloads saves. This is much faster than passing a large PDF as a data: URL and uses far less memory. The page loads no web content, uses no other permission, and is closed as soon as the download has started.
 ```
 
 `storage`

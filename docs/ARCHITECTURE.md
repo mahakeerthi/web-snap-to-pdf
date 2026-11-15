@@ -32,8 +32,10 @@ The only place that talks to `chrome.debugger`, `chrome.downloads`, `chrome.offs
 - Output. A PDF is read into one `Blob` in the worker, then `savePdf` hands the `Blob` to the
   offscreen page (`src/offscreen/`), which returns a `blob:chrome-extension://…` URL, and
   `downloadUrl` passes it to `chrome.downloads.download` (`conflictAction: 'uniquify'`, `saveAs`
-  from settings for every format). The worker closes the offscreen document once `download()` has
-  settled for every save that is using it. A download that has started survives the close. A
+  from settings for every format). An export that will save starts creating the offscreen document
+  as soon as the page is ready, so the creation overlaps the print, and the worker closes the
+  document when the last such export ends, after `download()` has settled or on failure. A download
+  that has started survives the close. A
   failure to make the URL throws "Could not save the PDF.", and a rejected `download()` shows
   Chrome's message. There is no second attempt and no fallback page. PNG, JPEG and Markdown use
   `download(base64, filename, saveAs, mime)`, which sends a `data:<mime>;base64,…` URL to
@@ -169,7 +171,7 @@ confirmation box; turning it off needs no confirmation), About, "Reset all setti
 ### `src/offscreen/`
 
 One hidden page (`offscreen.html`, classic script `offscreen.js`, no imports), created with
-reason `BLOBS` and open only while a PDF is saved. A service worker has no
+reason `BLOBS` and open only from when an export starts printing until its download has started. A service worker has no
 `URL.createObjectURL`, so the page answers `ps:blob-url` with one. It holds no state, applies no
 theme and uses no `chrome.*` API. The worker owns its lifetime (see `savePdf` and
 `closeOffscreen` in `background.js`). A document left open by a worker that died is reused by the
