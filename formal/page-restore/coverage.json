@@ -36,15 +36,15 @@
       "onDebuggerDetach"
     ]
   },
-  "syncCommit": "ea13924",
+  "syncCommit": "61857a2",
   "hashes": {
-    "extension/src/content.js#handle": "b54032da6451a06a",
-    "extension/src/content.js#prepare": "7f97735a6ea6f893",
+    "extension/src/content.js#handle": "e99efbcae5232508",
+    "extension/src/content.js#prepare": "d493cae9bd4c9356",
     "extension/src/content.js#restore": "3269c38786eae6b4",
     "extension/src/content.js#setStyle": "086cd427e5e3a363",
     "extension/src/content.js#isolate": "76a7a0afad633084",
     "extension/src/content.js#neutralizeFixed": "ece3bfa57dba21b7",
-    "extension/src/content.js#pick": "830eda6da6f65795",
+    "extension/src/content.js#pick": "4887f3087fcf5b4b",
     "extension/src/content.js#undoRemoval": "c4e3961cc6a5091c",
     "extension/src/content.js#restoreRemoval": "9e4f889cd3bce4af",
     "extension/src/content.js#resetRemovals": "c2563bcae5e4e1d0",
@@ -53,12 +53,15 @@
     "extension/src/content.js#pickable": "3240cf5c4e9b44bf",
     "extension/src/content.js#elementAt": "2efc3aa8058e1324",
     "extension/src/content.js#setCurrent": "62ba77a7a3fba28f",
-    "extension/src/content.js#renderBar": "f4906702f72780f9",
-    "extension/src/background.js#claimTab": "136633d75875929b",
-    "extension/src/background.js#generate": "45544065c30bfd3b",
-    "extension/src/background.js#captureElement": "c499f7b093ac8a3f",
-    "extension/src/background.js#withPreparedPage": "eb8411e0f13ff0b3",
+    "extension/src/content.js#renderBar": "52c52c60a5f132df",
+    "extension/src/content.js#loadLazyContent": "b60964f1c645d2d5",
+    "extension/src/background.js#claimTab": "6d0d80b24221ff09",
+    "extension/src/background.js#generate": "b820d9d9d582fea2",
+    "extension/src/background.js#captureElement": "cfe8d5dab01d5109",
+    "extension/src/background.js#withPreparedPage": "6071b1595edc95a7",
     "extension/src/background.js#startPicker": "b59f51e368887592",
-    "extension/src/background.js#handleMessage": "e4f8c6684a625c92"
+    "extension/src/background.js#handleMessage": "cc974f5b7ab9ab94",
+    "extension/src/background.js#startPreview": "1e062672fca936c5",
+    "extension/src/background.js#onDebuggerDetach": "18f29cf471bdab34"
   }
 }
