@@ -56,6 +56,31 @@ test('npm version bumps package.json and the manifest in one tagged commit', () 
   }
 });
 
+test('npm run package writes webpage-to-pdf-<version>.zip with manifest.json at the root', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'websnap-package-'));
+  try {
+    for (const file of ['package.json', 'extension/manifest.json', 'scripts/package.mjs']) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.copyFileSync(path.join(root, file), path.join(dir, file));
+    }
+    execFileSync('node', ['scripts/package.mjs'], { cwd: dir, stdio: 'pipe' });
+
+    const { version } = JSON.parse(fs.readFileSync(path.join(dir, 'extension/manifest.json'), 'utf8'));
+    const zipName = `webpage-to-pdf-${version}.zip`;
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'dist')), [zipName]);
+    const entries = execFileSync('unzip', ['-Z1', path.join(dir, 'dist', zipName)], { encoding: 'utf8' });
+    assert.deepEqual(entries.trim().split('\n'), ['manifest.json']);
+
+    const workflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
+    assert.ok(workflow.includes(zipName.replace(version, '$VERSION')), 'release.yml names the same ZIP');
+    assert.ok(!/(?<!verify-)web-snap-pdf-/.test(workflow), 'release.yml has no old ZIP name');
+    const releaseDoc = fs.readFileSync(path.join(root, 'docs/RELEASE.md'), 'utf8');
+    assert.ok(releaseDoc.includes(zipName.replace(version, '<version>')), 'RELEASE.md names the same ZIP');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the first release from no tags is 0.0.1', () => {
   assert.equal(nextVersion([], 'patch'), '0.0.1');
   assert.equal(nextVersion([''], 'minor'), '0.1.0');
