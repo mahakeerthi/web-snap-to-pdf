@@ -373,6 +373,10 @@ characters):
 
 - **Manifest strings** (`__MSG_extName__`, `extDescription`, `actionTitle`, `cmdSavePdf`,
   `cmdSaveArticle`) are resolved by Chrome from the browser UI language (`default_locale: "en"`).
+- **Context-menu titles** (`menu_page`, `menu_article`, `menu_selectElement`, `menu_removeElements`,
+  `menu_reset`) are read with `chrome.i18n.getMessage` when `installMenus` runs (install and browser
+  start), so they follow the browser UI language like the manifest strings. The language picked in
+  the popup or options does not change them.
 - **In-app UI**: `chrome.i18n` cannot switch language at runtime, so `src/lib/i18n.js` fetches the
   dictionary for `settings.language` (`'auto'` → `navigator.language`, full code such as `pt_BR`
   first, then the base language, then `en`) and merges it over English.
@@ -383,7 +387,7 @@ characters):
   `PICKER_STRINGS_EN` + translation) with `ps:start-picker`, `ps:set-target` and `ps:show-preview`.
   The page, article and element overlays use different title and image-label keys
   (`preview_title*`, `preview_imageAlt*`) and the caption `preview_captionSize`.
-- Not translated: context-menu titles, the download fallback page, and error messages generated in the
+- Not translated: the download fallback page, and error messages generated in the
   background (except `error_markdownDisabled`, the preview strings and the page-gone error, which the
   worker sends as `preview_errorInterrupted`; the `DEBUGGER_CLOSED` text stays English).
 
@@ -524,6 +528,9 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `/verify-page-restore` skill.
 - `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup, options and viewer pages
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
-  errors or missing translation keys.
+  errors or missing translation keys. It also fails when the Save As label names a single format in
+  any language, and, through `scripts/ui-checks/context-menu.mjs`, when the context-menu titles
+  `installMenus` creates are not the English and Japanese `menu_*` text (the recorded titles go to
+  `test/out/ui/context-menu-titles.json`).
 - `scripts/check-locales.mjs` (`npm run check:locales`) — locale key / placeholder parity.
 - `scripts/screenshot-preview.mjs` — preview-overlay screenshots for the docs and the store.

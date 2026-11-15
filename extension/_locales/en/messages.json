@@ -19,6 +19,26 @@
     "message": "Preview only the main article before saving it",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "Preview page",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Preview article",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Select an element to preview and save",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Remove elements before saving",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Restore all removed elements",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "Reading page…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Ask where to save each PDF",
+    "message": "Ask where to save each file",
     "description": "Checkbox"
   },
   "options_pageHandling": {

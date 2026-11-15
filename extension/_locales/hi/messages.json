@@ -19,6 +19,26 @@
     "message": "सेव करने से पहले मौजूदा पेज के सिर्फ़ मुख्य लेख की झलक देखें",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "पेज की झलक देखें",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "लेख की झलक देखें",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "कोई हिस्सा चुनें, झलक देखें और सेव करें",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "सेव करने से पहले हिस्से हटाएं",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "हटाए गए सभी हिस्से वापस लाएं",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "पेज पढ़ा जा रहा है…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "हर PDF के लिए पूछें कि कहां सेव करना है",
+    "message": "हर फ़ाइल के लिए पूछें कि कहां सेव करना है",
     "description": "Checkbox"
   },
   "options_pageHandling": {

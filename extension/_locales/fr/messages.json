@@ -19,6 +19,26 @@
     "message": "Afficher un aperçu de l’article principal seul avant de l’enregistrer",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "Aperçu de la page",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Aperçu de l’article",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Choisir un élément à prévisualiser et à enregistrer",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Retirer des éléments avant l’enregistrement",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Rétablir tous les éléments retirés",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "Lecture de la page…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Demander où enregistrer chaque PDF",
+    "message": "Demander où enregistrer chaque fichier",
     "description": "Checkbox"
   },
   "options_pageHandling": {

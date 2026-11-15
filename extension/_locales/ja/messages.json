@@ -19,6 +19,26 @@
     "message": "保存する前に現在のページのメイン記事だけをプレビューする",
     "description": "Keyboard shortcut description"
   },
+  "menu_page": {
+    "message": "ページをプレビュー",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "記事をプレビュー",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "要素を選択してプレビュー・保存",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "保存前に要素を削除",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "削除した要素をすべて元に戻す",
+    "description": "Right-click menu item"
+  },
   "popup_pageTitleLoading": {
     "message": "ページを読み込み中…",
     "description": "Popup subtitle while the active tab is queried"
@@ -536,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "PDF ごとに保存先を確認する",
+    "message": "ファイルごとに保存先を確認する",
     "description": "Checkbox"
   },
   "options_pageHandling": {

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkContextMenus } from './ui-checks/context-menu.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const extDir = path.join(root, 'extension');
@@ -633,6 +634,37 @@ try {
       await page.close();
     }
   }
+
+  // Save As applies to every export (PDF, PNG / JPEG, Markdown), so its label must not name one
+  // format, in the English fallback markup or in any language.
+  {
+    const formatName = /PDF|PNG|JPE?G|Markdown/i;
+    const html = fs.readFileSync(path.join(extDir, 'src/options/options.html'), 'utf8');
+    const fallback = html.match(/data-i18n="options_saveAs">([^<]*)</)?.[1];
+    if (!fallback || formatName.test(fallback))
+      problems.push(`[options-saveAs] HTML fallback label is ${JSON.stringify(fallback)}`);
+    const { SUPPORTED_LANGUAGES } = await import(pathToFileURL(path.join(extDir, 'src/lib/i18n.js')).href);
+    for (const { code } of SUPPORTED_LANGUAGES.filter((l) => l.code !== 'auto')) {
+      const label = `options-saveAs-${code}`;
+      const dict = JSON.parse(fs.readFileSync(path.join(extDir, `_locales/${code}/messages.json`), 'utf8'));
+      await sw.evaluate((language) => chrome.storage.sync.set({ settings: { language } }), code);
+      const page = await openPage(`${base}/options/options.html`, {
+        width: 720,
+        height: 900,
+        colorScheme: 'light',
+        label,
+      });
+      await page.waitForFunction(() => !document.documentElement.hasAttribute('data-boot'));
+      const text = (await page.textContent('label.toggle:has(#saveAs)')).trim();
+      if (text !== dict.options_saveAs.message)
+        problems.push(`[${label}] label is "${text}", expected the ${code} dictionary text`);
+      if (formatName.test(text)) problems.push(`[${label}] label names a single format: "${text}"`);
+      await page.close();
+    }
+    await sw.evaluate(() => chrome.storage.sync.clear());
+  }
+
+  await checkContextMenus({ extDir, outDir, problems });
 } catch (err) {
   problems.push(`script error: ${err.stack || err}`);
 } finally {
