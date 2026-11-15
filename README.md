@@ -1,14 +1,14 @@
-# Web Snap PDF
+# WebPage to PDF
 
 [![CI](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/mahakeerthi/web-snap-to-pdf/actions/workflows/ci.yml)
 
-Web Snap PDF is a Chrome extension that saves the page you are reading as a PDF. It prints with
+WebPage to PDF (formerly Web Snap PDF) is a Chrome extension that saves the page you are reading as a PDF. It prints with
 Chrome's own engine (`Page.printToPDF` through `chrome.debugger`), so the PDF keeps the page's
 styles, the text stays selectable, and links stay clickable. You can save the whole page, only the
 article, or one element you pick, and you can save that element as a PNG or JPEG image too. The
 extension makes no network requests and needs no account.
 
-Web Snap PDF is not on the Chrome Web Store. To use it, [install it from source](#install-from-source).
+WebPage to PDF is not on the Chrome Web Store. To use it, [install it from source](#install-from-source).
 It needs Chrome 128 or newer.
 
 | Popup                                                                                                       | Popup, dark theme                                                       |
@@ -69,7 +69,7 @@ toolbar button, a menu entry, or a shortcut on that tab.
 
 ### Why Chrome says "started debugging this browser"
 
-While the extension prints a PDF or captures an element, Chrome shows a bar that says _Web Snap PDF
+While the extension prints a PDF or captures an element, Chrome shows a bar that says _WebPage to PDF
 started debugging this browser_. Chrome shows this bar for every extension that attaches
 `chrome.debugger`, and no extension can hide it. The bar goes away when the export finishes. If you
 click **Cancel** on the bar, the export stops. Markdown export does not use the debugger and shows
@@ -81,7 +81,7 @@ no bar.
 2. Open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and select the `extension/` folder, the one that contains
    `manifest.json`. Do not select the repository root.
-4. Pin Web Snap PDF from the extensions menu so its toolbar button stays visible.
+4. Pin WebPage to PDF from the extensions menu so its toolbar button stays visible.
 
 After you pull new changes, click the reload button on the extension's card in
 `chrome://extensions`, then reload the tabs you want to save.
@@ -167,8 +167,11 @@ also turns on Markdown export and resets all settings.
 - Article detection is a heuristic. If it picks the wrong block or finds none, use **Select
   element**.
 - Canvas, WebGL, and video content prints as Chrome's print engine renders it.
-- On very long pages, page scans stop after 200,000 elements, auto-scroll stops after 250 steps, and
-  the wait for slow images ends after 6 seconds.
+- On very long pages, page scans stop after 200,000 elements and the wait for slow images ends after
+  6 seconds. Auto-scroll moves through every page the same way, 50 ms per step, and never stops
+  before step 250. After that it stops as soon as the page has grown since step 250 (an endless
+  feed), or after 30 seconds on a page that does not grow. The popup and the preview then warn that
+  content near the end may be missing.
 - Markdown export drops `data:` images larger than 2 KB, escapes Markdown punctuation everywhere
   (`snake_case` becomes `snake\_case`), and exports elements hidden with `visibility: hidden`. It
   has no support for rowspan, `sup`, `sub`, `mark`, `u`, task lists, or reversed lists. It merges
@@ -187,6 +190,7 @@ also turns on Markdown export and resets all settings.
 | "Could not detect an article on this page."                                                                         | Use **Select element** instead.                                                                                                                                                                                                                         |
 | **Select an element to preview and save** or **Remove elements before saving** in the right-click menu does nothing | An export is still running on this tab. The extension refuses the entry and writes the reason only to the service worker console. While the export runs, the popup disables its cards and shows "Generating PDF…". Try again after the export finishes. |
 | Images are missing from the PDF                                                                                     | Keep **Scroll page to load lazy images** on. Slow images get up to 6 seconds.                                                                                                                                                                           |
+| "Stopped scrolling before the end of the page, so some content near the end may be missing."                        | The page kept growing as it scrolled past step 250 (an endless feed), or is too long to scroll in 30 seconds. The file holds what loaded before the scroll stopped. **Select element** scrolls the page the same way, so it warns too.                  |
 | The page looks like a phone layout, or very small                                                                   | Change the layout width, or choose **Fit to paper width** and set the scale.                                                                                                                                                                            |
 | The page looks wrong after a failed export                                                                          | Right-click the page and choose **Restore all removed elements**, or reload the tab. If you removed elements, **Reset page** in the popup does the same.                                                                                                |
 
@@ -227,7 +231,7 @@ are the commands you use most:
 | `npm run test:ui`      | Renders the extension's pages in both themes and fails on errors. |
 | `npm run package`      | Builds the ZIP file for the Chrome Web Store in `dist/`.          |
 
-`npm run package` writes `dist/web-snap-pdf-<version>.zip` with `manifest.json` at the root of the
+`npm run package` writes `dist/webpage-to-pdf-<version>.zip` with `manifest.json` at the root of the
 archive. It stops if `package.json` and `extension/manifest.json` have different versions, and it
 needs the `zip` command. The release checklist is in [docs/RELEASE.md](docs/RELEASE.md).
 
@@ -248,4 +252,4 @@ and what a good pull request contains. These open tasks need an owner:
 
 ## License
 
-Web Snap PDF is free software under the [MIT License](LICENSE).
+WebPage to PDF is free software under the [MIT License](LICENSE).

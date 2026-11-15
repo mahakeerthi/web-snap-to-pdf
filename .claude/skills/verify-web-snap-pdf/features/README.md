@@ -1,12 +1,12 @@
-# Web Snap PDF verification map
+# WebPage to PDF verification map
 
-This directory is the maintained source for verifying the user-facing behavior of Web Snap PDF. Read the index before driving the extension, then use the matching feature file as the recipe.
+This directory is the maintained source for verifying the user-facing behavior of WebPage to PDF. Read the index before driving the extension, then use the matching feature file as the recipe.
 
 ## Baseline preconditions
 
 - `npm install` has run and `npx playwright install chromium` has installed Chromium.
 - `pdfinfo` and `pdftotext` (poppler) are on PATH.
-- `node scripts/verify-popup.mjs doctor` exits 0 and prints `"name": "Web Snap PDF"`, the version in `extension/manifest.json`, and `"printable": true`.
+- `node scripts/verify-popup.mjs doctor` exits 0 and prints `"name": "WebPage to PDF"`, the version in `extension/manifest.json`, and `"printable": true`.
 - Every journey starts from a fresh profile with default settings: image scale 2, filename template `{title}`, Save As off, Markdown off, hide fixed elements on.
 - Fixture pages come from `test/fixtures/`. `article.html` contains `ARTICLE-MARK` (in `#story`), `SIDEBAR-MARK` (in `#sidebar`), `FIXED-HEADER-MARK` and `FOOTER-MARK`. `element.html` has `#red`, a 400x300 element far below the fold, plus `#tall` and `#split` for split exports.
 
@@ -15,7 +15,7 @@ This directory is the maintained source for verifying the user-facing behavior o
 - Drive through `scripts/verify-popup.mjs`. Each journey is one fresh browser; never share one between journeys.
 - Open the fixture first and bring it to the front, then open the popup. The popup resolves its target tab once, at load.
 - Before any popup click, require `body[data-state="ready"]` and a `#page-title` equal to the fixture's title.
-- Prefer ids in extension pages (`#act-page`) and class or data handles in the shadow-root UI (`.seg [data-format="png"]`). Picker bar buttons go by role and their localized label.
+- Prefer ids in extension pages (`#act-page`) and class or tag handles in the shadow-root UI (`.download`, `select.format`, which you set with `selectOption` and which a `label` with the text Format names). Picker bar buttons go by role and their localized label.
 - Click the real control. `globalThis.__websnap` is for `doctor` and for reading state.
 
 ## Proof and skip reporting
@@ -38,8 +38,8 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 ## Features
 
-- [Full page PDF](./full-page-pdf.md) covers saving the whole page from the popup, the context menu and `Alt+Shift+P`.
-- [Article PDF](./article-pdf.md) covers saving only the main content from the popup, the context menu and `Alt+Shift+A`.
-- [Select element](./select-element.md) covers the element picker and the preview overlay's PDF, PNG and JPEG export, split parts and copy.
-- [Remove elements](./remove-elements.md) covers removing elements before an export, Undo, Save PDF from the picker bar, and resetting the page.
-- [Markdown export](./markdown.md) covers the opt-in in options and the page and article Markdown cards.
+- [Full page PDF](./full-page-pdf.md) covers previewing the whole page from the popup, the context menu and `Alt+Shift+P`, and saving it with Download in the overlay.
+- [Article PDF](./article-pdf.md) covers previewing only the main content from the popup, the context menu and `Alt+Shift+A`, and saving it with Download in the overlay.
+- [Select element](./select-element.md) covers the element picker and the preview overlay's Format dropdown (PDF, PNG and JPEG), split parts, copy and cancel.
+- [Remove elements](./remove-elements.md) covers removing elements before an export, Undo, Preview from the picker bar, and resetting the page.
+- [Markdown export](./markdown.md) covers the opt-in in options, the page and article Markdown cards and the overlay's Markdown format.

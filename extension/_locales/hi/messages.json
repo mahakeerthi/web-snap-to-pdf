@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Web Snap PDF",
+    "message": "WebPage to PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,16 +8,36 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "Web Snap PDF - यह पेज PDF के रूप में सेव करें",
+    "message": "WebPage to PDF - यह पेज PDF के रूप में सेव करें",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "मौजूदा पेज को अपनी सेव की गई सेटिंग के साथ PDF के रूप में सेव करें",
+    "message": "मौजूदा पेज को सेव करने से पहले उसकी झलक देखें",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "मौजूदा पेज का सिर्फ़ मुख्य लेख PDF के रूप में सेव करें",
+    "message": "सेव करने से पहले मौजूदा पेज के सिर्फ़ मुख्य लेख की झलक देखें",
     "description": "Keyboard shortcut description"
+  },
+  "menu_page": {
+    "message": "पेज की झलक देखें",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "लेख की झलक देखें",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "कोई हिस्सा चुनें, झलक देखें और सेव करें",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "सेव करने से पहले हिस्से हटाएं",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "हटाए गए सभी हिस्से वापस लाएं",
+    "description": "Right-click menu item"
   },
   "popup_pageTitleLoading": {
     "message": "पेज पढ़ा जा रहा है…",
@@ -332,11 +352,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "“पूरा पेज” पेज की हर चीज़ को काम करने वाले लिंक के साथ PDF के रूप में सेव करता है।",
+    "message": "“पूरा पेज” पूरे पेज की झलक दिखाता है। PDF, PNG या JPEG चुनें और फिर उसे डाउनलोड करें।",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "“सिर्फ़ लेख” मुख्य टेक्स्ट और इमेज रखता है और मेन्यू, साइडबार और विज्ञापन हटा देता है।",
+    "message": "“सिर्फ़ लेख” मुख्य टेक्स्ट और इमेज की झलक दिखाता है, मेन्यू, साइडबार और विज्ञापनों के बिना।",
     "description": "Help panel text"
   },
   "help_select": {
@@ -382,6 +402,10 @@
   "status_pickerError": {
     "message": "पिकर शुरू नहीं हो सका।",
     "description": "Status line error"
+  },
+  "status_lazyIncomplete": {
+    "message": "पेज के अंत से पहले स्क्रॉल रुक गया, इसलिए अंत के पास की कुछ सामग्री छूट सकती है।",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
   },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
@@ -496,7 +520,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "Web Snap PDF सेटिंग",
+    "message": "WebPage to PDF सेटिंग",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -532,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "हर PDF के लिए पूछें कि कहां सेव करना है",
+    "message": "हर फ़ाइल के लिए पूछें कि कहां सेव करना है",
     "description": "Checkbox"
   },
   "options_pageHandling": {
@@ -568,11 +592,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "Web Snap PDF, Chrome के बिल्ट-इन प्रिंट इंजन से पेज बनाता है, पूरी तरह आपके डिवाइस पर। कुछ भी कहीं अपलोड नहीं होता।",
+    "message": "WebPage to PDF, Chrome के बिल्ट-इन प्रिंट इंजन से पेज बनाता है, पूरी तरह आपके डिवाइस पर। कुछ भी कहीं अपलोड नहीं होता।",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "PDF बनते समय Chrome एक बार दिखाता है: “Web Snap PDF ने इस ब्राउज़र को डीबग करना शुरू किया”। Chrome इसी तरह एक्सटेंशन को अपना PDF इंजन देता है; PDF तैयार होते ही यह बार गायब हो जाता है।",
+    "message": "PDF बनते समय Chrome एक बार दिखाता है: “WebPage to PDF ने इस ब्राउज़र को डीबग करना शुरू किया”। Chrome इसी तरह एक्सटेंशन को अपना PDF इंजन देता है; PDF तैयार होते ही यह बार गायब हो जाता है।",
     "description": "About text"
   },
   "options_reset": {
@@ -676,7 +700,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "PDF सेव करें",
+    "message": "झलक",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -695,9 +719,17 @@
     "message": "यह हिस्सा एक्सपोर्ट करें",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "यह पेज एक्सपोर्ट करें",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "यह लेख एक्सपोर्ट करें",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "फ़ॉर्मैट",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -721,7 +753,7 @@
   },
   "preview_copyImage": {
     "message": "इमेज कॉपी करें",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "सभी हिस्से डाउनलोड करें",
@@ -755,6 +787,10 @@
     "message": "फिर से चुनें",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "हिस्सा चुनें",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "बंद करें",
     "description": "Preview modal button"
@@ -775,8 +811,16 @@
     "message": "चुने गए हिस्से की झलक",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "पेज की झलक",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "लेख की झलक",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "यह हिस्सा कैप्चर नहीं हो सका।",
+    "message": "झलक नहीं बन सकी।",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -784,16 +828,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें या हिस्सा दोबारा चुनें।",
+    "message": "कुछ गड़बड़ हो गई। फिर से कोशिश करें।",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "एक्सपोर्ट पूरा होने से पहले पेज बंद हो गया, फिर से लोड हुआ या बीच में रुक गया। फिर से कोशिश करें।",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "यह हिस्सा बहुत बड़ा है, इसलिए Chrome की 16,384 px की सीमा में रहने के लिए इमेज को $1× तक छोटा किया गया है।",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "इमेज बहुत बड़ी है, इसलिए Chrome की 16,384 px की सीमा में रहने के लिए उसे $1× तक छोटा किया गया है।",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "इमेज रिज़ॉल्यूशन (PNG / JPEG)",

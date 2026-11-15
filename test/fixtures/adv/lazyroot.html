@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lazy blocks inside a root that grows</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  #root { padding: 16px 16px 16px 40px; }
+  .block { box-sizing: border-box; height: 1500px; padding: 16px; border-top: 1px solid #ccc; }
+  .block img { display: block; width: 300px; height: 120px; background: #ccc; }
+</style>
+</head>
+<body>
+<header style="height:1200px">header</header>
+<section id="root"><h1>ROOT-START-MARK</h1></section>
+<footer style="height:3000px">footer</footer>
+<script>
+  // ?n=<blocks> initial lazy blocks (20). window.appendBlocks(k) adds k more lazy blocks to the root
+  // at any time. A plain scroll listener fills every image that is in view, no throttle.
+  // window.__scrolls counts scroll events, window.__filled() the filled images.
+  const q = new URLSearchParams(location.search);
+  const root = document.getElementById('root');
+  let next = 0;
+  const image = (i) => {
+    const c = document.createElement('canvas'); c.width = 300; c.height = 120;
+    const x = c.getContext('2d');
+    x.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; x.fillRect(0, 0, 300, 120);
+    x.fillStyle = '#fff'; x.font = '24px sans-serif'; x.fillText('img ' + i, 4, 60);
+    return c.toDataURL('image/png');
+  };
+  window.appendBlocks = (k) => {
+    for (let j = 0; j < k; j++, next++) {
+      const b = document.createElement('div');
+      b.className = 'block';
+      b.innerHTML = `<p>BLOCK-${next}-MARK</p><img class="lz" data-echo="${image(next)}" alt="">`;
+      root.appendChild(b);
+    }
+    window.__total = document.querySelectorAll('img.lz').length;
+  };
+  window.__scrolls = 0;
+  window.__filled = () => document.querySelectorAll('img.lz[src]').length;
+  const fillVisible = () => {
+    for (const el of document.querySelectorAll('img.lz:not([src])')) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) el.src = el.dataset.echo;
+    }
+  };
+  addEventListener('scroll', () => { window.__scrolls++; fillVisible(); });
+  window.appendBlocks(Number(q.get('n') || 20));
+</script>
+</body>
+</html>

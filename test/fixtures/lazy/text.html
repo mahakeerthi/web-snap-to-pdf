@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plain Long Page</title>
+<style>body { font-family: serif; max-width: 800px; margin: 0 auto; padding: 16px; }</style>
+</head>
+<body>
+<script>
+  // ?paras=<n> paragraphs of 50 words (1400 make 117 pages).
+  const q = new URLSearchParams(location.search);
+  const PARAS = Number(q.get('paras') || 1400);
+  const WORDS = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat'.split(' ');
+  let seed = 1;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  let html = '<h1>PLAIN-START-MARK</h1>';
+  for (let i = 0; i < PARAS; i++) {
+    const words = Array.from({ length: 50 }, () => WORDS[Math.floor(rand() * WORDS.length)]);
+    html += `<p>P${i}. ${words.join(' ')}.</p>`;
+  }
+  html += '<p>PLAIN-END-MARK</p>';
+  document.body.insertAdjacentHTML('beforeend', html);
+</script>
+</body>
+</html>

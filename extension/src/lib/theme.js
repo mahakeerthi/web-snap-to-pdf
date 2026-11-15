@@ -1,4 +1,4 @@
-// Colour theme for extension pages (popup, options, viewer).
+// Colour theme for extension pages (popup, options).
 //
 // settings.theme is 'system' | 'light' | 'dark'. 'light' / 'dark' set data-theme on <html>;
 // 'system' removes it so the CSS falls back to prefers-color-scheme.

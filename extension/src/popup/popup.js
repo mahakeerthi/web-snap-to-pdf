@@ -56,8 +56,8 @@ async function init() {
   updateRemoved(state.removed || 0);
   if (state.busy) setBusy(true, tr('status_generating'));
 
-  $('act-page').addEventListener('click', () => run('none'));
-  $('act-article').addEventListener('click', () => run('article'));
+  $('act-page').addEventListener('click', () => preview('page'));
+  $('act-article').addEventListener('click', () => preview('article'));
   $('act-select').addEventListener('click', () => startPicker('print'));
   $('act-remove').addEventListener('click', () => startPicker('remove'));
   $('act-reset').addEventListener('click', async () => {
@@ -292,20 +292,26 @@ async function flushSettings() {
   await saveSettings(settings);
 }
 
-async function run(prep) {
+// Opens the preview overlay on the page and closes the popup. The export happens from the overlay.
+async function preview(kind) {
   if (busy || !tab) return;
   setBusy(true, tr('status_preparing')); // synchronously, so a second click/Enter is ignored
   try {
     await flushSettings();
-    showResult(await send({ type: 'ps:generate', tabId: tab.id, prep, output: 'download', settings }));
+    const res = await send({ type: 'ps:open-preview', tabId: tab.id, kind });
+    if (res && res.ok) {
+      window.close();
+      return;
+    }
+    setBusy(false);
+    setStatus((res && res.error) || tr('status_error'), 'error');
   } catch (err) {
+    setBusy(false);
     setStatus(String((err && err.message) || err), 'error');
-  } finally {
-    if (busy) setBusy(false);
   }
 }
 
-/** Status line for a ps:generate / ps:export-markdown response ({ok, filename, warning} | {ok:false, error}). */
+/** Status line for a ps:export-markdown response ({ok, filename, warning} | {ok:false, error}). */
 function showResult(res) {
   setBusy(false);
   if (!res || !res.ok) {

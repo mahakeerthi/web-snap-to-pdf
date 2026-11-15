@@ -35,7 +35,7 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Install poppler (pdfinfo, pdftotext)
+      - name: Install poppler (pdfinfo, pdftotext, pdfimages)
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Lint, format and locale checks

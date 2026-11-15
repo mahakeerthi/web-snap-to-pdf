@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Web Snap PDF",
+    "message": "WebPage to PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,16 +8,36 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "Web Snap PDF - salvar esta página em PDF",
+    "message": "WebPage to PDF - salvar esta página em PDF",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "Salvar a página atual em PDF com as suas configurações",
+    "message": "Ver uma prévia da página atual antes de salvar",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "Salvar só o artigo principal da página atual em PDF",
+    "message": "Ver uma prévia só do artigo principal antes de salvar",
     "description": "Keyboard shortcut description"
+  },
+  "menu_page": {
+    "message": "Prévia da página",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Prévia do artigo",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Escolher um elemento para visualizar e salvar",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Remover elementos antes de salvar",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Restaurar todos os elementos removidos",
+    "description": "Right-click menu item"
   },
   "popup_pageTitleLoading": {
     "message": "Lendo a página…",
@@ -332,11 +352,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "Página inteira salva tudo o que está na página em PDF, com links que funcionam.",
+    "message": "Página inteira mostra uma prévia da página toda. Escolha PDF, PNG ou JPEG e baixe.",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "Só o artigo mantém o texto e as imagens principais e descarta menus, barras laterais e anúncios.",
+    "message": "Só o artigo mostra uma prévia do texto e das imagens principais, sem menus, barras laterais e anúncios.",
     "description": "Help panel text"
   },
   "help_select": {
@@ -382,6 +402,10 @@
   "status_pickerError": {
     "message": "Não foi possível iniciar o seletor.",
     "description": "Status line error"
+  },
+  "status_lazyIncomplete": {
+    "message": "A rolagem parou antes do final da página, então pode faltar conteúdo perto do final.",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
   },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
@@ -496,7 +520,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "Configurações do Web Snap PDF",
+    "message": "Configurações do WebPage to PDF",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -532,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Perguntar onde salvar cada PDF",
+    "message": "Perguntar onde salvar cada arquivo",
     "description": "Checkbox"
   },
   "options_pageHandling": {
@@ -568,11 +592,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "O Web Snap PDF gera as páginas com o mecanismo de impressão integrado do Chrome, totalmente no seu dispositivo. Nada é enviado para lugar nenhum.",
+    "message": "O WebPage to PDF gera as páginas com o mecanismo de impressão integrado do Chrome, totalmente no seu dispositivo. Nada é enviado para lugar nenhum.",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "O Chrome mostra a barra “Web Snap PDF começou a depurar este navegador” enquanto um PDF é gerado. É assim que o Chrome disponibiliza seu mecanismo de PDF para extensões; ela some assim que o PDF fica pronto.",
+    "message": "O Chrome mostra a barra “WebPage to PDF começou a depurar este navegador” enquanto um PDF é gerado. É assim que o Chrome disponibiliza seu mecanismo de PDF para extensões; ela some assim que o PDF fica pronto.",
     "description": "About text"
   },
   "options_reset": {
@@ -676,7 +700,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "Salvar PDF",
+    "message": "Prévia",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -695,9 +719,17 @@
     "message": "Exportar este elemento",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "Exportar esta página",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "Exportar este artigo",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "Formato",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -721,7 +753,7 @@
   },
   "preview_copyImage": {
     "message": "Copiar imagem",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "Baixar todas as partes",
@@ -755,6 +787,10 @@
     "message": "Escolher de novo",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "Escolher uma parte",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "Fechar",
     "description": "Preview modal button"
@@ -775,8 +811,16 @@
     "message": "Visualização do elemento selecionado",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "Prévia da página",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "Prévia do artigo",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "Não foi possível capturar este elemento.",
+    "message": "Não foi possível criar a prévia.",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -784,16 +828,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "Algo deu errado. Tente de novo ou escolha o elemento outra vez.",
+    "message": "Algo deu errado. Tente de novo.",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "A página foi fechada, recarregada ou interrompida antes de a exportação terminar. Tente de novo.",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "Este elemento é muito grande, então a imagem foi reduzida para $1× para respeitar o limite de 16.384 px do Chrome.",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "A imagem é muito grande, então foi reduzida para $1× para respeitar o limite de 16.384 px do Chrome.",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "Resolução da imagem (PNG / JPEG)",

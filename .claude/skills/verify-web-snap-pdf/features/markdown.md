@@ -1,6 +1,6 @@
 # Markdown export
 
-Markdown export is an experimental, opt-in feature. After the user confirms it in the options page, the popup shows `Full page` and `Article` Markdown buttons and the element overlay gains a Markdown format, each saving a `.md` file.
+Markdown export is an experimental, opt-in feature. After the user confirms it in the options page, the popup shows `Full page` and `Article` Markdown buttons and the preview overlay (for a page, an article or an element) gains Markdown in its Format dropdown, each saving a `.md` file. The popup cards still download directly. The overlay saves only when Download is clicked.
 
 ## Sub-features
 
@@ -8,13 +8,13 @@ Markdown export is an experimental, opt-in feature. After the user confirms it i
 - `md-gate` hides the Markdown cards, and the background refuses Markdown exports, while the feature is off.
 - `md-article` saves the main content as `<title>.md`.
 - `md-page` saves the whole page as `<title>.md`.
-- `md-element` saves a picked element as Markdown from the overlay's Markdown format.
+- `md-preview` saves the page, the article or a picked element as Markdown from the overlay's Markdown format. A Markdown Download runs no page preparation and cannot be cancelled.
 
 ## How to get to it (user POV)
 
 - Opt in: open the options page (the popup's gear `#open-options`, or the extension's Options entry), tick `Enable Markdown export (experimental)` (`#markdownEnabled`), then `Enable` (`#markdown-enable`) in the confirmation. The helper opens `options.html` in a tab; the real embedded options dialog in `chrome://extensions` is not drivable by the harness.
 - Popup cards `#md-article` and `#md-page` inside `#md-row`. Driven (`#md-article`); `#md-page` is reachable but not driven by a journey.
-- The overlay's `.seg [data-format="markdown"]` after picking an element. Covered by `npm run test:content`, not by the helper.
+- The overlay's `markdown` option in `select.format`, after a Full page, Article only or Select element preview. The option exists only while Markdown is enabled. Covered by `npm run test:content`, not by the helper.
 - No shortcut or context-menu entry exists.
 
 ## Driving it with scripts/verify-popup.mjs

@@ -5,7 +5,7 @@
   "description": "__MSG_extDescription__",
   "default_locale": "en",
   "minimum_chrome_version": "128",
-  "permissions": ["debugger", "activeTab", "scripting", "downloads", "storage", "contextMenus"],
+  "permissions": ["debugger", "activeTab", "scripting", "downloads", "offscreen", "storage", "contextMenus"],
   "action": {
     "default_title": "__MSG_actionTitle__",
     "default_popup": "src/popup/popup.html",

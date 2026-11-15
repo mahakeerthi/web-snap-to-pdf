@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview performance fixture</title>
+<style>
+  body { margin: 0; font: 16px/1.5 Georgia, serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px; box-sizing: border-box; }
+  p { margin: 0 0 14px; }
+  img.photo { display: block; width: 100%; max-width: 1100px; height: auto; margin: 16px 0; }
+  .dense p { font: 11px/1.2 monospace; margin: 0; word-break: break-all; }
+</style>
+</head>
+<body>
+<main><article id="story"><h1>PERF-MARK Preview performance fixture</h1><div id="content"></div></article></main>
+<script>
+  // Everything is drawn here, so no binary is committed. Query parameters:
+  //   paras=<n>    paragraphs of text (about 86 px each)
+  //   tall=<px>    as many paragraphs as fill this many CSS px
+  //   photos=<n>   photo-like images, each an <img> whose src is a canvas-made data URL, spread
+  //                through the text; noise=1 makes them incompressible
+  //   dense=<px>   a page of tiny random monospace text this tall
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => Number(q.get(k) ?? d);
+  const words = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua'.split(' ');
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const photo = (i) => {
+    const c = document.createElement('canvas');
+    c.width = 1100;
+    c.height = 560;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(c.width, c.height);
+    const amp = q.get('noise') === '1' ? 255 : 40;
+    for (let p = 0; p < img.data.length; p += 4) {
+      const x = (p >> 2) % c.width;
+      const y = Math.floor((p >> 2) / c.width);
+      img.data[p] = ((x * 255) / c.width + (i * 40) + rnd() * amp) % 256;
+      img.data[p + 1] = ((y * 255) / c.height + rnd() * amp) % 256;
+      img.data[p + 2] = (128 + rnd() * amp + i * 10) % 256;
+      img.data[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.85);
+  };
+  const content = document.getElementById('content');
+  const dense = num('dense', 0);
+  if (dense) {
+    const box = document.createElement('div');
+    box.className = 'dense';
+    for (let y = 0; y < dense; y += 13) {
+      const p = document.createElement('p');
+      let s = '';
+      for (let k = 0; k < 190; k++) s += String.fromCharCode(33 + Math.floor(rnd() * 90));
+      p.textContent = s;
+      box.append(p);
+    }
+    content.append(box);
+  } else {
+    const paras = num('tall', 0) ? Math.ceil(num('tall', 0) / 86) : num('paras', 120);
+    const photos = num('photos', 0);
+    const every = photos ? Math.max(1, Math.floor(paras / photos)) : Infinity;
+    let placed = 0;
+    for (let i = 0; i < paras; i++) {
+      const p = document.createElement('p');
+      let s = '';
+      for (let w = 0; w < 60; w++) s += words[(i * 7 + w) % words.length] + ' ';
+      p.textContent = s;
+      content.append(p);
+      if (placed < photos && (i + 1) % every === 0) {
+        const im = document.createElement('img');
+        im.className = 'photo';
+        im.alt = 'photo ' + placed;
+        im.src = photo(placed++);
+        content.append(im);
+      }
+    }
+  }
+</script>
+</body>
+</html>

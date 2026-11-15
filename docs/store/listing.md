@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Web Snap PDF
+# Chrome Web Store listing — WebPage to PDF
 
 Exact text to paste into the Developer Dashboard. The dashboard fields are plain text: copy the
 contents of each `text` block, not the Markdown around it. Checklist and background:
@@ -9,7 +9,7 @@ contents of each `text` block, not the Markdown around it. Checklist and backgro
 **Name** (from the manifest, `__MSG_extName__`):
 
 ```text
-Web Snap PDF
+WebPage to PDF
 ```
 
 **Summary** (from the manifest, `__MSG_extDescription__` in `extension/_locales/en/messages.json`;
@@ -24,7 +24,7 @@ Save any web page as a PDF in one click. Keeps styles and links, paged or single
 **Description:**
 
 ```text
-Web Snap PDF turns the page you are reading into a clean PDF with Chrome's built-in print engine. Text stays selectable, links stay clickable, and nothing is uploaded anywhere.
+WebPage to PDF turns the page you are reading into a clean PDF with Chrome's built-in print engine. Text stays selectable, links stay clickable, and nothing is uploaded anywhere.
 
 Three ways to save
 • Full page – the whole page, top to bottom
@@ -49,7 +49,7 @@ Private by design
 No account, no uploads, no tracking, no ads. Pages are converted on your device and the files go straight to your Downloads folder. Free, with no paid tier.
 
 Good to know
-While a PDF is generated or an element is captured, Chrome shows "Web Snap PDF started debugging this browser". That is how Chrome lets extensions use its PDF and screenshot engine; the bar disappears as soon as the file is ready. Chrome does not allow extensions on its own pages (chrome://) or on the Chrome Web Store.
+While a PDF is generated or an element is captured, Chrome shows "WebPage to PDF started debugging this browser". That is how Chrome lets extensions use its PDF and screenshot engine; the bar disappears as soon as the file is ready. Chrome does not allow extensions on its own pages (chrome://) or on the Chrome Web Store.
 ```
 
 **Category:** Tools (alternative: Workflow & Planning / Productivity, depending on the dashboard's
@@ -62,7 +62,7 @@ current category list).
 **Single purpose description:**
 
 ```text
-Web Snap PDF saves the web page in the current tab, or a part of it that the user selects, as a file on the user's device: a PDF, or a PNG/JPEG image of a selected element (and, only if the user turns on the experimental option, a Markdown text file). All conversion happens locally with Chrome's own rendering engine.
+WebPage to PDF saves the web page in the current tab, or a part of it that the user selects, as a file on the user's device: a PDF, or a PNG/JPEG image of a selected element (and, only if the user turns on the experimental option, a Markdown text file). All conversion happens locally with Chrome's own rendering engine.
 ```
 
 **Permission justifications:**
@@ -70,7 +70,7 @@ Web Snap PDF saves the web page in the current tab, or a part of it that the use
 `debugger`
 
 ```text
-Chrome exposes its native PDF renderer and full-element screenshots to extensions only through the DevTools Protocol. When the user starts an export, the extension attaches to that one tab, calls Page.printToPDF (for PDFs) or Page.captureScreenshot with a clip (for the element preview overlay and PNG/JPEG export), plus Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride, Page.getLayoutMetrics and Runtime.evaluate (reading the viewport height only) to lay out and measure the page, and detaches as soon as the file is produced, including on errors. It does not read network traffic, cookies, storage or any other tab. Chrome shows its standard debugging bar during the export.
+Chrome exposes its native PDF renderer and full-element screenshots to extensions only through the DevTools Protocol. When the user starts an export, the extension attaches to that one tab, calls Page.printToPDF (for PDFs) and reads the result in chunks with IO.read and IO.close, or calls Page.captureScreenshot with a clip (for the element preview overlay and PNG/JPEG export), plus Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride, Page.getLayoutMetrics and Runtime.evaluate (reading the viewport height only) to lay out and measure the page, and detaches as soon as the file is produced, including on errors. It does not read network traffic, cookies, storage or any other tab. Chrome shows its standard debugging bar during the export.
 ```
 
 `activeTab`
@@ -91,10 +91,16 @@ Injects the extension's own packaged content script into the active tab when the
 Saves the generated PDF, PNG/JPEG image or Markdown file to the user's Downloads folder, or to the location the user picks when "Ask where to save" is enabled.
 ```
 
+`offscreen`
+
+```text
+Saves a generated PDF quickly. A Manifest V3 service worker cannot create a blob: URL, so while a PDF is being generated and saved the extension opens one hidden page of its own (reason BLOBS). That page turns the PDF the extension just printed into a local blob: URL, which chrome.downloads saves. This is much faster than passing a large PDF as a data: URL and uses far less memory. The page loads no web content, uses no other permission, and is closed as soon as the download has started.
+```
+
 `storage`
 
 ```text
-Stores the user's export settings (paper size, margins, theme, language and similar) and small interface preferences, and, only if a direct download fails, passes a generated PDF from the service worker to the extension's own download page in memory (session storage). No page content or browsing data is stored.
+Stores the user's export settings (paper size, margins, theme, language and similar) and small interface preferences. No page content or browsing data is stored.
 ```
 
 `contextMenus`
@@ -119,7 +125,7 @@ creditworthiness or lending).
 repository and paste the URL):
 
 ```text
-Web Snap PDF does not collect, transmit or sell any data. Web pages are converted to PDF, image or Markdown files locally in your browser using Chrome's built-in engine, and the files are saved only to your device. Your settings are stored with Chrome's extension storage (synced by Chrome if you use Chrome Sync). The extension makes no network requests and contains no analytics or remote code.
+WebPage to PDF does not collect, transmit or sell any data. Web pages are converted to PDF, image or Markdown files locally in your browser using Chrome's built-in engine, and the files are saved only to your device. Your settings are stored with Chrome's extension storage (synced by Chrome if you use Chrome Sync). The extension makes no network requests and contains no analytics or remote code.
 ```
 
 ## Graphic assets

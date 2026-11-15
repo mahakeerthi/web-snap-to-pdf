@@ -6,12 +6,20 @@
 <h1>BIG-MARK noise images</h1>
 <p>Each canvas holds incompressible noise so the PDF is several megabytes.</p>
 <script>
-  for (let i = 0; i < 3; i++) {
-    const c = document.createElement('canvas'); c.width = 1400; c.height = 1400;
+  // ?n=<canvas count>&s=<canvas side in px>. The noise comes from a seeded generator, so every
+  // load prints the same pixels. The defaults (3 canvases of 1400 px) are the large-PDF test's size;
+  // n=12&s=1400 prints about 70 MB (scripts/pdf-save-perf.mjs).
+  const q = new URLSearchParams(location.search);
+  const n = Number(q.get('n') || 3);
+  const s = Number(q.get('s') || 1400);
+  let seed = 12345;
+  const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 24);
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('canvas'); c.width = s; c.height = s;
     const ctx = c.getContext('2d');
-    const img = ctx.createImageData(1400, 1400);
+    const img = ctx.createImageData(s, s);
     const d = img.data;
-    for (let j = 0; j < d.length; j += 4) { d[j] = Math.random() * 255; d[j+1] = Math.random() * 255; d[j+2] = Math.random() * 255; d[j+3] = 255; }
+    for (let j = 0; j < d.length; j += 4) { d[j] = rnd(); d[j+1] = rnd(); d[j+2] = rnd(); d[j+3] = 255; }
     ctx.putImageData(img, 0, 0);
     document.body.appendChild(c);
   }

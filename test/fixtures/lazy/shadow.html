@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gallery in a shadow root on a div</title>
+<style>body { margin: 0; font-family: sans-serif; }</style>
+</head>
+<body>
+<p>Light DOM text only. The gallery lives in an open shadow root attached to a plain div.</p>
+<div id="host"></div>
+<script>
+  // n blocks of gap px, each with a blurred 32 x 20 preview that a debounced scroll handler (t ms)
+  // swaps for the 300 x 120 image once the block is in view. The previews and the handler's keys
+  // live in the shadow root and in JavaScript, so nothing in the light DOM marks the page as lazy.
+  // window.__filled() counts the swapped images.
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => Number(q.get(k) ?? d);
+  const N = num('n', 60);
+  const GAP = num('gap', 1500);
+  const T = num('t', 30);
+  const imageUrl = (i, w, h, label) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff'; ctx.font = (h / 5) + 'px sans-serif'; ctx.fillText(label + i, 4, h / 2);
+    return c.toDataURL('image/png');
+  };
+  const shadow = document.getElementById('host').attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = '.block{box-sizing:border-box;padding:16px;border-top:1px solid #ccc} img{display:block;width:300px;height:120px}';
+  shadow.appendChild(style);
+  const keys = [];
+  const imgs = [];
+  for (let i = 0; i < N; i++) {
+    const block = document.createElement('div'); block.className = 'block'; block.style.height = GAP + 'px';
+    const p = document.createElement('p'); p.textContent = `BLOCK-${i}-MARK`;
+    const img = document.createElement('img'); img.alt = '';
+    img.src = imageUrl(i, 32, 20, 'q');
+    keys.push(imageUrl(i, 300, 120, 'full '));
+    block.append(p, img); shadow.appendChild(block); imgs.push(img);
+  }
+  const done = new Set();
+  const fillVisible = () => imgs.forEach((el, i) => {
+    if (done.has(i)) return;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > 0 && r.top < innerHeight) { done.add(i); el.src = keys[i]; }
+  });
+  let t = null;
+  addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(fillVisible, T); });
+  fillVisible();
+  window.__total = N;
+  window.__filled = () => done.size;
+</script>
+</body>
+</html>

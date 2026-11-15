@@ -1,4 +1,4 @@
-/* Web Snap PDF popup. Tokens first; dark values apply for data-theme="dark" and for the
+/* WebPage to PDF popup. Tokens first; dark values apply for data-theme="dark" and for the
    system theme when the OS is dark (unless the user forced light). */
 :root {
   --bg: #ffffff;

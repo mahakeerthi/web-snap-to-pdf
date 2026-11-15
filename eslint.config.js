@@ -15,7 +15,7 @@ export default [
       eqeqeq: ['error', 'smart'],
     },
   },
-  // Extension pages (popup, options, viewer) and shared lib/ modules: ES modules in a window.
+  // Extension pages (popup, options) and shared lib/ modules: ES modules in a window.
   {
     files: ['extension/**/*.js'],
     ignores: ['extension/src/background.js', 'extension/src/content.js'],

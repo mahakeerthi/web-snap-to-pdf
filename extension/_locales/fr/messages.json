@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "Web Snap PDF",
+    "message": "WebPage to PDF",
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
@@ -8,16 +8,36 @@
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
-    "message": "Web Snap PDF - enregistrer cette page en PDF",
+    "message": "WebPage to PDF - enregistrer cette page en PDF",
     "description": "Toolbar button tooltip"
   },
   "cmdSavePdf": {
-    "message": "Enregistrer la page actuelle en PDF avec vos paramètres",
+    "message": "Afficher un aperçu de la page actuelle avant de l’enregistrer",
     "description": "Keyboard shortcut description"
   },
   "cmdSaveArticle": {
-    "message": "Enregistrer uniquement l’article principal de la page en PDF",
+    "message": "Afficher un aperçu de l’article principal seul avant de l’enregistrer",
     "description": "Keyboard shortcut description"
+  },
+  "menu_page": {
+    "message": "Aperçu de la page",
+    "description": "Right-click menu item"
+  },
+  "menu_article": {
+    "message": "Aperçu de l’article",
+    "description": "Right-click menu item"
+  },
+  "menu_selectElement": {
+    "message": "Choisir un élément à prévisualiser et à enregistrer",
+    "description": "Right-click menu item"
+  },
+  "menu_removeElements": {
+    "message": "Retirer des éléments avant l’enregistrement",
+    "description": "Right-click menu item"
+  },
+  "menu_reset": {
+    "message": "Rétablir tous les éléments retirés",
+    "description": "Right-click menu item"
   },
   "popup_pageTitleLoading": {
     "message": "Lecture de la page…",
@@ -332,11 +352,11 @@
     "description": "Help panel title"
   },
   "help_fullPage": {
-    "message": "Page entière enregistre tout le contenu de la page en PDF, avec des liens actifs.",
+    "message": "Page entière affiche un aperçu de toute la page. Choisissez PDF, PNG ou JPEG, puis téléchargez-la.",
     "description": "Help panel text"
   },
   "help_article": {
-    "message": "Article seul garde le texte et les images principaux, sans menus, barres latérales ni pubs.",
+    "message": "Article seul affiche un aperçu du texte et des images principaux, sans menus, barres latérales ni pubs.",
     "description": "Help panel text"
   },
   "help_select": {
@@ -382,6 +402,10 @@
   "status_pickerError": {
     "message": "Impossible de lancer le sélecteur.",
     "description": "Status line error"
+  },
+  "status_lazyIncomplete": {
+    "message": "Le défilement s’est arrêté avant la fin de la page : du contenu peut manquer vers la fin.",
+    "description": "Added after the saved status when the scroll that loads lazy content stopped before the end of the page, because the page kept growing or the scroll reached its time limit"
   },
   "paper_A0": {
     "message": "A0 (841 × 1189 mm)",
@@ -496,7 +520,7 @@
     "description": "Layout width option"
   },
   "options_pageTitle": {
-    "message": "Paramètres de Web Snap PDF",
+    "message": "Paramètres de WebPage to PDF",
     "description": "Options page document title and heading"
   },
   "options_intro": {
@@ -532,7 +556,7 @@
     "description": "Followed by an example file name"
   },
   "options_saveAs": {
-    "message": "Demander où enregistrer chaque PDF",
+    "message": "Demander où enregistrer chaque fichier",
     "description": "Checkbox"
   },
   "options_pageHandling": {
@@ -568,11 +592,11 @@
     "description": "Options section heading"
   },
   "options_aboutText": {
-    "message": "Web Snap PDF génère les pages avec le moteur d’impression intégré de Chrome, entièrement sur votre appareil. Rien n’est envoyé nulle part.",
+    "message": "WebPage to PDF génère les pages avec le moteur d’impression intégré de Chrome, entièrement sur votre appareil. Rien n’est envoyé nulle part.",
     "description": "About text"
   },
   "options_debuggerNote": {
-    "message": "Pendant la génération d’un PDF, Chrome affiche la barre « Web Snap PDF a commencé à déboguer ce navigateur ». C’est ainsi que Chrome ouvre son moteur PDF aux extensions ; elle disparaît dès que le PDF est prêt.",
+    "message": "Pendant la génération d’un PDF, Chrome affiche la barre « WebPage to PDF a commencé à déboguer ce navigateur ». C’est ainsi que Chrome ouvre son moteur PDF aux extensions ; elle disparaît dès que le PDF est prêt.",
     "description": "About text"
   },
   "options_reset": {
@@ -676,7 +700,7 @@
     "description": "In-page picker button"
   },
   "picker_savePdf": {
-    "message": "Enregistrer en PDF",
+    "message": "Aperçu",
     "description": "In-page picker button"
   },
   "picker_done": {
@@ -695,9 +719,17 @@
     "message": "Exporter cet élément",
     "description": "In-page preview modal title"
   },
+  "preview_titlePage": {
+    "message": "Exporter cette page",
+    "description": "In-page preview modal title for the whole page"
+  },
+  "preview_titleArticle": {
+    "message": "Exporter cet article",
+    "description": "In-page preview modal title for the article"
+  },
   "preview_format": {
     "message": "Format",
-    "description": "Format segmented control label"
+    "description": "Format dropdown label"
   },
   "preview_formatPdf": {
     "message": "PDF",
@@ -721,7 +753,7 @@
   },
   "preview_copyImage": {
     "message": "Copier l’image",
-    "description": "Preview modal button (PNG only)"
+    "description": "Preview modal button (PNG and JPEG)"
   },
   "preview_downloadAll": {
     "message": "Télécharger toutes les parties",
@@ -755,6 +787,10 @@
     "message": "Resélectionner",
     "description": "Preview modal button: go back to the picker"
   },
+  "preview_selectPart": {
+    "message": "Choisir une partie",
+    "description": "Page and article preview button: pick one element to export instead"
+  },
   "preview_close": {
     "message": "Fermer",
     "description": "Preview modal button"
@@ -775,8 +811,16 @@
     "message": "Aperçu de l’élément sélectionné",
     "description": "Alt text of the preview image"
   },
+  "preview_imageAltPage": {
+    "message": "Aperçu de la page",
+    "description": "Alt text of the page preview image"
+  },
+  "preview_imageAltArticle": {
+    "message": "Aperçu de l’article",
+    "description": "Alt text of the article preview image"
+  },
   "preview_errorCapture": {
-    "message": "Impossible de capturer cet élément.",
+    "message": "Impossible de créer l’aperçu.",
     "description": "Preview modal error"
   },
   "preview_errorCopy": {
@@ -784,16 +828,24 @@
     "description": "Preview modal error"
   },
   "preview_errorGeneric": {
-    "message": "Une erreur s’est produite. Réessayez ou resélectionnez l’élément.",
+    "message": "Une erreur s’est produite. Réessayez.",
     "description": "Preview modal fallback error"
+  },
+  "preview_errorInterrupted": {
+    "message": "La page a été fermée, rechargée ou interrompue avant la fin de l’exportation. Réessayez.",
+    "description": "Preview modal error: the page closed, reloaded or the extension restarted during the export"
   },
   "preview_caption": {
     "message": "$1 · $2×$3 px",
     "description": "Element preview: caption \"<element> · W×H px\""
   },
+  "preview_captionSize": {
+    "message": "$1×$2 px",
+    "description": "Page and article preview: caption \"W×H px\""
+  },
   "preview_warningScaled": {
-    "message": "Cet élément est très grand : l’image est réduite à $1× pour respecter la limite de 16 384 px de Chrome.",
-    "description": "Element preview: warning when the image scale was reduced to fit the 16384 px limit"
+    "message": "L’image est très grande : elle est réduite à $1× pour respecter la limite de 16 384 px de Chrome.",
+    "description": "Preview: warning when the image scale was reduced to fit the 16384 px limit"
   },
   "options_imageScale": {
     "message": "Résolution d’image (PNG / JPEG)",

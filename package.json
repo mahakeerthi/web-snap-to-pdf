@@ -18,6 +18,7 @@
     "test:content": "node test/content.e2e.mjs",
     "test:ui": "node scripts/screenshot-ui.mjs",
     "test:all": "npm test && npm run test:content && npm run test:ui",
+    "test:lazy": "node scripts/lazy-matrix.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

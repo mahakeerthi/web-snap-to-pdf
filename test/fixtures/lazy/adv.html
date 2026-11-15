@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Viewport-reactive galleries</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .block { box-sizing: border-box; padding: 16px; border-top: 1px solid #ccc; }
+  img.lz { display: block; width: 300px; height: 120px; background-color: #ccc; }
+  img.lz.m { width: 150px; height: 60px; }
+  .mob { display: none; }
+  #hero { background: #eee; }
+</style>
+<style id="mq"></style>
+</head>
+<body>
+<script>
+  // Galleries that react to the viewport: orientation media queries, re-render on resize,
+  // vh-sized blocks and a hero sized from innerHeight.
+  //   loader   io | lodash (leading + trailing throttle, t ms)    t (100)
+  //   n (60)   blocks, each with one 300 x 120 lazy image (no placeholder)
+  //   attr     the attribute holding the real URL (data-lazy, which the pre-pass does not rescue;
+  //            data-src is copied to src by rescueLazyAttributes on both builds)
+  //   gap      block height in px (1500), or vh: block height in vh units (overrides gap)
+  //   mode     none
+  //            mq      desktop images sit in .desk, hidden by @media screen and (orientation: portrait)
+  //                    (a "mobile layout" that only screen media sees; print shows the desktop one)
+  //            js      the gallery is rendered by JS for matchMedia('screen and (orientation: portrait)'):
+  //                    portrait gets a mobile gallery (150 x 60 images), landscape the desktop one;
+  //                    a change listener re-renders it, as a useMediaQuery() component would
+  //            reload  location.reload() 100 ms after a resize (pages that re-init on resize)
+  //            reset   the gallery is re-rendered from its data rd ms (100) after a resize (fills lost)
+  //   hero     px: a hero whose height is set from innerHeight (hero=1 means 1 x innerHeight),
+  //            re-read herodb ms after each resize (herodb -1: read once at load)
+  const q = new URLSearchParams(location.search);
+  const num = (k, d) => Number(q.get(k) ?? d);
+  const LOADER = q.get('loader') || 'io';
+  const T = num('t', 100);
+  const N = num('n', 60);
+  const GAP = num('gap', 1500);
+  const VH = q.has('vh') ? num('vh', 100) : null;
+  const MODE = q.get('mode') || 'none';
+  const HERO = num('hero', 0);
+  const HERODB = num('herodb', -1);
+  const ATTR = q.get('attr') === 'data-src' ? 'data-src' : 'data-lazy';
+  // mqs=plain spells the query (orientation: portrait), which print media also evaluates (portrait paper).
+  const MQ = q.get('mqs') === 'plain' ? '(orientation: portrait)' : 'screen and (orientation: portrait)';
+  window.__boots = Number(sessionStorage.getItem('boots:' + location.search) || 0) + 1;
+  sessionStorage.setItem('boots:' + location.search, String(window.__boots));
+  window.__events = [];
+  const imageUrl = (i, w, h, label) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = `hsl(${(i * 37) % 360} 70% 45%)`; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff'; ctx.font = (h / 5) + 'px sans-serif'; ctx.fillText(label + i, 4, h / 2);
+    return c.toDataURL('image/png');
+  };
+  const DESK = Array.from({ length: N }, (_, i) => imageUrl(i, 300, 120, 'desk '));
+  const MOB = Array.from({ length: N }, (_, i) => imageUrl(i, 150, 60, 'mob '));
+  const blockStyle = VH ? `height:${VH}vh` : `height:${GAP}px`;
+  if (MODE === 'mq') document.getElementById('mq').textContent =
+    `@media ${MQ} { .desk { display: none } .mob { display: block } }`;
+
+  const portrait = matchMedia(MQ);
+  const galleryHtml = (mobile) => {
+    let h = '';
+    for (let i = 0; i < N; i++) {
+      const img = (MODE === 'js' && mobile)
+        ? `<img class="lz m" ${ATTR}="${MOB[i]}" alt="">`
+        : MODE === 'mq'
+          ? `<div class="desk"><img class="lz" ${ATTR}="${DESK[i]}" alt=""></div><div class="mob"><img class="lz m" ${ATTR}="${MOB[i]}" alt=""></div>`
+          : `<img class="lz" ${ATTR}="${DESK[i]}" alt="">`;
+      h += `<div class="block" style="${blockStyle}"><p>BLOCK-${i}-MARK</p>${img}</div>`;
+    }
+    return h;
+  };
+  document.body.insertAdjacentHTML('beforeend',
+    (HERO ? `<div id="hero"><h1>HERO-MARK</h1></div>` : '') + '<main id="gallery"></main>');
+  const gallery = document.getElementById('gallery');
+  const hero = document.getElementById('hero');
+  const sizeHero = () => { if (hero) hero.style.height = Math.round(HERO * innerHeight) + 'px'; };
+  sizeHero();
+  if (hero && HERODB >= 0) {
+    let ht = null;
+    addEventListener('resize', () => { clearTimeout(ht); ht = setTimeout(sizeHero, HERODB); });
+  }
+
+  // Loader: every visible unfilled .lz gets its data-src. IO re-observes on every render.
+  let io = null;
+  const fill = (el) => { if (el.dataset.done) return; el.dataset.done = '1'; el.src = el.getAttribute(ATTR); };
+  const visibleEls = () => [...gallery.querySelectorAll('.lz:not([data-done])')].filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+  });
+  const check = () => visibleEls().forEach(fill);
+  if (LOADER === 'io') io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { fill(e.target); io.unobserve(e.target); } }));
+  else {
+    let last = 0, trailing = null;
+    addEventListener('scroll', () => {
+      const wait = T - (Date.now() - last);
+      if (wait <= 0) { last = Date.now(); check(); }
+      else if (!trailing) trailing = setTimeout(() => { trailing = null; last = Date.now(); check(); }, wait);
+    });
+  }
+  const render = (mobile) => {
+    gallery.innerHTML = galleryHtml(mobile);
+    if (io) gallery.querySelectorAll('.lz').forEach((el) => io.observe(el));
+    else check();
+    __events.push(`render ${mobile ? 'mobile' : 'desktop'} at ${innerWidth}x${innerHeight}`);
+  };
+  render(MODE === 'js' && portrait.matches);
+  // Re-render only when the value flips, as a useMediaQuery() hook's state update would.
+  let isPortrait = portrait.matches;
+  if (MODE === 'js') portrait.addEventListener('change', (e) => { if (e.matches !== isPortrait) render((isPortrait = e.matches)); });
+  if (MODE === 'reload' || MODE === 'reset') {
+    let rt = null;
+    addEventListener('resize', () => {
+      clearTimeout(rt);
+      rt = setTimeout(() => (MODE === 'reload' ? location.reload() : render(false)), num('rd', 100));
+    });
+  }
+  addEventListener('resize', () => __events.push(`resize ${innerWidth}x${innerHeight}`));
+
+  const desk = () => [...gallery.querySelectorAll('img.lz:not(.m)')];
+  window.__total = N;
+  window.__expected = N;
+  window.__filled = () => desk().filter((el) => el.dataset.done).length;
+</script>
+</body>
+</html>

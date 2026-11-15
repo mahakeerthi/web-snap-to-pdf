@@ -1,6 +1,7 @@
 // Validates extension/_locales/*/messages.json against the English reference:
 // valid JSON, identical key sets, every English $N placeholder kept, no empty or stray-$ messages,
-// and extDescription within the Chrome Web Store's 132-character limit. Exits 1 on any problem.
+// extDescription within the Chrome Web Store's 132-character limit, extName identical in every
+// locale (one untranslated brand), and no message still using the old name. Exits 1 on any problem.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,11 +64,18 @@ for (const code of codes) {
     }
     // Chrome i18n treats $ specially: only $N (or $$ for a literal dollar sign) is allowed.
     if (/\$(?!\d|\$)/.test(msg.replace(/\$\$/g, ''))) report(code, `${key} contains a stray "$"`);
+    if (/web\s*snap/i.test(msg)) report(code, `${key} still uses the old name "Web Snap"`);
     if (code !== REFERENCE && en[key]?.message) {
       const lost = placeholders(en[key].message).filter((p) => !placeholders(msg).includes(p));
       if (lost.length) report(code, `${key} is missing placeholder ${lost.join(', ')}`);
     }
   }
+
+  if (code !== REFERENCE && dict.extName?.message !== en.extName?.message)
+    report(
+      code,
+      `extName is "${dict.extName?.message}", the name stays "${en.extName?.message}" in every locale`,
+    );
 
   const desc = dict.extDescription?.message;
   if (typeof desc === 'string') {

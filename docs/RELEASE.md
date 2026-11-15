@@ -21,16 +21,22 @@ dot-separated integers, so there are no prerelease versions.
 - [ ] `npm run check:locales` reports all 8 locales in sync and every `extDescription` ≤ 132 chars.
 - [ ] Manual smoke test with the unpacked `extension/` folder in a normal Chrome profile
       (the tests use a copy with extra `host_permissions`; this checks real `activeTab` behaviour):
-  - [ ] Popup: Full page and Article only download directly; the cards have no extra buttons.
+  - [ ] Popup: Full page and Article only open the preview overlay; nothing downloads until Download.
   - [ ] Layout toggle and Export settings: the summary line follows every change; the panel's
         open/closed state survives reopening the popup.
-  - [ ] Select element → full-page preview overlay with the toolbar at the top: PDF, PNG and JPEG
-        download; Copy image (PNG and JPEG) pastes into another app; Reselect; light / dark toggle;
-        Close and Esc close it. A very tall element is split into numbered parts shown stacked:
-        each part's Copy and Download work, and the toolbar's Download saves all parts.
-  - [ ] Remove elements (Undo, Save PDF, Done) and Reset page in the popup.
-  - [ ] Context menu: all five entries, including from the toolbar icon's menu.
-  - [ ] `Alt+Shift+P` and `Alt+Shift+A`.
+  - [ ] Select element → full-page preview overlay with the toolbar at the top. The Format
+        dropdown picks PDF, PNG or JPEG, and Download saves that format; Copy image (PNG and JPEG)
+        pastes into another app; Reselect; light / dark toggle; Close and Esc close it. A very tall
+        element is split into numbered parts shown stacked: each part's Copy and Download work, and
+        the toolbar's Download saves all parts.
+  - [ ] Full page and Article only previews: the same Format dropdown and Download; Select part
+        narrows the preview to one element.
+  - [ ] Esc while a long page is still previewing restores the page and saves nothing.
+  - [ ] Remove elements (Undo, Preview, Done) and Reset page in the popup. The remove bar's Preview
+        button opens the preview.
+  - [ ] Context menu: all five entries, including from the toolbar icon's menu. Preview page and
+        Preview article open the preview.
+  - [ ] `Alt+Shift+P` and `Alt+Shift+A` open the page and article previews.
   - [ ] Theme button cycles System → Light → Dark; options page and preview overlay follow.
   - [ ] Language selector: switch to at least one non-Latin language (ja or hi) and back; picker
         bar and preview overlay are translated.
@@ -45,12 +51,12 @@ dot-separated integers, so there are no prerelease versions.
 
 ## 3. Package
 
-The release workflow runs `npm run package` and attaches `web-snap-pdf-<version>.zip` and its
+The release workflow runs `npm run package` and attaches `webpage-to-pdf-<version>.zip` and its
 `.sha256` to the GitHub release. To build the same ZIP locally:
 
 ```sh
 npm run package
-unzip -l dist/web-snap-pdf-*.zip | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
+unzip -l dist/webpage-to-pdf-*.zip | grep -E ' manifest\.json$'   # must print "manifest.json", not "extension/manifest.json"
 ```
 
 The ZIP holds the contents of `extension/` only, with `manifest.json` and `_locales/` at its root.
@@ -59,7 +65,7 @@ The ZIP holds the contents of `extension/` only, with `manifest.json` and `_loca
 
 Paste from [store/listing.md](store/listing.md):
 
-- **Name:** Web Snap PDF.
+- **Name:** WebPage to PDF.
 - **Summary:** comes from the manifest description (`extDescription` in
   `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
   the summary for other store languages automatically.
@@ -81,7 +87,7 @@ light theme unless stated. Plan:
 | #   | Shot                                                                    | How to produce                                                                                                                                                                                                                           |
 | --- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Popup over an article page: "Full page / Article only / Select element" | Open a demo article at 1280 × 800, render `popup.html` (as `scripts/screenshot-ui.mjs` does, 360 px wide, device scale 2 for sharpness) and composite it at the top right under a mock toolbar.                                          |
-| 2   | Element preview overlay with PDF / PNG / JPEG                           | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
+| 2   | Element preview overlay with the Format menu                            | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
 | 3   | Export settings expanded                                                | Composite `popup-expanded-light.png` (crop to the Paper → Content groups) next to a sample PDF page rendered from the demo article.                                                                                                      |
 | 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-overlay-dark.png` side by side on a dark background.                                                                                                                                |
 | 5   | Remove elements / options                                               | The remove-mode bar on the demo page with a removed banner, or `options-light.png` framed on the canvas with the language menu open.                                                                                                     |
@@ -101,14 +107,15 @@ image, or opt-in Markdown), converted locally.
 
 **Permission justifications** (full paste text in the listing file):
 
-| Permission     | Why                                                                                                                                                                                                                                                                                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `debugger`     | Only route to Chrome's `Page.printToPDF` and full-element `Page.captureScreenshot`. Attached to the one tab the user acted on, per export, detached in `finally`. Also uses `Emulation.setEmulatedMedia`, `Emulation.setDeviceMetricsOverride`, `Page.getLayoutMetrics` and `Runtime.evaluate` (viewport height only). Never reads network, cookies or other tabs. |
-| `activeTab`    | Temporary access to the tab where the user clicked the button, menu item or shortcut; replaces host permissions.                                                                                                                                                                                                                                                   |
-| `scripting`    | Injects the packaged content script: page preparation and restore, pickers, on-page preview overlay, opt-in Markdown conversion.                                                                                                                                                                                                                                   |
-| `downloads`    | Saves the PDF / PNG / JPEG / Markdown file, optionally with Save As.                                                                                                                                                                                                                                                                                               |
-| `storage`      | Settings (`sync`), small UI preferences (`local`), PDF hand-off to the download fallback page if a direct download fails (`session`).                                                                                                                                                                                                                              |
-| `contextMenus` | Five right-click entries.                                                                                                                                                                                                                                                                                                                                          |
+| Permission     | Why                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debugger`     | Only route to Chrome's `Page.printToPDF` and full-element `Page.captureScreenshot`. Attached to the one tab the user acted on, per export, detached in `finally`. Also uses `Emulation.setEmulatedMedia`, `Emulation.setDeviceMetricsOverride`, `Page.getLayoutMetrics` and `Runtime.evaluate` (viewport height only), and reads the printed PDF with `IO.read` / `IO.close`. Never reads network, cookies or other tabs. |
+| `activeTab`    | Temporary access to the tab where the user clicked the button, menu item or shortcut; replaces host permissions.                                                                                                                                                                                                                                                                                                          |
+| `scripting`    | Injects the packaged content script: page preparation and restore, pickers, on-page preview overlay, opt-in Markdown conversion.                                                                                                                                                                                                                                                                                          |
+| `downloads`    | Saves the PDF / PNG / JPEG / Markdown file, optionally with Save As.                                                                                                                                                                                                                                                                                                                                                      |
+| `offscreen`    | One hidden extension page while a PDF is generated and saved, reason `BLOBS`: turns the PDF `Blob` into a `blob:` URL for `chrome.downloads`. Closed once the download starts.                                                                                                                                                                                                                                            |
+| `storage`      | Settings (`sync`) and small UI preferences (`local`).                                                                                                                                                                                                                                                                                                                                                                     |
+| `contextMenus` | Five right-click entries.                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 **Host permissions:** none. **Remote code:** none. **Data usage:** nothing collected; certify the
 three statements. **Privacy policy:** optional; the one-paragraph text in the listing file avoids
@@ -122,8 +129,8 @@ downloads through `downloads`).
 
 ## 6. Branding
 
-- [ ] Name, icon, screenshots, promo tiles and description are Web Snap PDF's own. Do not reuse
-      another extension's name, logo, screenshots or listing text, and do not describe Web Snap PDF
+- [ ] Name, icon, screenshots, promo tiles and description are WebPage to PDF's own. Do not reuse
+      another extension's name, logo, screenshots or listing text, and do not describe WebPage to PDF
       as affiliated with another extension. The store can reject or remove a listing that copies
       another listing's branding.
 
@@ -171,11 +178,11 @@ on top of it, which changes only the version in `package.json`, `package-lock.js
 
 Uploading is always by hand, from the GitHub release.
 
-1. Download `web-snap-pdf-X.Y.Z.zip` from the release page.
+1. Download `webpage-to-pdf-X.Y.Z.zip` from the release page.
 2. Check that it is the file this repository built:
 
    ```sh
-   gh attestation verify web-snap-pdf-X.Y.Z.zip --repo mahakeerthi/web-snap-to-pdf \
+   gh attestation verify webpage-to-pdf-X.Y.Z.zip --repo mahakeerthi/web-snap-to-pdf \
      --signer-workflow mahakeerthi/web-snap-to-pdf/.github/workflows/release.yml \
      --source-ref refs/heads/main
    ```

@@ -1,6 +1,6 @@
 # Code of conduct
 
-Web Snap PDF follows the
+WebPage to PDF follows the
 [Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 It applies to everyone who takes part in the project's issues, pull requests, and reviews.
 
