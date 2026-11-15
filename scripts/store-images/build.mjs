@@ -55,6 +55,11 @@ function stageHtml(caption, body, extraCss = '') {
 
 const SHOTS = {};
 
+// A capture taken before the compositor has painted at the current size can repeat the top of the
+// page lower down (seen under load), so wait two frames first.
+const painted = (page) =>
+  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
 async function waitForPreview(page) {
   await page.waitForFunction(
     () => {
@@ -114,6 +119,7 @@ async function popupShot(context, sw, extensionId, fixturePage, { colorScheme, h
     }
     await popup.mouse.move(0, 0);
     await popup.waitForTimeout(350);
+    await painted(popup);
     return await popup.screenshot();
   } finally {
     await popup.close();
@@ -189,6 +195,7 @@ async function captureAll({ sw, context, extensionId, base }) {
 
     {
       const page = await openFixture(context, base, { height: AREA - TOOLBAR });
+      await painted(page);
       SHOTS.pageBackground = await page.screenshot();
       SHOTS.popupLight = await popupShot(context, sw, extensionId, page, { colorScheme: 'light' });
       await sw.evaluate(() => chrome.storage.local.set({ popupExportSettingsOpen: true }));
@@ -204,6 +211,7 @@ async function captureAll({ sw, context, extensionId, base }) {
       const page = await openFixture(context, base);
       await startPagePreview(sw, base, page);
       await drawFormatMenu(page);
+      await painted(page);
       SHOTS.previewMenu = await page.screenshot();
       await page.close();
     }
@@ -232,6 +240,7 @@ async function captureAll({ sw, context, extensionId, base }) {
       await page.mouse.move(point.x - 60, point.y - 20);
       await page.mouse.move(point.x, point.y, { steps: 6 });
       await page.waitForTimeout(500);
+      await painted(page);
       SHOTS.picker = await page.screenshot();
       await page.keyboard.press('Escape');
       await page.close();
@@ -241,6 +250,7 @@ async function captureAll({ sw, context, extensionId, base }) {
       await sw.evaluate(() => chrome.storage.sync.set({ settings: { theme: 'dark' } }));
       const page = await openFixture(context, base, { colorScheme: 'dark' });
       await startPagePreview(sw, base, page);
+      await painted(page);
       SHOTS.previewDark = await page.screenshot();
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => !document.querySelector('[data-websnap-ui="preview"]'));
@@ -441,6 +451,7 @@ async function compose(context) {
   const written = [];
   const save = async (name, width, height) => {
     await stage.evaluate(() => document.fonts.ready);
+    await painted(stage);
     const file = path.join(outDir, name);
     fs.writeFileSync(file, await stage.screenshot({ scale: 'css' }));
     const info = inspectPng(file);
@@ -486,6 +497,7 @@ async function compose(context) {
     const gridHeight = await stage.evaluate(() => document.body.scrollHeight);
     await stage.setViewportSize({ width: 2000, height: gridHeight });
     fs.mkdirSync(path.dirname(sheetFile), { recursive: true });
+    await painted(stage);
     fs.writeFileSync(sheetFile, await stage.screenshot({ scale: 'css' }));
     console.log(`  sheet ${sheetFile}`);
   }

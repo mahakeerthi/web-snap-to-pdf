@@ -49,6 +49,11 @@ try {
     return page;
   }
 
+  // A capture taken before the compositor has painted at the current size sometimes repeats the top
+  // of the page where the sticky footer or the lower half should be (seen under load).
+  const paintedFrame = (page) =>
+    page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
   async function shot(page, name, fullPage = true) {
     const file = path.join(outDir, `${name}.png`);
     if (fullPage) {
@@ -59,9 +64,11 @@ try {
         Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height)),
       );
       await page.setViewportSize({ width: size.width, height });
+      await paintedFrame(page);
       await page.screenshot({ path: file });
       await page.setViewportSize(size);
     } else {
+      await paintedFrame(page);
       await page.screenshot({ path: file });
     }
     shots.push(file);
