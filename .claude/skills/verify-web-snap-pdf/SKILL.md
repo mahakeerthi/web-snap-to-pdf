@@ -16,7 +16,7 @@ There is nothing to keep running. Each `doctor` and each journey calls `launchEx
 - serves `test/fixtures/` on `http://127.0.0.1:<random port>`,
 - copies `extension/` to a temp dir and adds a host permission for that origin only,
 - starts Chromium with a temp profile and a temp download dir, and hands downloads back to Chrome's own download delegate so the extension's filenames survive,
-- returns `{ context, sw, extensionId, base, downloadDir, close }`.
+- returns `{ context, sw, extensionId, base, downloadDir, userDataDir, close }`.
 
 Ready means the service worker answered and the fixture tab is printable, which is what `doctor` checks. One-time setup on a fresh checkout is `npm install` and `npx playwright install chromium`. PDF checks need poppler (`pdfinfo`, `pdftotext`; `brew install poppler`). Set `HEADED=1` to watch the browser (passed through to the harness; the helper has only been proven headless, so a headed run with the popup as a background tab is unverified).
 
@@ -87,7 +87,7 @@ Proof standards for anything you add:
 
 The journeys prove the user paths. The suites cover the edge cases, and run them for the code you touched:
 
-- `npm test`: PDF pipeline (paper size, margins, header and footer, single page, screen media, page ranges, article mode, remove and reset, element PDF, large downloads, restricted pages, extension pages load).
+- `npm test`: PDF pipeline (paper size, margins, header and footer, single page, screen media, page ranges, article mode, remove and reset, element PDF, the PDF save path, restricted pages, extension pages load).
 - `npm run test:content`: content script, prepare and restore, pickers, preview overlay for pages, articles and elements (Format dropdown, PDF, PNG, JPEG, split parts, copy, theme, cancel on Close or Esc, the busy overlay), Markdown converter. `ONLY='<name regex>'` runs a subset.
 - `npm run test:ui`: every extension page renders without errors in both themes.
 - `npm run check`: ESLint, Prettier, locale parity.

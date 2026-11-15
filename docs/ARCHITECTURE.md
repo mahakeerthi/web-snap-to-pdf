@@ -7,7 +7,8 @@ Extension pages and the service worker are ES modules; the content script is a c
 
 ### `src/background.js` (service worker, module)
 
-The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.contextMenus`.
+The only place that talks to `chrome.debugger`, `chrome.downloads`, `chrome.offscreen` and
+`chrome.contextMenus`.
 
 - `startPreview(tabId, kind)` opens the preview overlay for the whole page or the article. It sends
   `ps:set-target` to the content script, which opens the overlay in its loading state and then asks for
@@ -20,7 +21,8 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
   with defaults (or loads saved settings when none are passed), claims the tab (a second run on the
   same tab is rejected), checks the URL with `isPrintableUrl`, injects `src/content.js` if a `ps:ping`
   gets no answer, sends `ps:prepare`, attaches the debugger (protocol `1.3`), applies media / viewport
-  emulation, calls `Page.printToPDF`, then downloads the file. A `finally` block always clears
+  emulation, calls `Page.printToPDF` with `transferMode: 'ReturnAsStream'`, reads the PDF with `IO.read`
+  (4 MiB chunks, each base64 chunk decoded on its own) and `IO.close`, then saves the file. A `finally` block always clears
   emulation, detaches the debugger and sends `ps:restore`. Only the preview overlay's Download calls
   it (`ps:generate-from-content`). No product code sends `ps:generate` any more; tests call
   `__websnap.generate`.
@@ -56,13 +58,18 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
 - `exportMarkdown(tabId, prep)`: experimental Markdown export (see [Markdown converter](#markdown-converter)).
   Throws `error_markdownDisabled` unless `settings.markdownEnabled` is true, so no caller can bypass
   the opt-in.
-- Output: `download(base64, filename, saveAs, mime)` uses `chrome.downloads.download` with a
-  `data:<mime>;base64,…` URL (`conflictAction: 'uniquify'`, `saveAs` from settings for every
-  format). A file is saved only from the overlay's Download button or a popup Markdown card. Only if a
-  PDF download throws does the
-  worker store a job (in a `Map` and best-effort in `chrome.storage.session` under `job:<uuid>`,
-  expiring after 15 minutes) and open the fallback page `src/viewer/viewer.html?job=<uuid>` with
-  `autoDownload: true`. `output: 'return'` (test hook only) returns the data instead.
+- Output. A PDF is read into one `Blob` in the worker, then `savePdf` hands the `Blob` to the
+  offscreen page (`src/offscreen/`), which returns a `blob:chrome-extension://…` URL, and
+  `downloadUrl` passes it to `chrome.downloads.download` (`conflictAction: 'uniquify'`, `saveAs`
+  from settings for every format). A file is saved only from the overlay's Download button or a
+  popup Markdown card. An export that will save starts creating the offscreen document
+  as soon as the page is ready, so the creation overlaps the print, and the worker closes the
+  document when the last such export ends, after `download()` has settled or on failure. A download
+  that has started survives the close. A
+  failure to make the URL throws "Could not save the PDF.", and a rejected `download()` shows
+  Chrome's message. There is no second attempt and no fallback page. PNG, JPEG and Markdown use
+  `download(base64, filename, saveAs, mime)`, which sends a `data:<mime>;base64,…` URL to
+  `downloadUrl`. `output: 'return'` (test hook only) returns the PDF as base64 instead.
 - `uiStrings(settings)`: English fallbacks `PICKER_STRINGS_EN` merged with the user's language for
   every `picker_*` / `preview_*` key; sent to the content script, which has no access to the
   dictionaries itself.
@@ -180,7 +187,7 @@ Pure functions from settings to `Page.printToPDF` parameters.
 - `buildHeaderFooter` produces `headerTemplate` (title left, date right) and `footerTemplate` (URL
   left, `pageNumber / totalPages` right) using Chrome's template classes.
 - `buildPrintParams` raises top/bottom margins to ≥ 0.5 in when header/footer is on, and adds
-  `pageRanges` (whitespace removed) only in paged layout. Always `transferMode: 'ReturnAsBase64'`.
+  `pageRanges` (whitespace removed) only in paged layout. Always `transferMode: 'ReturnAsStream'`.
   The popup also uses it for the summary line, so the summary shows the effective margins.
 - `buildFilename(template, meta, ext = 'pdf')` substitutes `{title}`, `{domain}` (without `www.`),
   `{date}` (`YYYY-MM-DD`), `{time}` (`HH-MM`), then `sanitizeFilename` replaces
@@ -222,12 +229,14 @@ Page handling (`expandScroll`, `preferCssPageSize`), Keyboard shortcuts (link to
 confirmation box; turning it off needs no confirmation), About, "Reset all settings" (writes
 `DEFAULT_SETTINGS`). Follows `storage.onChanged` (ignoring its own echo).
 
-### `src/viewer/`
+### `src/offscreen/`
 
-Internal download fallback only (never opened by a user action): used when `chrome.downloads`
-rejects a PDF `data:` URL, e.g. for very large files. Titled "Your PDF is ready". Reads `?job=<id>`, fetches the job with `ps:get-job`, decodes base64 into a Blob URL, shows it in an
-`<iframe>` (Chrome's PDF viewer) and downloads it via `chrome.downloads.download` on click (or
-immediately if `autoDownload`). Sends `ps:discard-job` once loaded. Themed; not translated.
+One hidden page (`offscreen.html`, classic script `offscreen.js`, no imports), created with
+reason `BLOBS` and open only from when an export starts printing until its download has started. A service worker has no
+`URL.createObjectURL`, so the page answers `ps:blob-url` with one. It holds no state, applies no
+theme and uses no `chrome.*` API. The worker owns its lifetime (see `savePdf` and
+`closeOffscreen` in `background.js`). A document left open by a worker that died is reused by the
+next PDF save and closed after it.
 
 ## Preview and image capture
 
@@ -387,7 +396,7 @@ characters):
   `PICKER_STRINGS_EN` + translation) with `ps:start-picker`, `ps:set-target` and `ps:show-preview`.
   The page, article and element overlays use different title and image-label keys
   (`preview_title*`, `preview_imageAlt*`) and the caption `preview_captionSize`.
-- Not translated: the download fallback page, and error messages generated in the
+- Not translated: error messages generated in the
   background (except `error_markdownDisabled`, the preview strings and the page-gone error, which the
   worker sends as `preview_errorInterrupted`; the `DEBUGGER_CLOSED` text stays English).
 
@@ -425,8 +434,6 @@ start with `ps:`. Handlers reply asynchronously; on any thrown error the reply i
 | `ps:start-picker`                 | popup                                  | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                                                       | content script's reply `{ ok }`; `{ ok: false, error }` while an export holds the tab (context-menu failures are only logged)              |
 | `ps:page-state`                   | popup                                  | `tabId?`                                                                                                                                                                                                    | `{ ok, printable, busy, title, url, removed, hasPicked, pickerActive?, previewOpen? }` (last two only when the content script is present)  |
 | `ps:reset-page`                   | popup                                  | `tabId?`                                                                                                                                                                                                    | `{ ok }`                                                                                                                                   |
-| `ps:get-job`                      | viewer (download fallback)             | `id`                                                                                                                                                                                                        | `{ ok, job: { base64, filename, title, autoDownload, createdAt } }` or `{ ok: false, error }` if expired                                   |
-| `ps:discard-job`                  | viewer (download fallback)             | `id`                                                                                                                                                                                                        | `{ ok }`                                                                                                                                   |
 
 `ps:preview-element`, `ps:export-element` and `ps:generate-from-content` refuse a `prep` outside
 `'none'`, `'article'` and `'element'` with `{ ok: false, error: 'Unknown export target.' }`.
@@ -456,6 +463,18 @@ messaging.
 | `ps:to-markdown`   | content                                              | `prep: 'none' \| 'article' \| 'element'`                                                                                                                                                             | `{ ok, markdown, title }` or `{ ok: false, error }`                                                                                                                                                                                                             |
 | `ps:reset-page`    | content                                              | none                                                                                                                                                                                                 | `{ ok: true }` (stops picker, closes preview, runs `restore()`, un-hides all removals, clears the target and the shared lazy pass)                                                                                                                              |
 
+### To the offscreen document (`Client.postMessage`)
+
+The offscreen page is not reached by `chrome.runtime.sendMessage`, which carries only JSON. The
+worker finds its client with `clients.matchAll` and posts through a fresh `MessageChannel`, so a
+`Blob` travels by structured clone.
+
+| Type          | Sender         | Payload                                           | Reply (on the channel port)                                                                |
+| ------------- | -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `ps:blob-url` | service worker | `blob` (the PDF `Blob`), reply port in `ports[0]` | `{ ok: true, url }` (`url` is a `blob:chrome-extension://…` URL) or `{ ok: false, error }` |
+
+The worker waits up to 10 s for the reply and up to 2 s for the page to appear, then fails the save.
+
 `ps:stop-picker` no longer exists.
 
 ## Storage
@@ -465,7 +484,6 @@ messaging.
 | `chrome.storage.sync`                  | `settings`                | Settings object (schema below)                                             |
 | `chrome.storage.local`                 | `popupExportSettingsOpen` | Whether the popup's Export settings panel is open                          |
 | `chrome.storage.local`                 | `previewFormat`           | Last format used in the preview overlay (`pdf`, `png`, `jpeg`, `markdown`) |
-| `chrome.storage.session`               | `job:<uuid>`              | PDF for the download fallback page (15-minute TTL)                         |
 | page `localStorage` (extension origin) | `websnap-theme`           | Theme cache for flash-free startup                                         |
 
 ## Settings schema
@@ -493,7 +511,7 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
 | `headerFooter`                                   | boolean                                                              | `false`      | popup                       | Forces top/bottom margins ≥ 0.5 in                                 |
 | `hfTitle` / `hfUrl` / `hfDate` / `hfPageNumbers` | boolean                                                              | `true`       | popup                       |                                                                    |
 | `filenameTemplate`                               | string with `{title}` `{domain}` `{date}` `{time}`                   | `'{title}'`  | options                     | Also used for `.png`, `.jpg`, `.md`                                |
-| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format; also used by the fallback page's Download |
+| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format                                            |
 | `imageScale`                                     | number 1-3                                                           | `2`          | options                     | Output px per CSS px for PNG / JPEG export; clamped 1-3            |
 | `markdownEnabled`                                | boolean                                                              | `false`      | options (with confirmation) | Gates the popup row, the overlay format and the background handler |
 | `theme`                                          | `'system' \| 'light' \| 'dark'`                                      | `'system'`   | popup header, options       |                                                                    |
@@ -503,7 +521,9 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
 
 - `test/e2e.mjs` (`npm test`) — PDF pipeline through `Page.printToPDF` (paper sizes, single page,
   header/footer, screen view, ranges, article, pickers, preview-overlay PDF download, the page PDF
-  from the preview against a direct export, large downloads, restricted pages, extension pages load).
+  from the preview against a direct export, the PDF save path (stream read, byte-for-byte file
+  check, `atob` decoder, failures, overlapping and back-to-back saves, a leftover offscreen
+  document), restricted pages, extension pages load).
 - `test/content.e2e.mjs` (`npm run test:content`) — content-script checks against
   `test/fixtures/` (restore correctness, scroll containers, fixed elements, article detection with
   `data-expect="article"`, picker and shadow DOM), the document-relative clip probe, the preview
@@ -517,17 +537,26 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `launchExtension({ extDir, viewport, headless, deviceScaleFactor, recordVideoDir })` starts the
   fixture server (`/__hang` never answers) and Chromium with a temp copy of the extension and a temp
   download folder, and returns
-  `{ context, sw, extensionId, base, downloadDir, close }`; `tabIdForUrl(sw, url)` finds the tab a
+  `{ context, sw, extensionId, base, downloadDir, userDataDir, close }`; `tabIdForUrl(sw, url)` finds the tab a
   page was opened in; `waitForDownload(sw, pred, timeoutMs)` waits for a completed download
   (`test/e2e.mjs`); `createReporter()` returns `{ check, test, summary }` (`ONLY=<regex>` runs
   matching tests only).
+- `scripts/pdf-save-perf.mjs` — times the PDF save step (the worker's `generate` call to the
+  download's `complete`) for three extension folders (`--main`, `--base`, `--head`, each an
+  `extension/` folder from `git archive`). Runs only while the 1-minute load average is at most 8.
+  The rule for a change to the save path, against `main`: a 70 MB PDF (`big.html?n=12&s=1400`, 5
+  fresh-browser runs per side) must be at least 30 % faster, and a 10-page PDF (`typical.html`, 8
+  launches per side, each 1 untimed and 5 timed exports) must not be more than 10 % slower, judged
+  by the upper bound of a bootstrap 95 % interval on the ratio of launch medians. It also prints
+  phase times, peak memory, and whether the files are byte-identical after both PDF dates are
+  masked.
 - `scripts/verify-popup.mjs` — drives the real popup against a fixture tab, through the preview
   overlay for Full page and Article only, and checks the downloaded file (the `/verify-web-snap-pdf`
   skill).
 - `formal/page-restore/` — TLA+ model of the page-restore promise (`check.mjs`) and a regression
   replay of its fixed finding on the real extension (`replay-finding.mjs`); the
   `/verify-page-restore` skill.
-- `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup, options and viewer pages
+- `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup and options pages
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
   errors or missing translation keys. It also fails when the Save As label names a single format in
   any language, and, through `scripts/ui-checks/context-menu.mjs`, when the context-menu titles

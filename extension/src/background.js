@@ -1,8 +1,9 @@
 // Web Snap PDF - background service worker.
-// Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
-// viewer and the content script (plus context menus and keyboard shortcuts):
+// Runs the export pipelines on the active tab and routes the ps:* messages from the popup and the
+// content script (plus context menus and keyboard shortcuts):
 //   startPreview()    ps:set-target -> the content script opens the preview overlay
-//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download
+//   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> stream to a Blob ->
+//                     offscreen blob: URL -> download
 //   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot per part (preview, PNG, JPEG)
 //   exportMarkdown()  ps:to-markdown in the content script (no debugger)
 // Every page change made by ps:prepare is undone with ps:restore, whatever the outcome. A job that
@@ -15,8 +16,10 @@ import { getMessages, t } from './lib/i18n.js';
 
 const CDP_VERSION = '1.3'; // chrome.debugger protocol version
 const CONTENT_SCRIPT = 'src/content.js';
-const VIEWER_PAGE = 'src/viewer/viewer.html';
-const PREVIEW_TTL_MS = 15 * 60 * 1000;
+const OFFSCREEN_PAGE = 'src/offscreen/offscreen.html';
+const PDF_READ_BYTES = 4 << 20; // IO.read chunk size: it barely changes read time, and 4 MiB keeps each reply small
+const OFFSCREEN_CLIENT_WAIT_MS = 2000;
+const BLOB_URL_REPLY_WAIT_MS = 10000;
 
 // Largest bitmap edge Page.captureScreenshot renders correctly: past 16384 device pixels (the GPU
 // texture limit) the output wraps around and repeats the top of the capture.
@@ -35,7 +38,13 @@ const SEGMENT_PX = 1600;
 const EXPORT_PREPS = ['none', 'article', 'element'];
 // The job that holds each tab: one export, preview capture or Download at a time.
 const activeJobs = new Map(); // tabId -> { requestId, prep, preview, abort: AbortController }
-const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt } (viewer fallback)
+
+// The offscreen document holds the PDF's blob: URL while a save starts its download. An export that
+// will save opens it when it starts printing, so its creation overlaps the print. Chrome allows one
+// per extension, so overlapping exports share it and the last one to finish closes it.
+let savesPending = 0; // exports between "will save" and "download() settled"
+let offscreenReady = null; // single-flight createDocument, reset on error and on close
+let offscreenClosing = null; // in-flight closeDocument, awaited before a new document is created
 
 class UserError extends Error {}
 /** Thrown inside an export when its job's signal aborts. `reason` is the signal's abort reason. */
@@ -145,19 +154,24 @@ async function generate({ tabId, settings, prep = 'none', output, requestId }) {
   settings = normalizeSettings(settings || (await loadSettings()));
   const job = claimTab(tabId, 'A PDF is already being generated for this tab.', { requestId, prep });
   const { signal } = job.abort;
+  let holding = false;
   try {
     progress(tabId, 'prepare', 'Preparing page…');
     const tab = await readyTab(tabId);
+    if (output !== 'return') {
+      holdOffscreen();
+      holding = true;
+    }
     const prepMsg = { prep, loadLazy: settings.loadLazy, requestId, ...scanOptions(settings) };
-    const { data, title, printWarning, lazy } = await withPreparedPage(
+    const { pdf, title, printWarning, lazy } = await withPreparedPage(
       tabId,
       prepMsg,
       (prepResult) => {
         throwIfAborted(signal);
         return withDebugger(tabId, async (target) => {
           throwIfAborted(signal);
-          const { data, warning } = await printPage(target, tabId, settings);
-          return { data, printWarning: warning, title: pageTitle(prepResult, tab), lazy: prepResult.lazy };
+          const { pdf, warning } = await printPage(target, tabId, settings);
+          return { pdf, printWarning: warning, title: pageTitle(prepResult, tab), lazy: prepResult.lazy };
         });
       },
       signal,
@@ -167,21 +181,24 @@ async function generate({ tabId, settings, prep = 'none', output, requestId }) {
       lazy && !lazy.complete ? t(await getMessages(settings.language), 'status_lazyIncomplete') : null;
     const warning = [printWarning, lazyWarning].filter(Boolean).join(' ') || null;
     const filename = buildFilename(settings.filenameTemplate, { title, domain: hostnameOf(tab.url) });
-    if (output === 'return') return { ok: true, base64: data, filename, warning };
+    if (output === 'return') {
+      return { ok: true, base64: bytesToBase64(new Uint8Array(await pdf.arrayBuffer())), filename, warning };
+    }
 
     progress(tabId, 'save', 'Saving…');
-    await savePdf(data, filename, tab.title, settings.saveAs);
+    await savePdf(pdf, filename, settings.saveAs);
     succeeded(tabId);
-    return { ok: true, filename, bytes: base64ByteLength(data), warning };
+    return { ok: true, filename, bytes: pdf.size, warning };
   } catch (err) {
     return abortedOr(tabId, err);
   } finally {
+    if (holding) releaseOffscreen();
     activeJobs.delete(tabId);
     progress(tabId, 'done', '');
   }
 }
 
-/** Page.printToPDF with the settings' media and layout emulation; returns { data, warning }. */
+/** Page.printToPDF with the settings' media and layout emulation; returns { pdf: Blob, warning }. */
 async function printPage(target, tabId, settings) {
   const { params, paper, margins, scale } = buildPrintParams(settings);
   const single = settings.layout === 'single';
@@ -206,8 +223,9 @@ async function printPage(target, tabId, settings) {
       warning = fitSinglePage(params, await measureContentHeight(target, tabId), { paper, margins, scale });
     }
     progress(tabId, 'render', 'Rendering PDF…');
-    const { data } = await printToPdf(target, params);
-    return { data, warning };
+    const { stream } = await printToPdf(target, params);
+    if (!stream) throw new Error('Chrome did not return the PDF as a stream.');
+    return { pdf: await readPdf(target, stream), warning };
   } finally {
     while (cleanup.length)
       await cleanup
@@ -227,15 +245,9 @@ function fitSinglePage(params, contentHeightPx, { paper, margins, scale }) {
   return `The page is longer than PDF viewers allow for a single page (${MAX_PAGE_INCHES} in), so it was split into ${Math.ceil(heightIn / MAX_PAGE_INCHES)} tall pages.`;
 }
 
-/** Downloads the PDF; if the data: URL download throws, the viewer page downloads it instead. */
-async function savePdf(base64, filename, title, saveAs) {
-  try {
-    await download(base64, filename, saveAs);
-  } catch (err) {
-    // Fallback: let the viewer page create a Blob URL and download from there.
-    console.warn('Direct download failed, falling back to viewer', err);
-    await openFallbackDownload({ base64, filename, title, autoDownload: true });
-  }
+/** Saves the PDF through a blob: URL made by the offscreen document that generate holds open. */
+async function savePdf(pdf, filename, saveAs) {
+  return downloadUrl(await blobUrl(pdf), filename, saveAs);
 }
 
 // ---------------------------------------------------------------------------
@@ -550,10 +562,7 @@ async function exportMarkdown(tabId, prep = 'none', { output } = {}) {
 }
 
 function utf8ToBase64(text) {
-  const bytes = new TextEncoder().encode(text);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
+  return bytesToBase64(new TextEncoder().encode(text));
 }
 
 async function lastPreviewFormat() {
@@ -781,8 +790,11 @@ function pageTitle(result, tab) {
 // Output helpers
 // ---------------------------------------------------------------------------
 
-async function download(base64, filename, saveAs, mime = 'application/pdf') {
-  const url = `data:${mime};base64,` + base64;
+async function download(base64, filename, saveAs, mime) {
+  return downloadUrl(`data:${mime};base64,` + base64, filename, saveAs);
+}
+
+async function downloadUrl(url, filename, saveAs) {
   const id = await chrome.downloads.download({
     url,
     filename,
@@ -793,39 +805,123 @@ async function download(base64, filename, saveAs, mime = 'application/pdf') {
   return id;
 }
 
-// Hands a PDF to the viewer page, which downloads it from a Blob URL (fallback for downloads of
-// data: URLs that Chrome refuses, e.g. very large ones).
-async function openFallbackDownload(job) {
-  const id = crypto.randomUUID();
-  const record = { ...job, createdAt: Date.now() };
-  previewJobs.set(id, record);
-  // Best effort persistence in case the worker is shut down before the viewer asks for the job.
+/**
+ * Reads a printed PDF out of Chrome's stream in chunks and returns it as one Blob. Each chunk is
+ * decoded on its own: chunk sizes are uneven, so the base64 strings cannot be joined first.
+ */
+async function readPdf(target, handle) {
+  const parts = [];
   try {
-    await chrome.storage.session.set({ ['job:' + id]: record });
-  } catch (err) {
-    console.warn('session storage unavailable for preview job', err);
-  }
-  setTimeout(() => discardJob(id), PREVIEW_TTL_MS);
-  await chrome.tabs.create({ url: chrome.runtime.getURL(`${VIEWER_PAGE}?job=${id}`) });
-  return id;
-}
-
-async function takeJob(id) {
-  let job = previewJobs.get(id);
-  if (!job) {
-    try {
-      const stored = await chrome.storage.session.get('job:' + id);
-      job = stored['job:' + id];
-    } catch {
-      /* ignore */
+    for (;;) {
+      const chunk = await cdp(target, 'IO.read', { handle, size: PDF_READ_BYTES });
+      if (chunk.data) {
+        if (chunk.base64Encoded !== true) throw new Error('Unexpected text chunk in the PDF stream.');
+        parts.push(base64ToBytes(chunk.data));
+      }
+      if (chunk.eof) break;
     }
+  } finally {
+    await cdp(target, 'IO.close', { handle }).catch(() => {});
   }
-  return job || null;
+  return new Blob(parts, { type: 'application/pdf' });
 }
 
-function discardJob(id) {
-  previewJobs.delete(id);
-  chrome.storage.session.remove('job:' + id).catch(() => {});
+function base64ToBytes(base64) {
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(base64);
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// A service worker has no URL.createObjectURL, so a hidden extension page makes the blob: URL.
+// The page owns the URL until it closes. A download that has started survives that.
+async function blobUrl(blob) {
+  try {
+    await ensureOffscreen();
+    const reply = await askOffscreen(await offscreenClient(), { type: 'ps:blob-url', blob });
+    if (!reply || !reply.ok) throw new Error((reply && reply.error) || 'No blob: URL came back.');
+    return reply.url;
+  } catch (err) {
+    console.warn('Web Snap: could not make a blob: URL for the PDF', err);
+    throw new UserError('Could not save the PDF.');
+  }
+}
+
+// Assigns offscreenReady before its first await, so concurrent saves share one createDocument.
+function ensureOffscreen() {
+  offscreenReady ??= (async () => {
+    await offscreenClosing;
+    const open = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+    if (open.length) return;
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_PAGE,
+      reasons: ['BLOBS'],
+      justification: 'Turn a generated PDF into a blob: URL for chrome.downloads.',
+    });
+  })();
+  const ready = offscreenReady;
+  ready.catch(() => {
+    if (offscreenReady === ready) offscreenReady = null;
+  });
+  return ready;
+}
+
+/** createDocument resolves once the page has loaded, so the poll is a safety net. */
+async function offscreenClient() {
+  const url = chrome.runtime.getURL(OFFSCREEN_PAGE);
+  const deadline = Date.now() + OFFSCREEN_CLIENT_WAIT_MS;
+  for (;;) {
+    const found = (await clients.matchAll({ type: 'window', includeUncontrolled: true })).find(
+      (c) => c.url === url,
+    );
+    if (found) return found;
+    if (Date.now() >= deadline) throw new Error('The offscreen document did not show up.');
+    await sleep(10);
+  }
+}
+
+function askOffscreen(client, msg) {
+  return new Promise((resolve, reject) => {
+    const { port1, port2 } = new MessageChannel();
+    const timer = setTimeout(() => {
+      port1.close();
+      reject(new Error('The offscreen document did not answer.'));
+    }, BLOB_URL_REPLY_WAIT_MS);
+    port1.onmessage = (e) => {
+      clearTimeout(timer);
+      port1.close();
+      resolve(e.data);
+    };
+    client.postMessage(msg, [port2]);
+  });
+}
+
+// Starts the document's creation early. A failure is not final: blobUrl asks again when the save
+// needs the URL.
+function holdOffscreen() {
+  savesPending++;
+  ensureOffscreen().catch(() => {});
+}
+
+function releaseOffscreen() {
+  if (!--savesPending) closeOffscreen();
+}
+
+// Decides and starts the close in the same synchronous stretch as the savesPending check, so an
+// export that starts later sees offscreenClosing and waits for it.
+function closeOffscreen() {
+  offscreenReady = null;
+  offscreenClosing = chrome.offscreen
+    .closeDocument()
+    .catch(() => {})
+    .finally(() => (offscreenClosing = null));
 }
 
 // ---------------------------------------------------------------------------
@@ -1081,14 +1177,6 @@ async function handleMessage(msg, sender) {
       if (await ping(tabId)) await sendContent(tabId, { type: 'ps:reset-page' });
       return { ok: true };
     }
-    case 'ps:get-job': {
-      const job = await takeJob(msg.id);
-      if (!job) return { ok: false, error: 'This preview has expired. Generate the PDF again.' };
-      return { ok: true, job };
-    }
-    case 'ps:discard-job':
-      discardJob(msg.id);
-      return { ok: true };
     default:
       throw new UserError('Unknown message: ' + msg.type);
   }

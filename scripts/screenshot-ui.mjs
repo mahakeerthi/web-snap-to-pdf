@@ -1,4 +1,4 @@
-// Visual QA: renders the popup, options and viewer pages of the unpacked extension in light and
+// Visual QA: renders the popup and options pages of the unpacked extension in light and
 // dark mode (plus the popup's dynamic states) and saves PNG screenshots to test/out/ui/.
 // Fails (exit code 1) on any uncaught page error or console error.
 // Run with: node scripts/screenshot-ui.mjs
@@ -95,26 +95,6 @@ try {
       };
     },
   };
-
-  const pdfPath = path.join(root, 'test/out/a4-default.pdf');
-  const viewerStub = fs.existsSync(pdfPath)
-    ? {
-        fn: (base64) => {
-          if (window !== window.top || !globalThis.chrome?.runtime?.sendMessage) return;
-          const realSend = chrome.runtime.sendMessage.bind(chrome.runtime);
-          chrome.runtime.sendMessage = async (msg, ...rest) => {
-            if (msg && msg.type === 'ps:get-job')
-              return {
-                ok: true,
-                job: { base64, filename: 'Example article – example.com.pdf', autoDownload: false },
-              };
-            if (msg && msg.type === 'ps:discard-job') return { ok: true };
-            return realSend(msg, ...rest);
-          };
-        },
-        arg: fs.readFileSync(pdfPath).toString('base64'),
-      }
-    : null;
 
   // Static i18n check: every key referenced by the popup/options markup or code must exist in the
   // English dictionary, otherwise users would see the HTML fallback or the raw key.
@@ -602,36 +582,6 @@ try {
       await page.selectOption('#theme', 'system');
       await page.close();
       await sw.evaluate(() => Promise.all([chrome.storage.sync.clear(), chrome.storage.local.clear()]));
-    }
-
-    // --- viewer ----------------------------------------------------------------------------
-    {
-      const page = await openPage(`${base}/viewer/viewer.html`, {
-        width: 1100,
-        height: 700,
-        colorScheme,
-        label: `viewer-error${sfx}`,
-      });
-      if (/preview/i.test(await page.evaluate(() => `${document.title} ${document.body.innerText}`)))
-        problems.push(`[viewer-error${sfx}] viewer text mentions "preview"`);
-      await shot(page, `viewer-error${sfx}`, false);
-      await page.close();
-    }
-    if (viewerStub) {
-      const page = await openPage(`${base}/viewer/viewer.html?job=demo`, {
-        width: 1100,
-        height: 700,
-        colorScheme,
-        label: `viewer${sfx}`,
-        init: viewerStub,
-      });
-      await page.waitForFunction(() => !document.getElementById('btn-download').disabled);
-      if (/preview/i.test(await page.evaluate(() => `${document.title} ${document.body.innerText}`)))
-        problems.push(`[viewer${sfx}] viewer text mentions "preview"`);
-      await shot(page, `viewer${sfx}`, false);
-      await page.setViewportSize({ width: 420, height: 500 });
-      await shot(page, `viewer-narrow${sfx}`, false);
-      await page.close();
     }
   }
 

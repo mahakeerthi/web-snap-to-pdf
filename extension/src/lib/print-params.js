@@ -95,7 +95,7 @@ export function buildPrintParams(settings) {
     printBackground: !!settings.printBackground,
     preferCSSPageSize: !!settings.preferCssPageSize,
     generateDocumentOutline: !!settings.outline,
-    transferMode: 'ReturnAsBase64',
+    transferMode: 'ReturnAsStream',
     ...buildHeaderFooter(settings),
   };
   const ranges = String(settings.pageRanges || '').replace(/\s+/g, '');
