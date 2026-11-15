@@ -17,7 +17,8 @@
 //   fail when the lower bound is > 1.10, otherwise inconclusive. `--append <results.json>` adds
 //   launches to an earlier run.
 // A run only starts when the 1-minute load average is at most --max-load. Otherwise the probe
-// waits and retries up to 3 times, then reports the slot as not run, which is never a pass.
+// waits --wait seconds and retries up to --retries times (default 3), then reports the slot as not
+// run, which is never a pass.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,6 +38,7 @@ const { values: args } = parseArgs({
     lazy: { type: 'boolean', default: false },
     'max-load': { type: 'string', default: '8' },
     wait: { type: 'string', default: '45' },
+    retries: { type: 'string', default: '3' },
     'expect-pages': { type: 'string' },
     out: { type: 'string' },
     append: { type: 'string' },
@@ -205,11 +207,11 @@ const discards = Object.fromEntries(sides.map(([s]) => [s, 0]));
 const notRun = Object.fromEntries(sides.map(([s]) => [s, 0]));
 
 async function waitForLoad(side) {
-  for (let attempt = 0; attempt <= 3; attempt++) {
+  for (let attempt = 0; attempt <= Number(args.retries); attempt++) {
     const load = os.loadavg()[0];
     if (load <= maxLoad) return load;
     discards[side]++;
-    if (attempt < 3) await new Promise((r) => setTimeout(r, Number(args.wait) * 1000));
+    if (attempt < Number(args.retries)) await new Promise((r) => setTimeout(r, Number(args.wait) * 1000));
   }
   return null;
 }
@@ -242,8 +244,10 @@ async function runLaunch(side, extDir, launchNo) {
       if (timed && !stopSampler) stopSampler = startSampler(userDataDir);
       const template = `perf-${side}-${launchNo}-${k}`;
       const x = await sw.evaluate(timedExport, { tabId, template, settings: settingsOver });
-      let ok =
-        x.state === 'complete' && fs.existsSync(x.filename) && fs.statSync(x.filename).size === x.res.bytes;
+      // main and base report bytes as 3/4 of the base64 length, which counts up to 2 padding bytes.
+      const slack = side === 'head' ? 0 : 2;
+      const over = fs.existsSync(x.filename) ? x.res.bytes - fs.statSync(x.filename).size : NaN;
+      let ok = x.state === 'complete' && over >= 0 && over <= slack;
       let pages = 0;
       if (ok) {
         pages = pdfPages(x.filename);
