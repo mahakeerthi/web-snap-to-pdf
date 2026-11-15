@@ -2945,7 +2945,16 @@ async function restoredWithin(page, tabId, before, limit = 1000, { overlay = fal
 const noNewPassScroll = async (page, escAt) => {
   const { sc } = await scrollLog(page);
   const late = sc.filter((e) => e.t > escAt + 100);
-  return { ok: late.length <= 1 && late.every((e) => e.y === 0), late: late.length, total: sc.length };
+  // One step may be in flight when Esc lands; the pass must not run on to the end of the page.
+  const before = sc.filter((e) => e.t <= escAt);
+  const yAtEsc = before.length ? before[before.length - 1].y : 0;
+  const furthest = Math.max(0, ...sc.filter((e) => e.t > escAt).map((e) => e.y));
+  return {
+    ok: late.length <= 1 && late.every((e) => e.y === 0) && furthest <= yAtEsc + 1500,
+    late: late.length,
+    total: sc.length,
+  };
+};
 };
 
 await test('preview: Esc while loading cancels the capture and restores the page', async () => {
