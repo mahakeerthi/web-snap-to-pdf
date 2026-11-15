@@ -2292,6 +2292,7 @@ await test('preview: Full page card opens the preview overlay', async () => {
   await waitForOverlay(page);
   const info = await waitForPreview(page);
   check(info.title === 'Export this page' && info.ready, `overlay "Export this page" ready (${info.title})`);
+  await page.screenshot({ path: path.join(outDir, 'preview-page.png') });
   check(/^\d+×\d+ px$/.test(info.caption), `caption is a size with no selector (${info.caption})`);
   check(
     await waitFor(() => popup.evaluate(() => window.__closed >= 1), { label: 'popup.close()' }),
@@ -2316,6 +2317,7 @@ await test('preview: Article card opens the preview overlay', async () => {
   const story = await rectOf(page, '#story');
   const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   check(info.title === 'Export this article', `title (${info.title})`);
+  await page.screenshot({ path: path.join(outDir, 'preview-article.png') });
   check(/^\d+×\d+ px$/.test(info.caption), `caption is a size with no selector (${info.caption})`);
   check(
     info.canvases.every((c) => c.cssWidth === Math.round(story.width) + 'px') &&
@@ -2391,6 +2393,7 @@ await test('preview: the format dropdown changes what Download saves', async () 
     `options PDF, PNG, JPEG, PDF selected (${info.formats})`,
   );
   await chooseFormat(page, 'png');
+  await page.screenshot({ path: path.join(outDir, 'preview-page-png-selected.png') });
   const parts = Math.ceil(height / 1600);
   const t0 = new Date().toISOString();
   await clickPreview(page, '.download');
@@ -3210,6 +3213,7 @@ await test('preview: the overlay is busy during any pass', async () => {
       };
     });
   const mid = await states();
+  await page.screenshot({ path: path.join(outDir, 'preview-busy-during-pass.png') });
   check(
     mid.download[0] &&
       mid.reselect[0] &&
