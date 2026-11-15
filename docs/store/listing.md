@@ -70,7 +70,7 @@ Web Snap PDF saves the web page in the current tab, or a part of it that the use
 `debugger`
 
 ```text
-Chrome exposes its native PDF renderer and full-element screenshots to extensions only through the DevTools Protocol. When the user starts an export, the extension attaches to that one tab, calls Page.printToPDF (for PDFs) or Page.captureScreenshot with a clip (for the element preview overlay and PNG/JPEG export), plus Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride, Page.getLayoutMetrics and Runtime.evaluate (reading the viewport height only) to lay out and measure the page, and detaches as soon as the file is produced, including on errors. It does not read network traffic, cookies, storage or any other tab. Chrome shows its standard debugging bar during the export.
+Chrome exposes its native PDF renderer and full-element screenshots to extensions only through the DevTools Protocol. When the user starts an export, the extension attaches to that one tab, calls Page.printToPDF (for PDFs) and reads the result in chunks with IO.read and IO.close, or calls Page.captureScreenshot with a clip (for the element preview overlay and PNG/JPEG export), plus Emulation.setEmulatedMedia, Emulation.setDeviceMetricsOverride, Page.getLayoutMetrics and Runtime.evaluate (reading the viewport height only) to lay out and measure the page, and detaches as soon as the file is produced, including on errors. It does not read network traffic, cookies, storage or any other tab. Chrome shows its standard debugging bar during the export.
 ```
 
 `activeTab`
@@ -91,10 +91,16 @@ Injects the extension's own packaged content script into the active tab when the
 Saves the generated PDF, PNG/JPEG image or Markdown file to the user's Downloads folder, or to the location the user picks when "Ask where to save" is enabled.
 ```
 
+`offscreen`
+
+```text
+Saves a generated PDF quickly. A Manifest V3 service worker cannot create a blob: URL, so while a PDF is being saved the extension opens one hidden page of its own (reason BLOBS). That page turns the PDF the extension just printed into a local blob: URL, which chrome.downloads saves. This takes about half the time of passing a large PDF as a data: URL and uses far less memory. The page loads no web content, uses no other permission, and is closed as soon as the download has started.
+```
+
 `storage`
 
 ```text
-Stores the user's export settings (paper size, margins, theme, language and similar) and small interface preferences, and, only if a direct download fails, passes a generated PDF from the service worker to the extension's own download page in memory (session storage). No page content or browsing data is stored.
+Stores the user's export settings (paper size, margins, theme, language and similar) and small interface preferences. No page content or browsing data is stored.
 ```
 
 `contextMenus`

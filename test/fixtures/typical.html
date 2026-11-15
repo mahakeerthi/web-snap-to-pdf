@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Typical Fixture</title>
+<style>body{font-family:Georgia,serif;max-width:760px;margin:0 auto;padding:16px;line-height:1.5} canvas{display:block;width:600px;height:300px;margin:12px 0} table{border-collapse:collapse} td{border:1px solid #999;padding:4px 8px}</style></head>
+<body><script>
+let seed = 7; const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+const words = 'the page print export chrome engine layout margin paper header footer article image text reader browser saved file document section figure table value result method sample'.split(' ');
+const para = (n) => Array.from({ length: n }, () => words[Math.floor(rnd() * words.length)]).join(' ') + '.';
+const P = Number(new URLSearchParams(location.search).get('p') || 46);
+for (let i = 0; i < P; i++) {
+  if (i % 5 === 0) { const h = document.createElement('h2'); h.textContent = 'Section ' + (i / 5 + 1); document.body.appendChild(h); }
+  const p = document.createElement('p'); p.textContent = para(110); document.body.appendChild(p);
+  if (i === 8 || i === 22 || i === 36) { const c = document.createElement('canvas'); c.width = 600; c.height = 300; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 600, 300); gr.addColorStop(0, '#36c'); gr.addColorStop(1, '#fc3'); g.fillStyle = gr; g.fillRect(0, 0, 600, 300); document.body.appendChild(c); }
+  if (i === 15) { const t = document.createElement('table'); for (let r = 0; r < 8; r++) { const tr = t.insertRow(); for (let k = 0; k < 4; k++) tr.insertCell().textContent = para(2); } document.body.appendChild(t); }
+}
+</script></body></html>

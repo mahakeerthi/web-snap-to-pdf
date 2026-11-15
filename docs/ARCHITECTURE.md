@@ -7,14 +7,16 @@ Extension pages and the service worker are ES modules; the content script is a c
 
 ### `src/background.js` (service worker, module)
 
-The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.contextMenus`.
+The only place that talks to `chrome.debugger`, `chrome.downloads`, `chrome.offscreen` and
+`chrome.contextMenus`.
 
 - `generate({ tabId, settings, prep, output })` is the PDF pipeline. It merges `settings` with
   defaults (or loads saved settings when none are passed), rejects a second run on the same tab,
   checks the URL with `isPrintableUrl`, injects `src/content.js` if a `ps:ping` gets no answer, sends
   `ps:prepare`, attaches the debugger (protocol `1.3`), applies media / viewport emulation, calls
-  `Page.printToPDF`, then downloads the file. A `finally` block always clears
-  emulation, detaches the debugger and sends `ps:restore`.
+  `Page.printToPDF` with `transferMode: 'ReturnAsStream'`, reads the PDF with `IO.read`
+  (4 MiB chunks, each base64 chunk decoded on its own) and `IO.close`, then saves the file. A
+  `finally` block always clears emulation, detaches the debugger and sends `ps:restore`.
 - Single-page mode: emulate print media, set a device-metrics override at the computed layout
   width, wait 200 ms, measure the height via `Page.getLayoutMetrics` (`cssContentSize`, falling back
   to the content script's `ps:measure`), then set the paper height to
@@ -27,12 +29,15 @@ The only place that talks to `chrome.debugger`, `chrome.downloads` and `chrome.c
 - `exportMarkdown(tabId, prep)`: experimental Markdown export (see [Markdown converter](#markdown-converter)).
   Throws `error_markdownDisabled` unless `settings.markdownEnabled` is true, so no caller can bypass
   the opt-in.
-- Output: `download(base64, filename, saveAs, mime)` uses `chrome.downloads.download` with a
-  `data:<mime>;base64,…` URL (`conflictAction: 'uniquify'`, `saveAs` from settings for every
-  format). Every export downloads. Only if a PDF download throws does the
-  worker store a job (in a `Map` and best-effort in `chrome.storage.session` under `job:<uuid>`,
-  expiring after 15 minutes) and open the fallback page `src/viewer/viewer.html?job=<uuid>` with
-  `autoDownload: true`. `output: 'return'` (test hook only) returns the data instead.
+- Output. A PDF is read into one `Blob` in the worker, then `savePdf` hands the `Blob` to the
+  offscreen page (`src/offscreen/`), which returns a `blob:chrome-extension://…` URL, and
+  `downloadUrl` passes it to `chrome.downloads.download` (`conflictAction: 'uniquify'`, `saveAs`
+  from settings for every format). The worker closes the offscreen document once `download()` has
+  settled for every save that is using it. A download that has started survives the close. A
+  failure to make the URL throws "Could not save the PDF.", and a rejected `download()` shows
+  Chrome's message. There is no second attempt and no fallback page. PNG, JPEG and Markdown use
+  `download(base64, filename, saveAs, mime)`, which sends a `data:<mime>;base64,…` URL to
+  `downloadUrl`. `output: 'return'` (test hook only) returns the PDF as base64 instead.
 - `uiStrings(settings)`: English fallbacks `PICKER_STRINGS_EN` merged with the user's language for
   every `picker_*` / `preview_*` key; sent to the content script, which has no access to the
   dictionaries itself.
@@ -122,7 +127,7 @@ Pure functions from settings to `Page.printToPDF` parameters.
 - `buildHeaderFooter` produces `headerTemplate` (title left, date right) and `footerTemplate` (URL
   left, `pageNumber / totalPages` right) using Chrome's template classes.
 - `buildPrintParams` raises top/bottom margins to ≥ 0.5 in when header/footer is on, and adds
-  `pageRanges` (whitespace removed) only in paged layout. Always `transferMode: 'ReturnAsBase64'`.
+  `pageRanges` (whitespace removed) only in paged layout. Always `transferMode: 'ReturnAsStream'`.
   The popup also uses it for the summary line, so the summary shows the effective margins.
 - `buildFilename(template, meta, ext = 'pdf')` substitutes `{title}`, `{domain}` (without `www.`),
   `{date}` (`YYYY-MM-DD`), `{time}` (`HH-MM`), then `sanitizeFilename` replaces
@@ -161,12 +166,14 @@ Page handling (`expandScroll`, `preferCssPageSize`), Keyboard shortcuts (link to
 confirmation box; turning it off needs no confirmation), About, "Reset all settings" (writes
 `DEFAULT_SETTINGS`). Follows `storage.onChanged` (ignoring its own echo).
 
-### `src/viewer/`
+### `src/offscreen/`
 
-Internal download fallback only (never opened by a user action): used when `chrome.downloads`
-rejects a PDF `data:` URL, e.g. for very large files. Titled "Your PDF is ready". Reads `?job=<id>`, fetches the job with `ps:get-job`, decodes base64 into a Blob URL, shows it in an
-`<iframe>` (Chrome's PDF viewer) and downloads it via `chrome.downloads.download` on click (or
-immediately if `autoDownload`). Sends `ps:discard-job` once loaded. Themed; not translated.
+One hidden page (`offscreen.html`, classic script `offscreen.js`, no imports), created with
+reason `BLOBS` and open only while a PDF is saved. A service worker has no
+`URL.createObjectURL`, so the page answers `ps:blob-url` with one. It holds no state, applies no
+theme and uses no `chrome.*` API. The worker owns its lifetime (see `savePdf` and
+`closeOffscreen` in `background.js`). A document left open by a worker that died is reused by the
+next PDF save and closed after it.
 
 ## Preview and image capture
 
@@ -265,7 +272,7 @@ characters):
   substitutes `$1…$n`.
 - **Content script**: the background sends the `picker_*` / `preview_*` strings (English fallback
   `PICKER_STRINGS_EN` + translation) with `ps:start-picker` and `ps:show-preview`.
-- Not translated: the download fallback page, and error messages generated in the
+- Not translated: error messages generated in the
   background (except `error_markdownDisabled` and the preview strings).
 
 Supported: `en`, `es`, `de`, `fr`, `pt_BR`, `hi`, `ja`, `zh_CN` (`SUPPORTED_LANGUAGES`).
@@ -301,8 +308,6 @@ start with `ps:`. Handlers reply asynchronously; on any thrown error the reply i
 | `ps:start-picker`                 | popup                                  | `tabId?`, `mode: 'print' \| 'remove'`                                                                                                                                                         | content script's reply `{ ok }`; `{ ok: false, error }` while an export holds the tab (context-menu failures are only logged)             |
 | `ps:page-state`                   | popup                                  | `tabId?`                                                                                                                                                                                      | `{ ok, printable, busy, title, url, removed, hasPicked, pickerActive?, previewOpen? }` (last two only when the content script is present) |
 | `ps:reset-page`                   | popup                                  | `tabId?`                                                                                                                                                                                      | `{ ok }`                                                                                                                                  |
-| `ps:get-job`                      | viewer (download fallback)             | `id`                                                                                                                                                                                          | `{ ok, job: { base64, filename, title, autoDownload, createdAt } }` or `{ ok: false, error }` if expired                                  |
-| `ps:discard-job`                  | viewer (download fallback)             | `id`                                                                                                                                                                                          | `{ ok }`                                                                                                                                  |
 
 Context-menu clicks and keyboard commands call `generate` / `startPicker` / the `ps:reset-page`
 handler directly inside the worker, without messaging.
@@ -323,6 +328,18 @@ handler directly inside the worker, without messaging.
 | `ps:to-markdown`  | content                                              | `prep: 'none' \| 'article' \| 'element'`                                                                     | `{ ok, markdown, title }` or `{ ok: false, error }`                                                                                           |
 | `ps:reset-page`   | content                                              | none                                                                                                         | `{ ok: true }` (stops picker, closes preview, runs `restore()`, un-hides all removals, clears the picked element)                             |
 
+### To the offscreen document (`Client.postMessage`)
+
+The offscreen page is not reached by `chrome.runtime.sendMessage`, which carries only JSON. The
+worker finds its client with `clients.matchAll` and posts through a fresh `MessageChannel`, so a
+`Blob` travels by structured clone.
+
+| Type          | Sender         | Payload                                           | Reply (on the channel port)                                                                |
+| ------------- | -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `ps:blob-url` | service worker | `blob` (the PDF `Blob`), reply port in `ports[0]` | `{ ok: true, url }` (`url` is a `blob:chrome-extension://…` URL) or `{ ok: false, error }` |
+
+The worker waits up to 10 s for the reply and up to 2 s for the page to appear, then fails the save.
+
 `ps:stop-picker` no longer exists.
 
 ## Storage
@@ -332,7 +349,6 @@ handler directly inside the worker, without messaging.
 | `chrome.storage.sync`                  | `settings`                | Settings object (schema below)                                             |
 | `chrome.storage.local`                 | `popupExportSettingsOpen` | Whether the popup's Export settings panel is open                          |
 | `chrome.storage.local`                 | `previewFormat`           | Last format used in the preview overlay (`pdf`, `png`, `jpeg`, `markdown`) |
-| `chrome.storage.session`               | `job:<uuid>`              | PDF for the download fallback page (15-minute TTL)                         |
 | page `localStorage` (extension origin) | `websnap-theme`           | Theme cache for flash-free startup                                         |
 
 ## Settings schema
@@ -360,7 +376,7 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
 | `headerFooter`                                   | boolean                                                              | `false`      | popup                       | Forces top/bottom margins ≥ 0.5 in                                 |
 | `hfTitle` / `hfUrl` / `hfDate` / `hfPageNumbers` | boolean                                                              | `true`       | popup                       |                                                                    |
 | `filenameTemplate`                               | string with `{title}` `{domain}` `{date}` `{time}`                   | `'{title}'`  | options                     | Also used for `.png`, `.jpg`, `.md`                                |
-| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format; also used by the fallback page's Download |
+| `saveAs`                                         | boolean                                                              | `false`      | options                     | Applies to every format                                            |
 | `imageScale`                                     | number 1-3                                                           | `2`          | options                     | Output px per CSS px for PNG / JPEG export; clamped 1-3            |
 | `markdownEnabled`                                | boolean                                                              | `false`      | options (with confirmation) | Gates the popup row, the overlay format and the background handler |
 | `theme`                                          | `'system' \| 'light' \| 'dark'`                                      | `'system'`   | popup header, options       |                                                                    |
@@ -390,7 +406,7 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
 - `formal/page-restore/` — TLA+ model of the page-restore promise (`check.mjs`) and a regression
   replay of its fixed finding on the real extension (`replay-finding.mjs`); the
   `/verify-page-restore` skill.
-- `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup, options and viewer pages
+- `scripts/screenshot-ui.mjs` (`npm run test:ui`) — renders the popup and options pages
   in light and dark (plus dynamic states) into `test/out/ui/` and fails on page or console
   errors or missing translation keys. It also fails when the Save As label names a single format in
   any language, and, through `scripts/ui-checks/context-menu.mjs`, when the context-menu titles

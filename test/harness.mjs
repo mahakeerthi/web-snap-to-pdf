@@ -82,7 +82,7 @@ export async function launchExtension({
     const sw = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
     await sw.evaluate(() => new Promise((r) => setTimeout(r, 200)));
     const extensionId = new URL(sw.url()).host;
-    return { context, sw, extensionId, base, downloadDir, close };
+    return { context, sw, extensionId, base, downloadDir, userDataDir, close };
   } catch (err) {
     await close();
     throw err;
