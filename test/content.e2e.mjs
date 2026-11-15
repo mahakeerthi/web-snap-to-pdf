@@ -2486,6 +2486,7 @@ await test('preview: the Format label, first focus on Close and the keyboard', a
   await command('save-pdf', tabId);
   await waitForPreview(page);
   f = await focusInfo();
+  await page.screenshot({ path: path.join(outDir, 'preview-360px-de.png') });
   check(
     f.overflow && f.inView,
     `360 px, German: no toolbar overflow, label and select in view (${JSON.stringify(f)})`,
