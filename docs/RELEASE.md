@@ -79,27 +79,35 @@ Paste from [store/listing.md](store/listing.md):
 
 ### Screenshots
 
-Requirements: 1280 × 800 (preferred) or 640 × 400, PNG or JPEG without transparency, 1-5 images.
-Our raw captures are narrower (popup 360 px, options 720 px), so the popup shots need composing onto
-a 1280 × 800 canvas; the preview-overlay shots are already 1280 × 800.
+Requirements: 1280 × 800 (preferred) or 640 × 400, PNG or JPEG without transparency, 1-5 images,
+square corners and full bleed. The five screenshots and the promo tile are already made, in
+`docs/store/images/`, and `docs/store/listing.md` says which file goes in which slot. They use a
+demo page with our own content (`test/fixtures/store/trail-guide.html`, a made-up magazine) and the
+default UI: the popup without the Markdown row.
 
-Use a neutral demo page with our own content (no third-party sites, logos or trademarks) and the
-light theme unless stated. Plan:
+| #   | File                    | Shows                                                                    |
+| --- | ----------------------- | ------------------------------------------------------------------------ |
+| 1   | `1-preview-format-menu` | The full-page preview with the Format menu open: PDF, PNG, JPEG          |
+| 2   | `2-three-ways-to-save`  | The popup over the demo article: Full page, Article only, Select element |
+| 3   | `3-select-one-part`     | The element picker outlining one chart card                              |
+| 4   | `4-export-settings`     | The popup's export settings next to the first page of a real PDF         |
+| 5   | `5-dark-mode`           | The preview and the popup in dark mode                                   |
 
-| #   | Shot                                                                    | How to produce                                                                                                                                                                                                                           |
-| --- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Popup over an article page: "Full page / Article only / Select element" | Open a demo article at 1280 × 800, render `popup.html` (as `scripts/screenshot-ui.mjs` does, 360 px wide, device scale 2 for sharpness) and composite it at the top right under a mock toolbar.                                          |
-| 2   | Element preview overlay with the Format menu                            | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
-| 3   | Export settings expanded                                                | Composite `popup-expanded-light.png` (crop to the Paper → Content groups) next to a sample PDF page rendered from the demo article.                                                                                                      |
-| 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-overlay-dark.png` side by side on a dark background.                                                                                                                                |
-| 5   | Remove elements / options                                               | The remove-mode bar on the demo page with a removed banner, or `options-light.png` framed on the canvas with the language menu open.                                                                                                     |
+Rebuild them after any UI change, then look at every one before you upload:
 
-The source images live in `docs/images/` (copied from `test/out/ui/` after `npm run test:ui`).
-Add a caption strip to each (e.g. "Save the whole page, the article, or just one part") only if it
-stays legible at 640 × 400.
+```sh
+npm run store:images        # needs poppler (pdftoppm) and Chromium; takes about 15 seconds
+npm run check:store-images  # sizes, and no alpha channel
+```
 
-- [ ] Small promo tile 440 × 280 (icon + name + one short line).
-- [ ] Store icon 128 × 128: `extension/icons/icon128.png`.
+`scripts/store-images/build.mjs` drives the real popup, preview and picker through
+`test/harness.mjs`, so the captures are the shipped UI. The one thing it draws itself is the open
+Format list in screenshot 1, because a native `<select>` menu is not part of a page screenshot. It
+fills that list from the options the real select holds. The README images in `docs/images/` are a
+separate set (see `npm run test:ui` and `node scripts/screenshot-preview.mjs`).
+
+- [x] Small promo tile 440 × 280 (icon, name, one short line): `docs/store/images/promo-tile-440x280.png`.
+- [x] Store icon 128 × 128: `extension/icons/icon128.png`.
 
 ## 5. Privacy practices tab
 
