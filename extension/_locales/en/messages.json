@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "Save any web page as a PDF in one click. Keeps styles and links, paged or single-page, 100% local with Chrome’s own PDF engine.",
+    "message": "Save any web page as a PDF. Preview the full page, the article or one part, then export to PDF, PNG or JPEG. Free and 100% local.",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

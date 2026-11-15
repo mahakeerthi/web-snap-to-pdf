@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "Salve qualquer página da web em PDF com um clique. Mantém estilos e links, com ou sem quebras de página. 100% local, com o Chrome.",
+    "message": "Salve qualquer página como PDF. Veja a página inteira, o artigo ou uma parte e exporte em PDF, PNG ou JPEG. Grátis e 100% local.",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

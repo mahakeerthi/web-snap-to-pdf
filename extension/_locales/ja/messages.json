@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "ウェブページをワンクリックで PDF に保存。スタイルとリンクを保持し、ページ分割または 1 ページで出力。Chrome の PDF エンジンで完全にローカル処理します。",
+    "message": "どんなウェブページも PDF で保存。ページ全体・記事・一部をプレビューして、PDF・PNG・JPEG で書き出し。無料で 100% ローカル処理。",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

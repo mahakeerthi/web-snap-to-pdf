@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "一键将任意网页保存为 PDF。保留样式和可点击链接，支持分页或单页布局，使用 Chrome 自带的 PDF 引擎完全在本地运行。",
+    "message": "将任意网页保存为 PDF。先预览整页、文章或所选部分，再导出为 PDF、PNG 或 JPEG。免费，100% 在本地运行。",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

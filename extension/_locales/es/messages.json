@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "Guarda cualquier web en PDF con un clic. Mantiene estilos y enlaces, en páginas o en una sola. 100 % local con el motor de Chrome.",
+    "message": "Guarda cualquier web como PDF. Previsualiza la página, el artículo o una parte y exporta a PDF, PNG o JPEG. Gratis y 100 % local.",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

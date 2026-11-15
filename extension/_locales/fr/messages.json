@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "Enregistrez une page web en PDF en un clic : styles et liens conservés, paginé ou sur une seule page. 100 % local via Chrome.",
+    "message": "Enregistrez une page web en PDF. Aperçu de la page, de l’article ou d’une partie, puis export PDF, PNG, JPEG. Gratuit, 100 % local.",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

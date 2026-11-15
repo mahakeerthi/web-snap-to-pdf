@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "Webseiten per Klick als PDF speichern: mit Stilen und Links, mit Seitenumbrüchen oder als eine Seite. 100 % lokal über Chrome.",
+    "message": "Webseiten als PDF speichern. Vorschau von Seite, Artikel oder Ausschnitt, dann Export als PDF, PNG oder JPEG. Gratis, 100 % lokal.",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {

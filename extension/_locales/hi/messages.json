@@ -4,7 +4,7 @@
     "description": "Extension name (manifest, popup header)"
   },
   "extDescription": {
-    "message": "वेब पेज को एक क्लिक में PDF में सेव करें। स्टाइल और लिंक बने रहते हैं, पेज ब्रेक के साथ या एक लंबे पेज में। Chrome से 100% लोकल।",
+    "message": "वेब पेज को PDF में सेव करें। पूरा पेज, लेख या एक हिस्सा पहले देखें, फिर PDF, PNG या JPEG में एक्सपोर्ट करें। मुफ़्त, 100% लोकल।",
     "description": "Extension description (manifest, Web Store)"
   },
   "actionTitle": {
