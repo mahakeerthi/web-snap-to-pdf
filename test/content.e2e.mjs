@@ -2562,6 +2562,18 @@ await test('preview: page preview of a scroll-locked page covers the whole docum
   await page.close();
 });
 
+await test('preview: page preview of a page wider than the window covers its width', async () => {
+  const { page, tabId } = await openTab('big.html');
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  await command('save-pdf', tabId);
+  const info = await waitForPreview(page);
+  const width = Number(/(\d+)×\d+ px/.exec(info.caption)[1]);
+  check(scrollWidth > 1250, `big.html overflows the window sideways (${scrollWidth} px)`);
+  check(width >= scrollWidth - 1, `the preview is as wide as the document (${width} px)`);
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
 await test('preview: page and article previews restore the page', async () => {
   const { page, tabId } = await openTab('article.html');
   const before = await snapshot(page);
