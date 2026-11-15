@@ -385,8 +385,9 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
 ## Test suites
 
 - `test/e2e.mjs` (`npm test`) — PDF pipeline through `Page.printToPDF` (paper sizes, single page,
-  header/footer, screen view, ranges, article, pickers, preview-overlay PDF download, large
-  downloads, restricted pages, extension pages load).
+  header/footer, screen view, ranges, article, pickers, preview-overlay PDF download, the PDF save
+  path (stream read, byte-for-byte file check, `atob` decoder, failures, overlapping and
+  back-to-back saves, a leftover offscreen document), restricted pages, extension pages load).
 - `test/content.e2e.mjs` (`npm run test:content`) — content-script checks against
   `test/fixtures/` (restore correctness, scroll containers, fixed elements, article detection with
   `data-expect="article"`, picker and shadow DOM), the document-relative clip probe, preview overlay,
@@ -397,10 +398,19 @@ Stored as one object under `settings` in `chrome.storage.sync`. Source: `DEFAULT
   `scripts/verify-popup.mjs` and `formal/page-restore/replay-finding.mjs`:
   `launchExtension({ extDir, viewport, headless })` starts the fixture server and Chromium with a
   temp copy of the extension and a temp download folder, and returns
-  `{ context, sw, extensionId, base, downloadDir, close }`; `tabIdForUrl(sw, url)` finds the tab a
+  `{ context, sw, extensionId, base, downloadDir, userDataDir, close }`; `tabIdForUrl(sw, url)` finds the tab a
   page was opened in; `waitForDownload(sw, pred, timeoutMs)` waits for a completed download
   (`test/e2e.mjs`); `createReporter()` returns `{ check, test, summary }` (`ONLY=<regex>` runs
   matching tests only).
+- `scripts/pdf-save-perf.mjs` — times the PDF save step (the worker's `generate` call to the
+  download's `complete`) for three extension folders (`--main`, `--base`, `--head`, each an
+  `extension/` folder from `git archive`). Runs only while the 1-minute load average is at most 8.
+  The rule for a change to the save path, against `main`: a 70 MB PDF (`big.html?n=12&s=1400`, 5
+  fresh-browser runs per side) must be at least 30 % faster, and a 10-page PDF (`typical.html`, 8
+  launches per side, each 1 untimed and 5 timed exports) must not be more than 10 % slower, judged
+  by the upper bound of a bootstrap 95 % interval on the ratio of launch medians. It also prints
+  phase times, peak memory, and whether the files are byte-identical after both PDF dates are
+  masked.
 - `scripts/verify-popup.mjs` — drives the real popup against a fixture tab and checks the
   downloaded file (the `/verify-web-snap-pdf` skill).
 - `formal/page-restore/` — TLA+ model of the page-restore promise (`check.mjs`) and a regression

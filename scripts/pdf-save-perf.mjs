@@ -4,10 +4,11 @@
 //   git archive <merge base> extension | tar -x -C /tmp/perf-base
 // and run
 //   node scripts/pdf-save-perf.mjs --main /tmp/perf-main/extension --base /tmp/perf-base/extension \
-//     --head extension --fixture big
-//   node scripts/pdf-save-perf.mjs --main ... --base ... --head extension --fixture typical
-// The gate (head against main) and the load rules are in docs/ARCHITECTURE.md's perf note and the
-// PR body. This script changes no production code.
+//     --head /tmp/perf-head/extension --fixture big
+//   node scripts/pdf-save-perf.mjs --main ... --base ... --head /tmp/perf-head/extension --fixture typical
+// Each launch copies the folder it is given, so do not edit a folder while a run is using it.
+// The rule it applies is in docs/ARCHITECTURE.md, "Test suites". This script changes no production
+// code.
 //
 // big: 12 noise canvases, about 70 MB. One fresh browser and one export per run, 5 runs per side,
 //   gated on head median <= 0.70 x main median.
@@ -288,6 +289,19 @@ async function runLaunch(side, extDir, launchNo) {
     console.log(
       `launch ${launchNo} ${side}: median ${fmt(entry.medianMs)} ms (${entry.ms.map((m) => fmt(m)).join(', ')}) errors ${errors} load ${load.toFixed(1)}`,
     );
+  } catch (err) {
+    launchLog.push({
+      side,
+      launch: launchNo,
+      load,
+      errors: 1,
+      ms: [],
+      medianMs: null,
+      phases: [],
+      memoryMb: null,
+      failure: String(err.message || err),
+    });
+    console.log(`launch ${launchNo} ${side}: FAILED ${String(err.message || err).split('\n')[0]}`);
   } finally {
     await stopSampler?.();
     await close();
@@ -419,10 +433,16 @@ if (args.append) {
 }
 const firstLaunch = launchLog.length ? Math.max(...launchLog.map((e) => e.launch)) + 1 : 0;
 const rounds = slotsPerSide;
+const saveRaw = () => {
+  if (args.out) fs.writeFileSync(args.out, JSON.stringify({ args, expectedPages, launchLog }, null, 1));
+};
 for (let r = 0; r < rounds; r++) {
   const n = firstLaunch + r;
   const order = n % 2 === 0 ? sides : [...sides].reverse();
-  for (const [side, dir] of order) await runLaunch(side, dir, n);
+  for (const [side, dir] of order) {
+    await runLaunch(side, dir, n);
+    saveRaw();
+  }
 }
 const out = report();
 if (args.out) {
