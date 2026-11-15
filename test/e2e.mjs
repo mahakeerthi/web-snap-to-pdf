@@ -79,15 +79,17 @@ function saveToDisk(tabId, template, settings = {}) {
     settings: { filenameTemplate: template, loadLazy: false, ...settings },
   });
 }
-async function failureOf(promise) {
-  try {
-    await promise;
-  } catch (err) {
-    return String(err.message || err)
-      .split('\n')[0]
-      .replace(/^worker\.evaluate: (\w*Error: )?/, '');
-  }
-  return null;
+// The message `promise` rejects with, or null when it resolves. A promise still pending after
+// `ms` counts as a failure of its own, so a removed timeout shows up as a red check, not a hang.
+async function failureOf(promise, ms = 60000) {
+  const outcome = promise.then(
+    () => null,
+    (err) =>
+      String(err.message || err)
+        .split('\n')[0]
+        .replace(/^worker\.evaluate: (\w*Error: )?/, ''),
+  );
+  return Promise.race([outcome, sleepMs(ms).then(() => `no answer within ${ms} ms`)]);
 }
 // Waits until every named file has a completed download. Fails fast on an interrupted one.
 async function waitForFiles(names, timeoutMs = 60000) {
@@ -165,6 +167,7 @@ async function checkSavedStream(res, item, label) {
     rec.reads.length >= 1 && rec.reads.every((r) => r.base64Encoded === true),
     `${label}: ${rec.reads.length} IO.read calls, all base64`,
   );
+  check(rec.reads.at(-1)?.eof === true, `${label}: the last IO.read reply is eof`);
   check(
     rec.closes.length === 1 && rec.closes[0] === rec.prints[0]?.stream,
     `${label}: one IO.close with the printed handle`,
@@ -481,7 +484,7 @@ await test('an offscreen page that never shows up or never answers fails the sav
       });
     },
     async () => {
-      const error = await failureOf(saveToDisk(tabId, 'p2-nopage'));
+      const error = await failureOf(saveToDisk(tabId, 'p2-nopage'), 15000);
       check(error === 'Could not save the PDF.', `a missing offscreen page fails the save (${error})`);
       check((await busy()) === false, 'the tab is not busy afterwards');
       check(await offscreenClosed(), 'the unused offscreen document is closed');
@@ -499,7 +502,7 @@ await test('an offscreen page that never shows up or never answers fails the sav
       });
     },
     async () => {
-      const error = await failureOf(saveToDisk(tabId, 'p2-nopost'));
+      const error = await failureOf(saveToDisk(tabId, 'p2-nopost'), 30000);
       check(
         error === 'Could not save the PDF.',
         `a silent offscreen page fails the save after its wait (${error})`,
