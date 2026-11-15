@@ -67,12 +67,14 @@ Paste from [store/listing.md](store/listing.md):
 
 - **Name:** WebPage to PDF.
 - **Summary:** comes from the manifest description (`extDescription` in
-  `extension/_locales/en/messages.json`, ≤ 132 characters, currently 127). Translations provide
+  `extension/_locales/en/messages.json`, ≤ 132 characters, currently 129). Translations provide
   the summary for other store languages automatically.
-- **Description:** leads with the three ways to save, then the feature bullets, privacy, and the
-  debugging-bar note. It mentions Markdown only as **experimental and off by default**. Do not
-  advertise it as a headline feature while it is opt-in, and keep the screenshots on the default
-  UI (the popup without the Markdown row), except where noted below.
+- **Description:** opens with a plain sentence and the preview, then the three ways to save, the
+  feature bullets, privacy, and the debugging-bar note. It mentions Markdown only as
+  **experimental and off by default**. Do not advertise it as a headline feature while it is
+  opt-in, and keep the screenshots on the default UI (the popup without the Markdown row), except
+  where noted below. `npm run check:listing` checks the name and summary against the manifest and
+  that no search phrase repeats more than five times (the store's keyword-spam line).
 - **Category:** Tools.
 
 ### Screenshots
