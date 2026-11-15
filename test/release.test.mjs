@@ -72,10 +72,12 @@ test('npm run package writes webpage-to-pdf-<version>.zip with manifest.json at 
     assert.deepEqual(entries.trim().split('\n'), ['manifest.json']);
 
     const workflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
-    assert.ok(workflow.includes(zipName.replace(version, '$VERSION')), 'release.yml names the same ZIP');
-    assert.ok(!/(?<!verify-)web-snap-pdf-/.test(workflow), 'release.yml has no old ZIP name');
     const releaseDoc = fs.readFileSync(path.join(root, 'docs/RELEASE.md'), 'utf8');
+    const oldZipName = /(?<!verify-)web-snap-pdf-/;
+    assert.ok(workflow.includes(zipName.replace(version, '$VERSION')), 'release.yml names the same ZIP');
+    assert.ok(!oldZipName.test(workflow), 'release.yml has no old ZIP name');
     assert.ok(releaseDoc.includes(zipName.replace(version, '<version>')), 'RELEASE.md names the same ZIP');
+    assert.ok(!oldZipName.test(releaseDoc), 'RELEASE.md has no old ZIP name');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
