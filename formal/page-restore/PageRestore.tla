@@ -17,10 +17,12 @@
 (*   ps:reset-page stopPicker, closePreview, restore, resetRemovals        *)
 (* background.js                                                           *)
 (*   claimTab      one export per tab (activeJobs)                         *)
-(*   generate /    ps:prepare ... printToPDF / captureScreenshot ...       *)
-(*   captureElement  ps:restore in `finally`                               *)
+(*   generate /    ps:prepare ... printToPDF / captureScreenshot ...,      *)
+(*   captureElement  ps:restore in `finally`, also when a Close, an Esc    *)
+(*                 or a dismissed debugging bar cancels prepare, the       *)
+(*                 screenshot loop or the PDF                              *)
 (*   ps:reset-page refused while activeJobs has the tab                    *)
-(*   startPicker   refused while activeJobs has the tab                    *)
+(*   startPicker / startPreview  refused while activeJobs has the tab      *)
 (***************************************************************************)
 EXTENDS Sequences, Naturals
 

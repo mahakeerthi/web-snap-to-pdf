@@ -85,7 +85,7 @@
         return prepare(msg);
       case 'ps:restore':
         restore();
-        armPassRecord();
+        ownWritesDone();
         return { ok: true };
       case 'ps:abort-prepare':
         if (state.prepareAbort) state.prepareAbort.abort();
@@ -130,7 +130,7 @@
   async function prepare(msg) {
     stopPicker();
     restore();
-    pausePassRecord();
+    ownWritesDone();
     const own = new AbortController();
     state.prepareAbort = own;
     try {
@@ -173,17 +173,7 @@
         reused = true;
       } else {
         lazy = await loadLazyContent(signal);
-        if (!signal.aborted && state.preview) {
-          state.passRecord = {
-            overlay: state.preview,
-            prep,
-            root,
-            scrollHeight: document.documentElement.scrollHeight,
-            complete: lazy.complete,
-            dirty: false,
-            observer: null,
-          };
-        }
+        if (!signal.aborted && state.preview) recordPass(prep, root, lazy.complete);
       }
     }
     if (signal.aborted) {
@@ -203,6 +193,7 @@
     if (expandScroll) expandScrollContainers(root);
     unlockDocument();
     scrollToInstant(0, 0);
+    ownWritesDone();
     await nextFrame();
     await nextFrame();
     return { ok: true, title: document.title, lazy, reused: reused || undefined };
@@ -559,8 +550,35 @@
   // The shared pass. A pass that ran to its end while an overlay was open is kept as state.passRecord,
   // so the export after a preview (same overlay, prep and root) does not scroll the page again. A
   // record is used only while the page is as the pass left it: the same real-viewport height, and no
-  // DOM change since the worker's restore (a MutationObserver armed there). Any doubt means a full
-  // pass, which is slower and never less complete.
+  // DOM change since the pass ended. The observer watches from then on, through the capture too,
+  // because a screenshot of a tall page resizes the viewport once per part and a gallery that
+  // re-renders on resize rebuilds itself meanwhile (adv.html, mode=reset). Our own writes are
+  // dropped with ownWritesDone(). Any doubt means a full pass, which is slower and never less
+  // complete.
+  function recordPass(prep, root, complete) {
+    dropPassRecord();
+    const record = {
+      overlay: state.preview,
+      prep,
+      root,
+      scrollHeight: document.documentElement.scrollHeight,
+      complete,
+      dirty: false,
+      observer: new MutationObserver((records) => {
+        if (records.every(isOurMutation)) return;
+        record.dirty = true;
+        record.observer.disconnect();
+      }),
+    };
+    record.observer.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    state.passRecord = record;
+  }
+
   function usablePassRecord(prep, root) {
     const r = state.passRecord;
     if (!r) return null;
@@ -577,36 +595,16 @@
   }
 
   function dropPassRecord() {
-    pausePassRecord();
+    const r = state.passRecord;
+    if (r) r.observer.disconnect();
     state.passRecord = null;
   }
 
-  // A prepare writes to the page itself, so the record's observer stays off until the next restore.
-  function pausePassRecord() {
+  // Called right after a batch of our own page writes, before the page can run: the mutation
+  // records they queued are not a change made by the page.
+  function ownWritesDone() {
     const r = state.passRecord;
-    if (r && r.observer) {
-      r.observer.disconnect();
-      r.observer = null;
-    }
-  }
-
-  function armPassRecord() {
-    const r = state.passRecord;
-    if (!r || r.dirty) return;
-    pausePassRecord();
-    const observer = new MutationObserver((records) => {
-      if (records.every(isOurMutation)) return;
-      r.dirty = true;
-      observer.disconnect();
-      r.observer = null;
-    });
-    observer.observe(document.documentElement, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      characterData: true,
-    });
-    r.observer = observer;
+    if (r) r.observer.takeRecords();
   }
 
   // Changes to our own UI (the overlay host, the picker) say nothing about the page.

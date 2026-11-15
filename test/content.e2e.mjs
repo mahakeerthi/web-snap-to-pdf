@@ -3378,6 +3378,362 @@ await test('preview: a dismissed debugging bar stops the export with a plain mes
   await setSettings({});
 });
 
+// --- 10. one lazy pass for the preview and its Download --------------------------------------
+
+const imageCount = (file, min = 100) =>
+  execFileSync('pdfimages', ['-list', file], { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .slice(2)
+    .map((l) => l.trim().split(/\s+/))
+    .filter((c) => Number(c[3]) >= min).length;
+const lastPrepare = async () => {
+  const all = await workerMsgs('ps:prepare');
+  return all[all.length - 1];
+};
+const scrolls = (page) => page.evaluate(() => window.__scrolls);
+async function settledViewport(page, quietMs = 700) {
+  let last = await page.evaluate(() => innerHeight);
+  let since = Date.now();
+  while (Date.now() - since < quietMs) {
+    await wait(50);
+    const now = await page.evaluate(() => innerHeight);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    }
+  }
+}
+// A page preview of adv/lazyroot.html with the image landed, the worker log cleared and the scroll
+// counter reset, ready for a Download.
+async function previewReady(n = 20) {
+  const { page, tabId } = await openTab(`adv/lazyroot.html?n=${n}`);
+  await command('save-pdf', tabId);
+  await waitForPreview(page, 60000);
+  await resetWorkerLog();
+  await page.evaluate(() => (window.__scrolls = 0));
+  return { page, tabId };
+}
+async function downloadPdfFrom(page) {
+  const t0 = new Date().toISOString();
+  await chooseFormat(page, 'pdf');
+  await clickPreview(page, '.download');
+  return waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+}
+
+await test("preview: Download reuses the preview's lazy pass on an unchanged page", async () => {
+  const { page } = await previewReady(20);
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  const n = await scrolls(page);
+  check(n <= 2, `the page saw ${n} scroll events during the Download`);
+  check(prep.reused === true, `the Download's ps:prepare reply says reused (${prep.reused})`);
+  check(prep.repliedAt - prep.sentAt < 600, `the prepare took ${prep.repliedAt - prep.sentAt} ms`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+
+  const el = await openTab('adv/lazyroot.html?n=20');
+  await pickElement(el.page, el.tabId, '#root', { timeout: 90000 });
+  await resetWorkerLog();
+  const gen = () =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, prep: 'element', output: 'return' })
+          .then((r) => ({ ok: r.ok, base64: r.base64 })),
+      el.tabId,
+    );
+  await gen();
+  await wait(200);
+  await el.page.evaluate(() => (window.__scrolls = 0));
+  const second = await gen();
+  const preps = await workerMsgs('ps:prepare');
+  check(
+    preps.length === 2 && preps[0].reused === undefined && preps[1].reused === true,
+    `element: the second export reuses the first one's pass (${preps.map((p) => p.reused)})`,
+  );
+  check(
+    (await scrolls(el.page)) <= 2,
+    `element: ${await scrolls(el.page)} scroll events in the second export`,
+  );
+  check(lazyPdf(second, 'reuse-element.pdf').images === 20, 'element: 20 of 20 images');
+  await el.page.close();
+});
+
+await test('preview: Download runs a new pass when the page grew', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => window.appendBlocks(30));
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(prep.reused === undefined, `the Download's prepare is a full pass (${prep.reused})`);
+  check((await scrolls(page)) > 2, `the page scrolls again (${await scrolls(page)} scroll events)`);
+  check(
+    imageCount(item.filename, 250) === 50,
+    `the PDF holds ${imageCount(item.filename, 250)} of 50 images`,
+  );
+  await page.close();
+});
+
+await test('preview: Download runs a new pass when the page re-rendered its images', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => {
+    for (const img of document.querySelectorAll('img.lz')) {
+      const c = img.cloneNode(false);
+      c.removeAttribute('src');
+      img.replaceWith(c);
+    }
+  });
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(prep.reused === undefined, `the Download's prepare is a full pass (${prep.reused})`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+});
+
+await test('preview: two exports in a row with the overlay open', async () => {
+  const gen = (tabId) =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, prep: 'none', output: 'return' })
+          .then((r) => ({ ok: r.ok, base64: r.base64 })),
+      tabId,
+    );
+  const mutations = {
+    unchanged: [() => {}, 20, 20],
+    grew: [() => window.appendBlocks(30), 50, 50],
+    rerendered: [
+      () => {
+        for (const img of document.querySelectorAll('img.lz')) {
+          const c = img.cloneNode(false);
+          c.removeAttribute('src');
+          img.replaceWith(c);
+        }
+      },
+      20,
+      20,
+    ],
+  };
+  for (const [name, [mutate, , expected]] of Object.entries(mutations)) {
+    const { page, tabId } = await openTab('adv/lazyroot.html?n=20');
+    await pickElement(page, tabId, '#root', { timeout: 90000 });
+    await resetWorkerLog();
+    await gen(tabId);
+    await page.evaluate(mutate);
+    await wait(200);
+    await page.evaluate(() => (window.__scrolls = 0));
+    const second = await gen(tabId);
+    const prep = await lastPrepare();
+    const images = lazyPdf(second, `two-${name}.pdf`).images;
+    check(images === expected, `(a) ${name}: the second PDF holds ${images} of ${expected} images`);
+    if (name === 'unchanged')
+      check(
+        prep.reused === true && (await scrolls(page)) <= 2 && prep.repliedAt - prep.sentAt < 600,
+        `(a) unchanged reuses (${prep.reused}, ${await scrolls(page)} scroll events, ${prep.repliedAt - prep.sentAt} ms)`,
+      );
+    else check(prep.reused === undefined, `(a) ${name} runs a new pass`);
+    await page.close();
+  }
+  const { page } = await previewReady(20);
+  await chooseFormat(page, 'png');
+  for (const part of [1, 2]) {
+    const t0 = new Date().toISOString();
+    await clickPreview(page, `.part[data-part="${part}"] .part-download`);
+    await waitForDownload((i) => /\.png$/.test(i.filename) && i.startTime >= t0, 60000);
+    await waitFor(async () => !(await previewInfo(page)).downloadDisabled, {
+      label: 'the overlay to be idle again',
+    });
+    const prep = await lastPrepare();
+    check(
+      (await overlayOpen(page)) && prep.reused === true,
+      `(b) part ${part}: the overlay stays open and the pass is reused (${prep.reused})`,
+    );
+  }
+  check((await scrolls(page)) <= 2, `(b) ${await scrolls(page)} scroll events across both part Downloads`);
+  await page.close();
+});
+
+await test('preview: Download reuses an incomplete pass and shows its warning', async () => {
+  const { page, tabId } = await openTab('lazy/loader.html?n=0&feed=1');
+  await command('save-pdf', tabId);
+  await waitForPreview(page, 90000);
+  await resetWorkerLog();
+  const t0 = new Date().toISOString();
+  await chooseFormat(page, 'pdf');
+  await clickPreview(page, '.download');
+  await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+  const prep = await lastPrepare();
+  check(prep.reused === true, `the Download reuses the preview's pass (${prep.reused})`);
+  check(
+    prep.lazy && prep.lazy.complete === false,
+    `the reused pass is still incomplete (${JSON.stringify(prep.lazy)})`,
+  );
+  const info = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && i.warning ? i : null;
+    },
+    { label: 'the lazy-load warning' },
+  );
+  check(info.warning === lazyWarning(), `the overlay shows the warning the pass earned (${info.warning})`);
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test("preview: resize and orientation galleries keep main's image count", async () => {
+  const direct = (tabId) =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, output: 'return', settings: { loadLazy: true } })
+          .then((r) => ({ base64: r.base64 })),
+      tabId,
+    );
+  const countOf = (r, name) => {
+    const file = path.join(outDir, name);
+    fs.writeFileSync(file, Buffer.from(r.base64, 'base64'));
+    return imageCount(file);
+  };
+  for (const [id, url] of [
+    ['reset0-io', 'lazy/adv.html?loader=io&mode=reset&rd=0'],
+    ['orient-mq-io', 'lazy/adv.html?loader=io&mode=mq'],
+  ]) {
+    // main's export of the URL on a fresh tab, and after a preview was shown and closed. A headless
+    // run leaves Chrome's debugging bar up after a preview's capture, and its slide-in at the next
+    // attach resizes the page under any export, so the second count (give or take the few frames
+    // the resizes race) is the fair floor for a Download. A record reused wrongly gives 1 here.
+    const fresh = await openTab(url);
+    const expected = countOf(await direct(fresh.tabId), `gallery-${id}-fresh.pdf`);
+    await fresh.page.close();
+    const after = await openTab(url);
+    await command('save-pdf', after.tabId);
+    await waitForPreview(after.page, 90000);
+    await after.page.keyboard.press('Escape');
+    await waitFor(async () => !(await workerState(after.tabId)).busy, { label: 'the tab to be released' });
+    await settledViewport(after.page);
+    const floor = countOf(await direct(after.tabId), `gallery-${id}-after-preview.pdf`);
+    await after.page.close();
+    const { page, tabId } = await openTab(url);
+    await command('save-pdf', tabId);
+    await waitForPreview(page, 90000);
+    await settledViewport(page);
+    const t0 = new Date().toISOString();
+    await chooseFormat(page, 'pdf');
+    await clickPreview(page, '.download');
+    const item = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+    const got = imageCount(item.filename);
+    check(
+      got >= floor - 5 && got > 1,
+      `${id}: preview + Download saves ${got} images; main exports ${expected} on a fresh tab and ${floor} after a preview`,
+    );
+    await page.close();
+  }
+});
+
+// --- 11. the page going away mid-export ------------------------------------------------------
+
+await test('preview: a page that goes away mid-export gets a plain message', async () => {
+  const messages = JSON.parse(
+    fs.readFileSync(path.join(root, 'extension/_locales/en/messages.json'), 'utf8'),
+  );
+  const de = JSON.parse(fs.readFileSync(path.join(root, 'extension/_locales/de/messages.json'), 'utf8'));
+  const raw = /message channel|Receiving end|No tab with|port closed/i;
+  for (const [language, expected] of [
+    ['en', messages.preview_errorInterrupted.message],
+    ['de', de.preview_errorInterrupted.message],
+  ]) {
+    await setSettings({ language });
+    for (const how of ['navigates', 'closes']) {
+      const { page, tabId } = await openTab(LAZY_LONG);
+      const popup = await openPopupFor(tabId, page);
+      const pending = popupSend(popup, { type: 'ps:export-element', tabId, format: 'png', prep: 'none' });
+      await waitFor(() => page.evaluate(() => scrollY > 0), { interval: 20, label: 'the pass to scroll' });
+      if (how === 'navigates') await page.goto(`${base}/body-fixed.html`);
+      else await page.close();
+      const res = await pending;
+      check(
+        res.ok === false && res.error === expected && !raw.test(res.error),
+        `${language}, tab ${how}: "${res.error}"`,
+      );
+      await popup.close();
+      if (how === 'navigates') await page.close();
+    }
+  }
+  await setSettings({});
+
+  const { page, tabId } = await openTab('article.html');
+  await send(tabId, { type: 'ps:ping' });
+  const lost =
+    'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received';
+  await sw.evaluate(
+    async ({ tabId, lost }) => {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (lost) => {
+          chrome.runtime.sendMessage = () => Promise.reject(new Error(lost));
+        },
+        args: [lost],
+      });
+    },
+    { tabId, lost },
+  );
+  const strings = { preview_errorInterrupted: 'INTERRUPTED', preview_errorGeneric: 'GENERIC' };
+  await send(tabId, { type: 'ps:set-target', kind: 'page', strings, theme: 'light' });
+  const info = await waitForPreview(page);
+  check(
+    info.error === 'INTERRUPTED',
+    `the overlay shows the plain message for a lost capture (${info.error})`,
+  );
+  await page.keyboard.press('Escape');
+  await stubSendMessage(tabId);
+  await send(tabId, { type: 'ps:set-target', kind: 'page', strings, theme: 'light' });
+  const [req] = (await readSentMessages(tabId)).filter((m) => m.type === 'ps:preview-element').slice(-1);
+  await send(tabId, {
+    type: 'ps:show-preview',
+    requestId: req.requestId,
+    parts: [{ dataUrl: 'data:image/png;base64,' + PIXEL_PNG, width: 10, height: 10 }],
+    width: 10,
+    height: 10,
+    format: 'pdf',
+    strings,
+    theme: 'light',
+  });
+  await waitForPreview(page);
+  await sw.evaluate(
+    async ({ tabId, lost }) => {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (lost) => {
+          chrome.runtime.sendMessage = () => Promise.reject(new Error(lost));
+        },
+        args: [lost],
+      });
+    },
+    { tabId, lost },
+  );
+  await clickPreview(page, '.download');
+  const after = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && /INTERRUPTED/.test(i.status) ? i : null;
+    },
+    { label: 'the status line' },
+  );
+  check(
+    after.status === 'INTERRUPTED',
+    `the status line shows the plain message for a lost Download (${after.status})`,
+  );
+  await page.keyboard.press('Escape');
+  await send(tabId, { type: 'ps:reset-page' });
+  await page.close();
+});
+
 const failures = summary();
 await close();
 process.exit(failures ? 1 : 0);

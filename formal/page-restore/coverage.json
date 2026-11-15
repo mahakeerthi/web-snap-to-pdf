@@ -22,7 +22,8 @@
       "pickable",
       "elementAt",
       "setCurrent",
-      "renderBar"
+      "renderBar",
+      "loadLazyContent"
     ],
     "extension/src/background.js": [
       "claimTab",
@@ -30,7 +31,9 @@
       "captureElement",
       "withPreparedPage",
       "startPicker",
-      "handleMessage"
+      "handleMessage",
+      "startPreview",
+      "onDebuggerDetach"
     ]
   },
   "syncCommit": "ea13924",
