@@ -35,22 +35,24 @@ node scripts/verify-popup.mjs drive <journey>
 node scripts/verify-popup.mjs drive all
 ```
 
-| Journey              | Fixture                  | What the user does                                                                                         | Pass means                                                                |
-| -------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `full-page`          | `article.html`           | Popup, `#act-page`                                                                                         | PDF with `ARTICLE-MARK` and `SIDEBAR-MARK`, popup status names the file   |
-| `article`            | `article.html`           | Popup, `#act-article`                                                                                      | PDF with `ARTICLE-MARK`, without `SIDEBAR-MARK`                           |
-| `select-element-png` | `element.html`           | Popup, `#act-select`, click `#red`, overlay PNG, Download                                                  | 800x600 PNG (400x300 at the default image scale 2), overlay closes        |
-| `remove-reset`       | `article.html`           | Popup, `#act-remove`, click `#sidebar`, Done, popup, `#act-page`, `#act-reset`, `#act-page`                | First PDF lacks `SIDEBAR-MARK`, second has it, reset card hides           |
-| `markdown`           | `article.html` + options | Popup shows no Markdown cards; options `#markdownEnabled`, confirm `#markdown-enable`; popup `#md-article` | `.md` file with a `# ` heading and `ARTICLE-MARK`, without `SIDEBAR-MARK` |
+| Journey              | Fixture                  | What the user does                                                                                                          | Pass means                                                                          |
+| -------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `full-page`          | `article.html`           | Popup, `#act-page`, wait for the overlay, `.download`                                                                       | No download until `.download`, then PDF with `ARTICLE-MARK` and `SIDEBAR-MARK`      |
+| `article`            | `article.html`           | Popup, `#act-article`, wait for the overlay, `.download`                                                                    | No download until `.download`, then PDF with `ARTICLE-MARK`, without `SIDEBAR-MARK` |
+| `select-element-png` | `element.html`           | Popup, `#act-select`, click `#red`, `select.format` PNG, `.download`                                                        | 800x600 PNG (400x300 at the default image scale 2), overlay closes                  |
+| `remove-reset`       | `article.html`           | Popup, `#act-remove`, click `#sidebar`, Done, popup, `#act-page` and `.download`, `#act-reset`, `#act-page` and `.download` | First PDF lacks `SIDEBAR-MARK`, second has it, reset card hides                     |
+| `markdown`           | `article.html` + options | Popup shows no Markdown cards; options `#markdownEnabled`, confirm `#markdown-enable`; popup `#md-article`                  | `.md` file with a `# ` heading and `ARTICLE-MARK`, without `SIDEBAR-MARK`           |
+
+Full page and Article only open the preview overlay and download nothing until the user clicks Download in it. The popup closes itself once the overlay opens, so these journeys have no popup status line to check. `scripts/verify-popup.mjs` is being updated by the PR A builder to match: `popupPdfExport` waits for the overlay, records that no download started, clicks `.download`, then checks the PDF, and `select-element-png` chooses PNG through `select.format`. Until that lands, the `full-page`, `article` and `remove-reset` journeys do not match this table.
 
 Each journey gets its own fresh browser and profile, so settings never leak between journeys. Exit 0 means every journey passed, 1 means at least one check failed, 2 means a usage error.
 
 How the helper reaches each surface, for writing a new journey:
 
 - **Popup.** The toolbar popup cannot be opened by automation. The helper opens `chrome-extension://<id>/src/popup/popup.html` as a background tab in the fixture's window (`chrome.tabs.create({ url, windowId, active: false })`), so `popup.js` resolves the fixture as the active tab exactly once at load. It then waits for `body[data-state]` and for `html[data-boot]` to go away, and asserts `data-state="ready"` and that `#page-title` equals the fixture's title before any click. A popup opened before the fixture is in front targets the wrong tab, so open a new popup after every picker run rather than reusing one.
-- **Popup cards.** `#act-page`, `#act-article`, `#act-select`, `#act-remove`, `#act-reset` (only visible while elements are removed), `#md-page` and `#md-article` (inside `#md-row`, only while Markdown is enabled). The popup status line is `#status`, with class `ok` or `error`.
-- **Picker.** Lives in an open shadow root on the page, host `[data-websnap-ui=""]`. Hover then click the target with `page.mouse`. The remove-mode bar has Undo, Save PDF and Done buttons and a `.count` badge. Find buttons by role and the label from `chrome.i18n.getMessage('picker_done')` so the run survives a non-English browser locale.
-- **Preview overlay.** Host `[data-websnap-ui="preview"]`, open shadow root. Ready when `.stage canvas[data-ready]` exists. Format buttons `.seg [data-format="pdf|png|jpeg|markdown"]` (checked one has `aria-checked="true"`), `.copy`, `.download`, `.reselect`, `.close`; split parts add `.part-copy` and `.part-download` per `.part`. Playwright CSS locators pierce the shadow root.
+- **Popup cards.** `#act-page`, `#act-article`, `#act-select`, `#act-remove`, `#act-reset` (only visible while elements are removed), `#md-page` and `#md-article` (inside `#md-row`, only while Markdown is enabled). `#act-page` and `#act-article` open the preview overlay and the popup closes itself, as it does for `#act-select`, so open a new popup afterwards. The popup status line is `#status`, with class `ok` or `error`. After `#md-page` and `#md-article` it names the saved file; after the other cards it only shows an error.
+- **Picker.** Lives in an open shadow root on the page, host `[data-websnap-ui=""]`. Hover then click the target with `page.mouse`. The remove-mode bar has Undo, Preview and Done buttons and a `.count` badge. Preview opens the page preview with the removals applied. Find buttons by role and the label from `chrome.i18n.getMessage('picker_done')` so the run survives a non-English browser locale.
+- **Preview overlay.** Host `[data-websnap-ui="preview"]`, open shadow root. Ready when `.stage canvas[data-ready]` exists. The `h2` reads Export this page, Export this article or Export this element. The Format control is `select.format` inside the shadow root, labelled by a `label` with the text Format (not `.seg [data-format=...]`, which is gone). Its option values are `pdf`, `png`, `jpeg` and, only while Markdown is enabled, `markdown`; choose one with `selectOption`, and read the choice from the select's `value`. The other controls are `.copy`, `.download`, `.reselect` (the button reads Select part on a page or article preview and Reselect on an element preview) and `.close`; split parts add `.part-copy` and `.part-download` per `.part`, shown only for PNG and JPEG. The Format select, `.download`, `.copy` and `.reselect` are disabled while the preview loads and while any export has the page prepared (a busy overlay); `.close` always works. Playwright CSS locators pierce the shadow root.
 - **Options page.** `chrome-extension://<id>/src/options/options.html` in a tab, ready when `html[data-boot]` is gone.
 - **Downloads.** Snapshot `chrome.downloads.search({})` ids before the click, then wait for a new item in state `complete` (fail on `interrupted`). Never wait on `#status.ok` for a second export in the same popup: it still shows the first one. A repeated filename comes back as `<name> (1).pdf`.
 
@@ -61,7 +63,7 @@ How the helper reaches each surface, for writing a new journey:
 Every `drive` run writes `test/out/verify/<run-id>/` (`<run-id>` is the start time in ISO form) and prints `evidence: <path>` last. It holds `summary.json` (pass and failures per journey) and one folder per journey with:
 
 - the downloaded file or files, copied out before the browser closes,
-- screenshots of the steps that prove the action: `popup.png` before the click, `popup-saved.png` with the status line, `overlay-png.png`, `remove-picker.png`, `popup-removed.png`, `popup-reset.png`, `options-confirm.png`, `popup-markdown.png`, and `failure.png` when a journey throws,
+- screenshots of the steps that prove the action: `popup.png` before the click, `overlay-png.png`, `remove-picker.png`, `popup-removed.png`, `popup-reset.png`, `options-confirm.png`, `popup-markdown.png`, and `failure.png` when a journey throws,
 - `result.json`: journey, fixture, every control clicked in order, each download with filename and bytes plus `pdf.pages` and `pdf.pageSize` (pdfinfo) and `marks.found` / `marks.absent` (pdftotext), or `image` type and size, every check with pass or fail and detail, `notes`, `pass`, and `failures`.
 
 Proof standards for anything you add:
@@ -86,7 +88,7 @@ Proof standards for anything you add:
 The journeys prove the user paths. The suites cover the edge cases, and run them for the code you touched:
 
 - `npm test`: PDF pipeline (paper size, margins, header and footer, single page, screen media, page ranges, article mode, remove and reset, element PDF, large downloads, restricted pages, extension pages load).
-- `npm run test:content`: content script, prepare and restore, pickers, preview overlay (PDF, PNG, JPEG, split parts, copy, theme), Markdown converter. `ONLY='<name regex>'` runs a subset.
+- `npm run test:content`: content script, prepare and restore, pickers, preview overlay for pages, articles and elements (Format dropdown, PDF, PNG, JPEG, split parts, copy, theme, cancel on Close or Esc, the busy overlay), Markdown converter. `ONLY='<name regex>'` runs a subset.
 - `npm run test:ui`: every extension page renders without errors in both themes.
 - `npm run check`: ESLint, Prettier, locale parity.
 
@@ -96,8 +98,8 @@ The verified build is a stand-in for the shipped one in these ways, and these pa
 
 - **activeTab.** The shipped manifest has no host permissions and relies on the `activeTab` grant from a real toolbar click, keyboard shortcut or context-menu click. The harness instead adds `host_permissions` for the fixture origin to its temp copy of the manifest. A bug that only shows without host permissions passes here.
 - **The toolbar popup window.** The helper opens `popup.html` in a tab. Its size, focus and auto-close behavior (the popup closing when the page gets focus) are not exercised. `window.close()` after starting a picker does close the tab, recorded in each picker journey's `notes`.
-- **Keyboard shortcuts** `Alt+Shift+P` (save page) and `Alt+Shift+A` (save article), handled by `chrome.commands`.
-- **Context-menu items** (Save page, Save article, Select an element, Remove elements, Restore all removed elements) on the page, frame and toolbar icon.
+- **Keyboard shortcuts** `Alt+Shift+P` (preview the page) and `Alt+Shift+A` (preview the article), handled by `chrome.commands`. `npm run test:content` calls the real listener through `__websnap.command`, which proves the handler and not the key binding.
+- **Context-menu items** (Preview page, Preview article, Select an element, Remove elements, Restore all removed elements) on the page, frame and toolbar icon. `npm run test:content` calls the real listener through `__websnap.menu`, which proves the handler and not the menu.
 - **The embedded options dialog.** `options_ui.open_in_tab` is false, so the popup's gear opens options inside `chrome://extensions`. The helper opens `options.html` in its own tab.
 - **Save As prompts.** With `saveAs` on, Chrome shows a native dialog per file.
 

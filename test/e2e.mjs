@@ -189,12 +189,12 @@ await test('select-element picker opens a preview; Download (PDF) saves just tha
       if (!host) return null;
       const sr = host.shadowRoot;
       const canvas = sr.querySelector('.stage canvas');
-      const checked = sr.querySelector('.seg [aria-checked="true"]');
+      const select = sr.querySelector('select.format');
       const d = sr.querySelector('.download').getBoundingClientRect();
       return {
         ready: !!(canvas && canvas.dataset.ready),
         toolbarTop: sr.querySelector('.toolbar').getBoundingClientRect().top,
-        format: checked && checked.dataset.format,
+        format: select && select.value,
         download: { x: d.left + d.width / 2, y: d.top + d.height / 2 },
       };
     });
@@ -271,6 +271,57 @@ await test('extension pages load without errors (popup, options, viewer)', async
     await page.goto(`chrome-extension://${extensionId}/${p}`);
     await page.waitForTimeout(400);
     check(errors.length === 0, `${p} has no errors`, errors.join(' | '));
+    await page.close();
+  }
+});
+
+await test('page and article previews download the same PDF as a direct export', async () => {
+  await sw.evaluate(() => {
+    globalThis.__prepares = [];
+    const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+    chrome.tabs.sendMessage = async (tabId, msg, ...rest) => {
+      const res = await send(tabId, msg, ...rest);
+      if (msg.type === 'ps:prepare') globalThis.__prepares.push({ reused: res && res.reused });
+      return res;
+    };
+  });
+  for (const [kind, command, prep] of [
+    ['page', 'save-pdf', 'none'],
+    ['article', 'save-article', 'article'],
+  ]) {
+    const direct = await openTab(articleUrl);
+    const directFile = savePdf(`direct-${kind}.pdf`, await generate({ tabId: direct.tabId, prep }));
+    await direct.page.close();
+    const { page, tabId } = await openTab(articleUrl);
+    await sw.evaluate(() => (globalThis.__prepares.length = 0));
+    await sw.evaluate(({ command, tabId }) => globalThis.__websnap.command(command, tabId), {
+      command,
+      tabId,
+    });
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-websnap-ui="preview"]')
+          ?.shadowRoot.querySelector('.stage canvas[data-ready]'),
+      null,
+      { timeout: 30000 },
+    );
+    const t0 = new Date().toISOString();
+    await page.evaluate(() =>
+      document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('.download').click(),
+    );
+    const item = await waitForDownload(sw, (i) => /\.pdf$/.test(i.filename) && i.startTime >= t0);
+    const viaPreview = savePdf(`preview-${kind}.pdf`, fs.readFileSync(item.filename));
+    const prepares = await sw.evaluate(() => globalThis.__prepares);
+    check(
+      pdfInfo(viaPreview).pages === pdfInfo(directFile).pages,
+      `${kind}: same page count as a direct export (${pdfInfo(viaPreview).pages} and ${pdfInfo(directFile).pages})`,
+    );
+    check(pdfText(viaPreview) === pdfText(directFile), `${kind}: same text as a direct export`);
+    check(
+      prepares.length === 2,
+      `${kind}: the Download's prepare ${prepares[1] && prepares[1].reused ? 'reused' : 'did not reuse'} the preview's pass`,
+    );
     await page.close();
   }
 });

@@ -1,10 +1,13 @@
 // Web Snap PDF - background service worker.
 // Runs the export pipelines on the active tab and routes the ps:* messages from the popup, the
 // viewer and the content script (plus context menus and keyboard shortcuts):
+//   startPreview()    ps:set-target -> the content script opens the preview overlay
 //   generate()        ps:prepare -> debugger attach -> Page.printToPDF -> download
 //   captureElement()  debugger attach -> ps:prepare -> Page.captureScreenshot per part (preview, PNG, JPEG)
 //   exportMarkdown()  ps:to-markdown in the content script (no debugger)
-// Every page change made by ps:prepare is undone with ps:restore, whatever the outcome.
+// Every page change made by ps:prepare is undone with ps:restore, whatever the outcome. A job that
+// holds a tab (activeJobs) can be cancelled: Close or Esc in the overlay (ps:cancel-export) or the
+// user dismissing Chrome's debugging bar (onDebuggerDetach).
 import { loadSettings, saveSettings, normalizeSettings } from './lib/settings.js';
 import { buildPrintParams, layoutWidthPx, buildFilename } from './lib/print-params.js';
 import { MAX_PAGE_INCHES, CSS_PX_PER_INCH } from './lib/paper-sizes.js';
@@ -19,18 +22,43 @@ const PREVIEW_TTL_MS = 15 * 60 * 1000;
 // texture limit) the output wraps around and repeats the top of the capture.
 const MAX_CAPTURE_PX = 16384;
 const JPEG_QUALITY = 92;
-// The preview is captured at screen resolution; keep its data URL (sent to the page) reasonably small.
+// The preview is captured at screen resolution as JPEG; keep its data URL (sent to the page)
+// reasonably small. A 1200 x 6000 CSS px photo at device scale 2 came to 4.3 MB at quality 80.
 const PREVIEW_MAX_PIXELS = 32e6;
+const PREVIEW_JPEG_QUALITY = 80;
 const LAST_FORMAT_KEY = 'previewFormat'; // chrome.storage.local: last format chosen in the preview overlay
 const PREVIEW_FORMATS = ['pdf', 'png', 'jpeg', 'markdown'];
 // Tall elements are captured (and shown / saved) as parts of at most this many CSS pixels each, so
 // every image stays readable and far below the capture limit.
 const SEGMENT_PX = 1600;
 
-const activeJobs = new Set(); // tabIds currently generating
+const EXPORT_PREPS = ['none', 'article', 'element'];
+// The job that holds each tab: one export, preview capture or Download at a time.
+const activeJobs = new Map(); // tabId -> { requestId, prep, preview, abort: AbortController }
 const previewJobs = new Map(); // jobId -> { base64, filename, title, autoDownload, createdAt } (viewer fallback)
 
 class UserError extends Error {}
+/** Thrown inside an export when its job's signal aborts. `reason` is the signal's abort reason. */
+class CaptureAborted extends Error {
+  constructor(reason) {
+    super('Cancelled.');
+    this.reason = reason;
+  }
+}
+/** Abort reason set when the user dismisses Chrome's debugging bar. */
+class DebuggerClosed extends Error {}
+/** The tab closed, navigated or stopped answering while an export was running. */
+class PageGone extends UserError {
+  constructor() {
+    super(PAGE_GONE_EN);
+  }
+}
+const DEBUGGER_CLOSED = "The export stopped because Chrome's debugging bar was closed. Try again.";
+// English fallback; the worker answers with the user's language (preview_errorInterrupted).
+const PAGE_GONE_EN = 'The page was closed, reloaded or interrupted before the export finished. Try again.';
+// What Chrome rejects with when the page or the tab goes away under a message or a CDP call.
+const PAGE_GONE_RE =
+  /message channel closed|message port closed|Receiving end does not exist|back\/forward cache|No tab with (given )?id|Extension context invalidated/i;
 
 // English fallbacks for the in-page UI (picker toolbar + element preview overlay). Translations from
 // _locales/<lang>/messages.json override them key by key (see uiStrings()).
@@ -41,12 +69,15 @@ const PICKER_STRINGS_EN = {
   picker_hintRemove: 'Click anything to remove it. ↑/↓ widen or narrow. Press Done when finished.',
   picker_removedCount: '$1 removed',
   picker_undo: 'Undo',
-  picker_savePdf: 'Save PDF',
+  picker_savePdf: 'Preview',
   picker_done: 'Done',
   picker_cancel: 'Cancel',
   picker_errorNoElement: 'Nothing selected. Click an element on the page first.',
   preview_title: 'Export this element',
+  preview_titlePage: 'Export this page',
+  preview_titleArticle: 'Export this article',
   preview_caption: '$1 · $2×$3 px',
+  preview_captionSize: '$1×$2 px',
   preview_format: 'Format',
   preview_formatPdf: 'PDF',
   preview_formatPng: 'PNG',
@@ -56,16 +87,20 @@ const PICKER_STRINGS_EN = {
   preview_copyImage: 'Copy image',
   preview_copied: 'Image copied to the clipboard',
   preview_reselect: 'Reselect',
+  preview_selectPart: 'Select part',
   preview_close: 'Close',
   preview_loading: 'Rendering preview…',
   preview_saving: 'Saving…',
   preview_saved: 'Saved $1',
   preview_imageAlt: 'Preview of the selected element',
+  preview_imageAltPage: 'Preview of the page',
+  preview_imageAltArticle: 'Preview of the article',
   preview_warningScaled:
-    'This element is very large, so the image is reduced to $1× to stay within Chrome’s 16,384 px limit.',
-  preview_errorCapture: 'Could not capture this element.',
+    'The image is very large, so it is reduced to $1× to stay within Chrome’s 16,384 px limit.',
+  preview_errorCapture: 'Could not capture the preview.',
   preview_errorCopy: 'Could not copy the image. Download it instead.',
-  preview_errorGeneric: 'Something went wrong. Try again or reselect the element.',
+  preview_errorGeneric: 'Something went wrong. Try again.',
+  preview_errorInterrupted: PAGE_GONE_EN,
   preview_downloadAll: 'Download all parts',
   preview_part: 'Part $1 of $2',
   preview_copyPart: 'Copy',
@@ -103,20 +138,31 @@ async function uiStrings(settings) {
  * @param {'none'|'article'|'element'} [opts.prep]
  * @param {'download'|'return'} [opts.output]  Missing (or anything else) means download; 'return'
  *   hands the base64 PDF back to the caller (tests).
+ * @param {number} [opts.requestId]  The overlay's Download id; ps:cancel-export with it cancels the job.
+ * A cancel returns { ok: false, aborted: true }.
  */
-async function generate({ tabId, settings, prep = 'none', output }) {
+async function generate({ tabId, settings, prep = 'none', output, requestId }) {
   settings = normalizeSettings(settings || (await loadSettings()));
-  claimTab(tabId, 'A PDF is already being generated for this tab.');
+  const job = claimTab(tabId, 'A PDF is already being generated for this tab.', { requestId, prep });
+  const { signal } = job.abort;
   try {
     progress(tabId, 'prepare', 'Preparing page…');
     const tab = await readyTab(tabId);
-    const prepMsg = { prep, loadLazy: settings.loadLazy, ...scanOptions(settings) };
-    const { data, title, printWarning, lazy } = await withPreparedPage(tabId, prepMsg, (prepResult) =>
-      withDebugger(tabId, async (target) => {
-        const { data, warning } = await printPage(target, tabId, settings);
-        return { data, printWarning: warning, title: pageTitle(prepResult, tab), lazy: prepResult.lazy };
-      }),
+    const prepMsg = { prep, loadLazy: settings.loadLazy, requestId, ...scanOptions(settings) };
+    const { data, title, printWarning, lazy } = await withPreparedPage(
+      tabId,
+      prepMsg,
+      (prepResult) => {
+        throwIfAborted(signal);
+        return withDebugger(tabId, async (target) => {
+          throwIfAborted(signal);
+          const { data, warning } = await printPage(target, tabId, settings);
+          return { data, printWarning: warning, title: pageTitle(prepResult, tab), lazy: prepResult.lazy };
+        });
+      },
+      signal,
     );
+    throwIfAborted(signal);
     const lazyWarning =
       lazy && !lazy.complete ? t(await getMessages(settings.language), 'status_lazyIncomplete') : null;
     const warning = [printWarning, lazyWarning].filter(Boolean).join(' ') || null;
@@ -128,7 +174,7 @@ async function generate({ tabId, settings, prep = 'none', output }) {
     succeeded(tabId);
     return { ok: true, filename, bytes: base64ByteLength(data), warning };
   } catch (err) {
-    throw failed(tabId, err);
+    return abortedOr(tabId, err);
   } finally {
     activeJobs.delete(tabId);
     progress(tabId, 'done', '');
@@ -222,9 +268,20 @@ function splitRect(rect, segment = SEGMENT_PX) {
  */
 async function captureElement(
   tabId,
-  { settings, format = 'png', scale = null, quality, maxPixels = Infinity, part = null },
+  {
+    settings,
+    format = 'png',
+    scale = null,
+    quality,
+    maxPixels = Infinity,
+    part = null,
+    prep = 'element',
+    requestId,
+    preview = false,
+  },
 ) {
-  claimTab(tabId, 'An export is already running for this tab.');
+  const job = claimTab(tabId, 'An export is already running for this tab.', { requestId, prep, preview });
+  const { signal } = job.abort;
   try {
     const tab = await readyTab(tabId);
     // Unlike generate(), attach before preparing: attaching shows Chrome's "started debugging this
@@ -233,47 +290,60 @@ async function captureElement(
     // of the clip instead of rendering the rest.
     return await withDebugger(tabId, async (target) => {
       await waitForStableViewport(target);
-      const prepMsg = { prep: 'element', loadLazy: false, ...scanOptions(settings) };
-      return withPreparedPage(tabId, prepMsg, async (prepResult) => {
-        const rect = requireOk(
-          await sendContent(tabId, { type: 'ps:picked-rect' }),
-          'The selected element is gone. Select it again.',
-        );
-        if (rect.width < 1 || rect.height < 1)
-          throw new UserError('The selected element has no visible size.');
-        const clips = splitRect(rect);
-        if (part != null && !clips[part - 1]) throw new UserError('This part of the image no longer exists.');
-        // Output pixels per clip.scale unit: devicePixelRatio (incl. page zoom) on real displays,
-        // but not under DevTools device emulation, so measure it instead of trusting
-        // window.devicePixelRatio. One scale for every part, so the parts line up.
-        const ratio = await captureRatio(target);
-        const wanted = Math.min(
-          scale == null ? ratio : scale,
-          Math.sqrt(maxPixels / (rect.width * rect.height)),
-        );
-        const outScale = capScale(rect, wanted);
-        const indexes = part == null ? clips.map((_, i) => i) : [part - 1];
-        const parts = [];
-        for (const i of indexes) {
-          const data = await screenshotClip(target, clips[i], { format, scale: outScale, ratio, quality });
-          parts.push({
-            part: i + 1,
-            data,
-            cssHeight: clips[i].height,
-            imageWidth: Math.round(clips[i].width * outScale),
-            imageHeight: Math.round(clips[i].height * outScale),
-          });
-        }
-        return {
-          parts,
-          count: clips.length,
-          scale: outScale,
-          scaledDown: outScale < wanted,
-          rect,
-          title: pageTitle(prepResult, tab),
-          tab,
-        };
-      });
+      const prepMsg = {
+        prep,
+        loadLazy: prep === 'element' ? false : settings.loadLazy,
+        requestId,
+        ...scanOptions(settings),
+      };
+      return withPreparedPage(
+        tabId,
+        prepMsg,
+        async (prepResult) => {
+          const rect = requireOk(
+            await sendContent(tabId, { type: 'ps:picked-rect' }),
+            'The selected element is gone. Select it again.',
+          );
+          if (rect.width < 1 || rect.height < 1)
+            throw new UserError('The selected element has no visible size.');
+          const clips = splitRect(rect);
+          if (part != null && !clips[part - 1])
+            throw new UserError('This part of the image no longer exists.');
+          // Output pixels per clip.scale unit: devicePixelRatio (incl. page zoom) on real displays,
+          // but not under DevTools device emulation, so measure it instead of trusting
+          // window.devicePixelRatio. One scale for every part, so the parts line up.
+          const ratio = await captureRatio(target);
+          const wanted = Math.min(
+            scale == null ? ratio : scale,
+            Math.sqrt(maxPixels / (rect.width * rect.height)),
+          );
+          const outScale = capScale(rect, wanted);
+          const indexes = part == null ? clips.map((_, i) => i) : [part - 1];
+          const parts = [];
+          for (const i of indexes) {
+            throwIfAborted(signal);
+            const data = await screenshotClip(target, clips[i], { format, scale: outScale, ratio, quality });
+            parts.push({
+              part: i + 1,
+              data,
+              cssHeight: clips[i].height,
+              imageWidth: Math.round(clips[i].width * outScale),
+              imageHeight: Math.round(clips[i].height * outScale),
+            });
+          }
+          return {
+            parts,
+            count: clips.length,
+            scale: outScale,
+            scaledDown: outScale < wanted,
+            rect,
+            title: pageTitle(prepResult, tab),
+            tab,
+            signal,
+          };
+        },
+        signal,
+      );
     });
   } finally {
     activeJobs.delete(tabId);
@@ -318,23 +388,29 @@ function partFilename(filename, part) {
 }
 
 /**
- * Show the in-page preview overlay for the element picked with the "select element" picker.
- * ps:show-preview carries one PNG data URL per part (screen resolution, whole element within
- * PREVIEW_MAX_PIXELS). Returns { ok, width, height, parts, warning } (CSS pixels of the element).
+ * Capture what the overlay's target is (the picked element, the article or the whole page, by
+ * `prep`) and show it with ps:show-preview: one JPEG data URL per part (screen resolution, whole
+ * target within PREVIEW_MAX_PIXELS), tagged with `requestId` so the overlay ignores a stale one.
+ * Returns { ok, width, height, parts, warning } (CSS pixels of the target), or
+ * { ok: false, aborted: true } after Close or Esc.
  */
-async function previewElement(tabId) {
+async function previewElement(tabId, { prep = 'element', requestId } = {}) {
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
   let cap;
   try {
     cap = await captureElement(tabId, {
       settings,
-      format: 'png',
+      format: 'jpeg',
+      quality: PREVIEW_JPEG_QUALITY,
       scale: null,
       maxPixels: PREVIEW_MAX_PIXELS,
+      prep,
+      requestId,
+      preview: true,
     });
   } catch (err) {
-    throw failed(tabId, err);
+    return abortedOr(tabId, err);
   }
   // What an image export at the configured scale would be reduced to (shown in the caption).
   const imageScale = clampImageScale(settings.imageScale);
@@ -345,8 +421,9 @@ async function previewElement(tabId) {
   if (format === 'markdown' && !markdownEnabled) format = 'pdf';
   const res = await sendContent(tabId, {
     type: 'ps:show-preview',
+    requestId,
     parts: cap.parts.map((p) => ({
-      dataUrl: 'data:image/png;base64,' + p.data,
+      dataUrl: 'data:image/jpeg;base64,' + p.data,
       width: cap.rect.width,
       height: p.cssHeight,
     })),
@@ -376,14 +453,26 @@ async function previewElement(tabId) {
  * file, the downloads API cannot reuse a chosen directory). `part` (1-based) saves only that part.
  * `output: 'return'` returns the base64 data of each part instead (tests).
  */
-async function exportElementImage(tabId, format = 'png', { output, part = null } = {}) {
+async function exportElementImage(
+  tabId,
+  format = 'png',
+  { output, part = null, prep = 'element', requestId } = {},
+) {
   format = format === 'jpeg' || format === 'jpg' ? 'jpeg' : 'png';
   const settings = await loadSettings();
   const strings = await uiStrings(settings);
   const scale = clampImageScale(settings.imageScale);
   const mime = 'image/' + format;
   try {
-    const cap = await captureElement(tabId, { settings, format, scale, quality: JPEG_QUALITY, part });
+    const cap = await captureElement(tabId, {
+      settings,
+      format,
+      scale,
+      quality: JPEG_QUALITY,
+      part,
+      prep,
+      requestId,
+    });
     const filename = buildFilename(
       settings.filenameTemplate,
       { title: cap.title, domain: hostnameOf(cap.tab.url) },
@@ -410,6 +499,7 @@ async function exportElementImage(tabId, format = 'png', { output, part = null }
       return { ...result, mime, parts: parts.map(({ data, ...p }) => ({ ...p, base64: data })) };
     }
     let bytes = 0;
+    throwIfAborted(cap.signal);
     for (const p of parts) {
       await download(p.data, p.filename, settings.saveAs, mime);
       bytes += base64ByteLength(p.data);
@@ -423,7 +513,7 @@ async function exportElementImage(tabId, format = 'png', { output, part = null }
     }));
     return { ...result, parts: saved, bytes };
   } catch (err) {
-    throw failed(tabId, err);
+    return abortedOr(tabId, err);
   }
 }
 
@@ -485,8 +575,18 @@ function rememberPreviewFormat(format) {
 // Debugger helpers
 // ---------------------------------------------------------------------------
 
-function cdp(target, method, params) {
-  return chrome.debugger.sendCommand(target, method, params || {});
+// Maps what Chrome rejects with when the debugger goes away (the user dismissed its bar) or the tab
+// closes, so no CDP text naming a tab id reaches the user.
+async function cdp(target, method, params) {
+  try {
+    return await chrome.debugger.sendCommand(target, method, params || {});
+  } catch (err) {
+    const msg = errorMessage(err);
+    if (/Debugger is not attached|Detached while handling command|canceled/i.test(msg))
+      throw new UserError(DEBUGGER_CLOSED);
+    if (PAGE_GONE_RE.test(msg)) throw new PageGone();
+    throw err;
+  }
 }
 
 async function attach(tabId) {
@@ -570,9 +670,6 @@ async function printToPdf(target, params) {
       const { generateDocumentOutline, ...rest } = params;
       return cdp(target, 'Page.printToPDF', rest);
     }
-    if (/Detached while handling command|canceled/i.test(msg)) {
-      throw new UserError('PDF generation was cancelled.');
-    }
     throw err;
   }
 }
@@ -618,13 +715,20 @@ async function ensureContentScript(tabId) {
   }
 }
 
-function sendContent(tabId, message) {
-  return chrome.tabs.sendMessage(tabId, message);
+async function sendContent(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (err) {
+    if (PAGE_GONE_RE.test(errorMessage(err))) throw new PageGone();
+    throw err;
+  }
 }
 
 /** Checks that Chrome lets extensions script the tab and injects the content script if needed. */
 async function readyTab(tabId) {
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await chrome.tabs.get(tabId).catch((err) => {
+    throw PAGE_GONE_RE.test(errorMessage(err)) ? new PageGone() : err;
+  });
   assertPrintable(tab);
   await ensureContentScript(tabId);
   return tab;
@@ -637,15 +741,27 @@ function scanOptions(settings) {
 
 /**
  * Prepares the page (ps:prepare: lazy content, isolation, fixed bars, scroll panes), runs
- * `fn(prepResult)` and always restores the page afterwards (ps:restore).
+ * `fn(prepResult)` and always restores the page afterwards (ps:restore). Restore runs only after
+ * the prepare reply, never while the pass is still running. When `signal` aborts before that
+ * reply, ps:abort-prepare stops the pass (Chrome delivers one sender's messages in order, so it
+ * never overtakes the ps:prepare it follows) and the aborted reply throws CaptureAborted.
  */
-async function withPreparedPage(tabId, prepMsg, fn) {
+async function withPreparedPage(tabId, prepMsg, fn, signal) {
+  const stopPass = () => sendContent(tabId, { type: 'ps:abort-prepare' }).catch(() => {});
   try {
-    const prepResult = requireOk(
-      await sendContent(tabId, { type: 'ps:prepare', ...prepMsg }),
-      'Could not prepare the page.',
-    );
-    return await fn(prepResult);
+    const pending = sendContent(tabId, { type: 'ps:prepare', ...prepMsg });
+    if (signal) {
+      if (signal.aborted) stopPass();
+      else signal.addEventListener('abort', stopPass, { once: true });
+    }
+    let res;
+    try {
+      res = await pending;
+    } finally {
+      signal?.removeEventListener('abort', stopPass);
+    }
+    if (res && res.aborted) throw new CaptureAborted(signal && signal.reason);
+    return await fn(requireOk(res, 'Could not prepare the page.'));
   } finally {
     await sendContent(tabId, { type: 'ps:restore' }).catch(() => {});
   }
@@ -755,10 +871,31 @@ function toUserFacing(err) {
   return e;
 }
 
-/** One export per tab at a time; release with activeJobs.delete(tabId). */
-function claimTab(tabId, busyMessage) {
+/**
+ * One export per tab at a time; release with activeJobs.delete(tabId). Returns the job that now
+ * holds the tab. A refused request never touches the running job's entry.
+ */
+function claimTab(tabId, busyMessage, { requestId, prep, preview = false } = {}) {
   if (activeJobs.has(tabId)) throw new UserError(busyMessage);
-  activeJobs.add(tabId);
+  const job = { requestId, prep, preview, abort: new AbortController() };
+  activeJobs.set(tabId, job);
+  return job;
+}
+
+function throwIfAborted(signal) {
+  if (signal.aborted) throw new CaptureAborted(signal.reason);
+}
+
+/**
+ * Ends an export that threw. A cancel from Close or Esc is not an error: { ok: false, aborted: true },
+ * no badge. A dismissed debugging bar and every other error flash the badge and throw.
+ */
+function abortedOr(tabId, err) {
+  if (err instanceof CaptureAborted) {
+    if (!(err.reason instanceof DebuggerClosed)) return { ok: false, aborted: true };
+    throw failed(tabId, new UserError(DEBUGGER_CLOSED));
+  }
+  throw failed(tabId, err);
 }
 
 function succeeded(tabId) {
@@ -813,6 +950,36 @@ async function startPicker(tabId, mode) {
   return sendContent(tabId, { type: 'ps:start-picker', mode, strings, theme: settings.theme || 'system' });
 }
 
+/**
+ * Opens the preview overlay for the whole page or the article (ps:set-target). The content script
+ * answers once the overlay is open in its loading state and then asks for the capture itself
+ * (ps:preview-element). A second request for the kind that is already loading is a no-op.
+ */
+async function startPreview(tabId, kind) {
+  const prep = kind === 'article' ? 'article' : 'none';
+  try {
+    await readyTab(tabId);
+    const settings = await loadSettings();
+    const strings = await uiStrings(settings);
+    // Checked after the awaits, in the same synchronous stretch as the send: a check at the top
+    // would let an export claim the tab during the awaits (formal/page-restore).
+    const job = activeJobs.get(tabId);
+    if (job && job.preview && job.prep === prep && !job.abort.signal.aborted) return { ok: true };
+    if (job) throw new UserError('Wait for the current export to finish before previewing.');
+    return requireOk(
+      await sendContent(tabId, { type: 'ps:set-target', kind, strings, theme: settings.theme || 'system' }),
+      'Could not open the preview.',
+    );
+  } catch (err) {
+    throw failed(tabId, err);
+  }
+}
+
+function exportTarget(prep) {
+  if (!EXPORT_PREPS.includes(prep)) throw new UserError('Unknown export target.');
+  return prep;
+}
+
 function senderTabId(sender) {
   const tabId = sender && sender.tab && sender.tab.id;
   if (tabId == null) throw new UserError('No tab for this request.');
@@ -827,33 +994,55 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg.type !== 'string' || !msg.type.startsWith('ps:')) return false;
   handleMessage(msg, sender)
     .then((result) => sendResponse(result ?? { ok: true }))
-    .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
+    .catch(async (err) => sendResponse({ ok: false, error: await replyText(err) }));
   return true; // keep the channel open for the async response
 });
 
+/** The error text for a reply: a PageGone in the user's language, anything else as thrown. */
+async function replyText(err) {
+  if (!(err instanceof PageGone)) return errorMessage(err);
+  try {
+    return t(await uiStrings(await loadSettings()), 'preview_errorInterrupted');
+  } catch {
+    return errorMessage(err);
+  }
+}
+
 async function handleMessage(msg, sender) {
   switch (msg.type) {
-    case 'ps:generate': {
+    case 'ps:open-preview': {
+      // Sent by the popup's Full page and Article only cards.
       const tabId = await targetTabId(msg);
-      return generate({ tabId, settings: msg.settings, prep: msg.prep || 'none', output: msg.output });
+      if (msg.kind !== 'page' && msg.kind !== 'article') throw new UserError('Unknown export target.');
+      return startPreview(tabId, msg.kind);
+    }
+    case 'ps:cancel-export': {
+      // Sent by the overlay when it closes while its capture or Download is still running.
+      const job = activeJobs.get(senderTabId(sender));
+      if (job && job.requestId === msg.requestId) job.abort.abort();
+      return { ok: true };
     }
     case 'ps:generate-from-content': {
-      // Sent by the in-page picker toolbar / preview overlay; uses saved settings.
+      // Sent by the preview overlay (PDF); uses saved settings.
       const tabId = senderTabId(sender);
+      const prep = exportTarget(msg.prep ?? 'none');
       if (msg.format) rememberPreviewFormat(msg.format);
-      return generate({ tabId, prep: msg.prep || 'none', output: msg.output });
+      return generate({ tabId, prep, output: msg.output, requestId: msg.requestId });
     }
-    case 'ps:preview-element':
-      // Sent by the picker after a click in "select element" mode.
-      return previewElement(msg.tabId ?? senderTabId(sender));
+    case 'ps:preview-element': {
+      // Sent by the content script once its overlay is open (page, article or picked element).
+      const prep = exportTarget(msg.prep ?? 'element');
+      return previewElement(msg.tabId ?? senderTabId(sender), { prep, requestId: msg.requestId });
+    }
     case 'ps:export-element': {
-      // Sent by the preview overlay: PNG / JPEG download of the picked element, every part or
-      // only `part` (1-based) of a split element.
+      // Sent by the preview overlay: PNG / JPEG download of the target, every part or only
+      // `part` (1-based) of a split image.
       const tabId = msg.tabId ?? senderTabId(sender);
+      const prep = exportTarget(msg.prep ?? 'element');
       const format = msg.format === 'jpeg' ? 'jpeg' : 'png';
       const part = Number.isInteger(msg.part) && msg.part >= 1 ? msg.part : null;
       rememberPreviewFormat(format);
-      return exportElementImage(tabId, format, { part });
+      return exportElementImage(tabId, format, { part, prep, requestId: msg.requestId });
     }
     case 'ps:set-theme': {
       // Sent by the preview overlay's light / dark toggle; the popup and options read it on open.
@@ -934,13 +1123,13 @@ function runLogged(promise) {
 chrome.runtime.onInstalled.addListener(installMenus);
 chrome.runtime.onStartup.addListener(installMenus);
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+function onMenuClicked(info, tab) {
   if (!tab || tab.id == null) return;
   switch (info.menuItemId) {
     case 'page':
-      return runLogged(generate({ tabId: tab.id }));
+      return runLogged(startPreview(tab.id, 'page'));
     case 'article':
-      return runLogged(generate({ tabId: tab.id, prep: 'article' }));
+      return runLogged(startPreview(tab.id, 'article'));
     case 'selectElement':
       return runLogged(startPicker(tab.id, 'print'));
     case 'removeElements':
@@ -950,18 +1139,27 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     default:
       return undefined;
   }
-});
+}
+chrome.contextMenus.onClicked.addListener(onMenuClicked);
 
-chrome.commands.onCommand.addListener((command, tab) => {
+function onCommand(command, tab) {
   const tabId = tab && tab.id;
-  if (tabId == null) return;
-  if (command === 'save-pdf') runLogged(generate({ tabId }));
-  if (command === 'save-article') runLogged(generate({ tabId, prep: 'article' }));
-});
+  if (tabId == null) return undefined;
+  if (command === 'save-pdf') return runLogged(startPreview(tabId, 'page'));
+  if (command === 'save-article') return runLogged(startPreview(tabId, 'article'));
+  return undefined;
+}
+chrome.commands.onCommand.addListener(onCommand);
 
-chrome.debugger.onDetach.addListener((source, reason) => {
-  if (reason === 'canceled_by_user') console.info('Web Snap: debugger detached by user on tab', source.tabId);
-});
+// The user pressed Cancel on Chrome's "started debugging this browser" bar: stop the job that holds
+// the tab. Only that reason: a closed tab detaches with target_closed, and the extension's own
+// detach in withDebugger fires no event at all (measured).
+function onDebuggerDetach(source, reason) {
+  if (reason !== 'canceled_by_user') return;
+  const job = activeJobs.get(source.tabId);
+  if (job) job.abort.abort(new DebuggerClosed(reason));
+}
+chrome.debugger.onDetach.addListener(onDebuggerDetach);
 
 // Test hook for test/ and scripts/. Harmless in production.
 globalThis.__websnap = {
@@ -972,5 +1170,9 @@ globalThis.__websnap = {
   startPicker: (tabId, mode) => handleMessage({ type: 'ps:start-picker', tabId, mode }, {}),
   pageState: (tabId) => handleMessage({ type: 'ps:page-state', tabId }, {}),
   resetPage: (tabId) => handleMessage({ type: 'ps:reset-page', tabId }, {}),
+  // The real listeners, which Playwright cannot trigger with an accelerator or a context menu.
+  command: (command, tabId) => onCommand(command, { id: tabId }),
+  menu: (menuItemId, tabId) => onMenuClicked({ menuItemId }, { id: tabId }),
+  debuggerDetached: (source, reason) => onDebuggerDetach(source, reason),
   splitRect,
 };

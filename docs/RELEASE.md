@@ -21,16 +21,22 @@ dot-separated integers, so there are no prerelease versions.
 - [ ] `npm run check:locales` reports all 8 locales in sync and every `extDescription` ≤ 132 chars.
 - [ ] Manual smoke test with the unpacked `extension/` folder in a normal Chrome profile
       (the tests use a copy with extra `host_permissions`; this checks real `activeTab` behaviour):
-  - [ ] Popup: Full page and Article only download directly; the cards have no extra buttons.
+  - [ ] Popup: Full page and Article only open the preview overlay; nothing downloads until Download.
   - [ ] Layout toggle and Export settings: the summary line follows every change; the panel's
         open/closed state survives reopening the popup.
-  - [ ] Select element → full-page preview overlay with the toolbar at the top: PDF, PNG and JPEG
-        download; Copy image (PNG and JPEG) pastes into another app; Reselect; light / dark toggle;
-        Close and Esc close it. A very tall element is split into numbered parts shown stacked:
-        each part's Copy and Download work, and the toolbar's Download saves all parts.
-  - [ ] Remove elements (Undo, Save PDF, Done) and Reset page in the popup.
-  - [ ] Context menu: all five entries, including from the toolbar icon's menu.
-  - [ ] `Alt+Shift+P` and `Alt+Shift+A`.
+  - [ ] Select element → full-page preview overlay with the toolbar at the top. The Format
+        dropdown picks PDF, PNG or JPEG, and Download saves that format; Copy image (PNG and JPEG)
+        pastes into another app; Reselect; light / dark toggle; Close and Esc close it. A very tall
+        element is split into numbered parts shown stacked: each part's Copy and Download work, and
+        the toolbar's Download saves all parts.
+  - [ ] Full page and Article only previews: the same Format dropdown and Download; Select part
+        narrows the preview to one element.
+  - [ ] Esc while a long page is still previewing restores the page and saves nothing.
+  - [ ] Remove elements (Undo, Preview, Done) and Reset page in the popup. The remove bar's Preview
+        button opens the preview.
+  - [ ] Context menu: all five entries, including from the toolbar icon's menu. Preview page and
+        Preview article open the preview.
+  - [ ] `Alt+Shift+P` and `Alt+Shift+A` open the page and article previews.
   - [ ] Theme button cycles System → Light → Dark; options page and preview overlay follow.
   - [ ] Language selector: switch to at least one non-Latin language (ja or hi) and back; picker
         bar and preview overlay are translated.
@@ -81,7 +87,7 @@ light theme unless stated. Plan:
 | #   | Shot                                                                    | How to produce                                                                                                                                                                                                                           |
 | --- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Popup over an article page: "Full page / Article only / Select element" | Open a demo article at 1280 × 800, render `popup.html` (as `scripts/screenshot-ui.mjs` does, 360 px wide, device scale 2 for sharpness) and composite it at the top right under a mock toolbar.                                          |
-| 2   | Element preview overlay with PDF / PNG / JPEG                           | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
+| 2   | Element preview overlay with the Format menu                            | `node scripts/screenshot-preview.mjs` → `docs/images/preview-overlay-light.png` (1280 × 800). Before the store capture, point `FIXTURE` / `TARGET` at a realistic demo element (a chart card or recipe box) instead of the red test box. |
 | 3   | Export settings expanded                                                | Composite `popup-expanded-light.png` (crop to the Paper → Content groups) next to a sample PDF page rendered from the demo article.                                                                                                      |
 | 4   | Dark mode                                                               | Same as 1 with `popup-default-dark.png` and `preview-overlay-dark.png` side by side on a dark background.                                                                                                                                |
 | 5   | Remove elements / options                                               | The remove-mode bar on the demo page with a removed banner, or `options-light.png` framed on the canvas with the language menu open.                                                                                                     |

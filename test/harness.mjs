@@ -15,6 +15,8 @@ const tempDir = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
 async function serveFixtures() {
   const server = http.createServer((req, res) => {
+    // Keeps the request open without answering (an image that never loads). Closed with the server.
+    if (req.url.split('?')[0] === '/__hang') return;
     const file = path.join(fixturesDir, path.normalize(req.url.split('?')[0]).replace(/^\/+/, ''));
     if (!file.startsWith(fixturesDir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
@@ -23,6 +25,7 @@ async function serveFixtures() {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     fs.createReadStream(file).pipe(res);
   });
+  server.on('connection', (socket) => socket.on('error', () => {}));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   return { server, base: `http://127.0.0.1:${server.address().port}` };
 }
@@ -31,6 +34,8 @@ export async function launchExtension({
   extDir = path.join(root, 'extension'),
   viewport,
   headless = !process.env.HEADED,
+  deviceScaleFactor,
+  recordVideoDir,
 } = {}) {
   const { server, base } = await serveFixtures();
   const testExtDir = tempDir('websnap-ext-');
@@ -41,6 +46,7 @@ export async function launchExtension({
 
   async function close() {
     await context?.close();
+    server.closeAllConnections?.();
     server.close();
     for (const dir of [testExtDir, userDataDir, downloadDir]) {
       // Chromium can hold the profile for a moment after closing.
@@ -69,8 +75,16 @@ export async function launchExtension({
       headless,
       channel: 'chromium',
       ignoreDefaultArgs: ['--disable-extensions'],
-      args: [`--disable-extensions-except=${testExtDir}`, `--load-extension=${testExtDir}`],
+      args: [
+        `--disable-extensions-except=${testExtDir}`,
+        `--load-extension=${testExtDir}`,
+        // Not Playwright's deviceScaleFactor option: the debugger session drops that emulation.
+        ...(deviceScaleFactor ? [`--force-device-scale-factor=${deviceScaleFactor}`] : []),
+      ],
       ...(viewport && { viewport }),
+      ...(recordVideoDir && {
+        recordVideo: { dir: recordVideoDir, size: viewport || { width: 1280, height: 800 } },
+      }),
     });
     // Playwright intercepts downloads (Browser.setDownloadBehavior 'allowAndName'), saving every file
     // as <playwright-artifacts>/<GUID> and discarding the filename the extension asked for. Hand

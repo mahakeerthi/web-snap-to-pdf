@@ -2,7 +2,8 @@
 // Drives the real popup, picker, preview overlay and options page of the extension the way a user
 // does, and keeps proof of each journey. See .claude/skills/verify-web-snap-pdf/SKILL.md.
 //   node scripts/verify-popup.mjs doctor
-//   node scripts/verify-popup.mjs drive <full-page|article|select-element-png|remove-reset|markdown|all>
+//   node scripts/verify-popup.mjs drive <full-page|page-png|article|select-element-png|remove-reset|markdown|all>
+// VIDEO_DIR=<dir> records each journey with Playwright video into <dir>/<journey>.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -168,15 +169,31 @@ async function hoverAndClick(page, selector) {
   await page.mouse.click(p.x, p.y);
 }
 
-async function popupPdfExport(ctx, file, card, expect) {
+// Clicks a popup card (Full page or Article only) and waits for the preview overlay on the fixture
+// page. The real popup closes itself here; a script-opened tab does not, so a popup is used once.
+async function openPreviewFromCard(ctx, popup, fixture, card, title) {
+  const overlay = preview(fixture.page);
+  const before = await downloadIds(ctx);
+  await click(ctx, popup, card);
+  await overlay.locator('.stage canvas[data-ready]').first().waitFor({ timeout: 90000 });
+  const heading = (await overlay.locator('h2').textContent()).trim();
+  ctx.check(heading === title, `${card} opens the "${title}" preview`, heading);
+  ctx.check(
+    (await downloadIds(ctx)).length === before.length,
+    `${card}: nothing downloads before Download is clicked`,
+  );
+  return { overlay, before };
+}
+
+async function popupPdfExport(ctx, file, card, title, expect) {
   const fixture = await openFixture(ctx, file);
   const popup = await openPopup(ctx, fixture);
   await shot(ctx, popup, 'popup.png');
-  const before = await downloadIds(ctx);
-  await click(ctx, popup, card);
+  const { overlay, before } = await openPreviewFromCard(ctx, popup, fixture, card, title);
+  await shot(ctx, fixture.page, 'overlay.png');
+  await overlay.locator('select.format').selectOption('pdf');
+  await click(ctx, fixture.page, '[data-websnap-ui="preview"] .download');
   const { file: pdf, record } = keepDownload(ctx, await waitForNewDownload(ctx, before), card);
-  await expectSavedStatus(ctx, popup, record.filename);
-  await shot(ctx, popup, 'popup-saved.png');
   inspectPdf(ctx, pdf, record);
   expectMarks(ctx, record, expect);
 }
@@ -185,13 +202,57 @@ const JOURNEYS = {
   'full-page': {
     fixture: 'article.html',
     run: (ctx) =>
-      popupPdfExport(ctx, 'article.html', '#act-page', { present: ['ARTICLE-MARK', 'SIDEBAR-MARK'] }),
+      popupPdfExport(ctx, 'article.html', '#act-page', 'Export this page', {
+        present: ['ARTICLE-MARK', 'SIDEBAR-MARK'],
+      }),
+  },
+
+  'page-png': {
+    fixture: 'article.html (Format dropdown, PNG)',
+    async run(ctx) {
+      const fixture = await openFixture(ctx, 'article.html');
+      const popup = await openPopup(ctx, fixture);
+      const { overlay, before } = await openPreviewFromCard(
+        ctx,
+        popup,
+        fixture,
+        '#act-page',
+        'Export this page',
+      );
+      const caption = await overlay.locator('.caption').textContent();
+      const height = Number(/×(\d+) px/.exec(caption)[1]);
+      const parts = Math.ceil(height / 1600);
+      const format = overlay.locator('select.format');
+      ctx.check(
+        (await format.locator('option').allTextContents()).join() === 'PDF,PNG,JPEG',
+        'the Format dropdown offers PDF, PNG and JPEG',
+      );
+      await format.selectOption('png');
+      ctx.controls.push('overlay: select.format = png');
+      await shot(ctx, fixture.page, 'overlay-png.png');
+      await click(ctx, fixture.page, '[data-websnap-ui="preview"] .download');
+      let seen = before;
+      let total = 0;
+      for (let i = 0; i < parts; i++) {
+        const item = await waitForNewDownload(ctx, seen);
+        seen = [...seen, item.id];
+        const { file, record } = keepDownload(ctx, item, `page PNG part ${i + 1}`);
+        record.image = imageSize(fs.readFileSync(file));
+        ctx.check(record.image.type === 'png', `part ${i + 1} is a PNG`, record.image.type);
+        total += record.image.height;
+      }
+      ctx.check(
+        Math.abs(total - height * 2) <= parts,
+        `${parts} PNG parts add up to the page at imageScale 2`,
+        `${total} px for ${height} CSS px`,
+      );
+    },
   },
 
   article: {
     fixture: 'article.html',
     run: (ctx) =>
-      popupPdfExport(ctx, 'article.html', '#act-article', {
+      popupPdfExport(ctx, 'article.html', '#act-article', 'Export this article', {
         present: ['ARTICLE-MARK'],
         absent: ['SIDEBAR-MARK'],
       }),
@@ -210,15 +271,12 @@ const JOURNEYS = {
       const overlay = preview(fixture.page);
       await overlay.locator('.stage canvas[data-ready]').first().waitFor({ timeout: 20000 });
       ctx.check(true, 'preview overlay rendered the element');
-      const png = overlay.locator('.seg [data-format="png"]');
-      await png.click();
-      ctx.controls.push('overlay: .seg [data-format="png"]');
+      await overlay.locator('select.format').selectOption('png');
+      ctx.controls.push('overlay: select.format = png');
       await fixture.page.waitForFunction(
         () =>
-          document
-            .querySelector('[data-websnap-ui="preview"]')
-            .shadowRoot.querySelector('.seg [data-format="png"]')
-            .getAttribute('aria-checked') === 'true',
+          document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('select.format')
+            .value === 'png',
       );
       await shot(ctx, fixture.page, 'overlay-png.png');
       const before = await downloadIds(ctx);
@@ -262,22 +320,32 @@ const JOURNEYS = {
       ctx.check(resetShown && /\b1\b/.test(resetText), 'popup offers reset for 1 element', resetText);
       await shot(ctx, popup, 'popup-removed.png');
 
-      let before = await downloadIds(ctx);
-      await click(ctx, popup, '#act-page');
-      const removed = keepDownload(ctx, await waitForNewDownload(ctx, before), 'after removal');
-      await expectSavedStatus(ctx, popup, removed.record.filename);
+      const exportFromPopup = async (fromPopup, label) => {
+        const { overlay, before } = await openPreviewFromCard(
+          ctx,
+          fromPopup,
+          fixture,
+          '#act-page',
+          'Export this page',
+        );
+        await overlay.locator('select.format').selectOption('pdf');
+        await click(ctx, fixture.page, '[data-websnap-ui="preview"] .download');
+        return keepDownload(ctx, await waitForNewDownload(ctx, before), label);
+      };
+      const removed = await exportFromPopup(popup, 'after removal');
       inspectPdf(ctx, removed.file, removed.record);
       expectMarks(ctx, removed.record, { present: ['ARTICLE-MARK'], absent: ['SIDEBAR-MARK'] });
 
-      await click(ctx, popup, '#act-reset');
-      await popup.waitForSelector('#act-reset.hidden', { state: 'attached', timeout: 5000 }).catch(() => {});
-      ctx.check(!(await popup.isVisible('#act-reset')), 'reset card hides after reset');
+      const resetPopup = await openPopup(ctx, fixture);
+      await click(ctx, resetPopup, '#act-reset');
+      await resetPopup
+        .waitForSelector('#act-reset.hidden', { state: 'attached', timeout: 5000 })
+        .catch(() => {});
+      ctx.check(!(await resetPopup.isVisible('#act-reset')), 'reset card hides after reset');
       ctx.check((await sidebarDisplay()) !== 'none', '#sidebar visible on the page after reset');
-      await shot(ctx, popup, 'popup-reset.png');
+      await shot(ctx, resetPopup, 'popup-reset.png');
 
-      before = await downloadIds(ctx);
-      await click(ctx, popup, '#act-page');
-      const restored = keepDownload(ctx, await waitForNewDownload(ctx, before), 'after reset');
+      const restored = await exportFromPopup(await openPopup(ctx, fixture), 'after reset');
       inspectPdf(ctx, restored.file, restored.record);
       expectMarks(ctx, restored.record, { present: ['ARTICLE-MARK', 'SIDEBAR-MARK'] });
     },
@@ -341,7 +409,10 @@ async function driveOne(name, runDir) {
     },
   };
   console.log(`\n▶ ${name}`);
-  const launched = await launchExtension({ viewport: VIEWPORT });
+  const launched = await launchExtension({
+    viewport: VIEWPORT,
+    ...(process.env.VIDEO_DIR && { recordVideoDir: path.join(process.env.VIDEO_DIR, name) }),
+  });
   Object.assign(ctx, launched);
   try {
     await journey.run(ctx);

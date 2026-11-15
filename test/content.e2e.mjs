@@ -13,7 +13,7 @@ import { launchExtension, createReporter, tabIdForUrl } from './harness.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'test/out');
 fs.mkdirSync(outDir, { recursive: true });
-const { context, sw, base, downloadDir, close } = await launchExtension({
+const { context, sw, extensionId, base, downloadDir, close } = await launchExtension({
   // EXT_DIR lets you run the suite against another build (e.g. an older content.js) for comparison.
   extDir: process.env.EXT_DIR ? path.resolve(process.env.EXT_DIR) : undefined,
   viewport: { width: 1200, height: 800 },
@@ -190,7 +190,8 @@ async function previewInfo(page) {
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
     };
     const canvases = [...sr.querySelectorAll('.stage canvas')];
-    const seg = [...sr.querySelectorAll('.seg button')];
+    const select = q('select.format');
+    const options = select ? [...select.options] : [];
     return {
       hostDisplay: getComputedStyle(host).display,
       title: q('h2').textContent,
@@ -212,14 +213,18 @@ async function previewInfo(page) {
         ? { width: canvases[0].width, height: canvases[0].height, cssWidth: canvases[0].style.width }
         : null,
       canvases: canvases.map((c) => ({ width: c.width, height: c.height, cssWidth: c.style.width })),
+      partHeads: [...sr.querySelectorAll('.part-head')].map(shown),
+      partsGap: q('.parts') ? getComputedStyle(q('.parts')).rowGap : null,
       parts: [...sr.querySelectorAll('.part')].map((p) => ({
         label: p.querySelector('.part-label') ? p.querySelector('.part-label').textContent : '',
         copy: shown(p.querySelector('.part-copy')),
         download: shown(p.querySelector('.part-download')),
       })),
-      formats: seg.map((b) => b.dataset.format),
-      labels: seg.map((b) => b.textContent),
-      checked: (seg.find((b) => b.getAttribute('aria-checked') === 'true') || {}).dataset?.format || null,
+      formats: options.map((o) => o.value),
+      labels: options.map((o) => o.textContent),
+      checked: select && options.length ? select.value : null,
+      formatLabel: select && select.labels[0] ? select.labels[0].textContent : '',
+      formatShown: shown(select),
       copyVisible: shown(q('.copy')),
       copyTitle: q('.copy').title,
       downloadLabel: q('.download').textContent,
@@ -229,11 +234,11 @@ async function previewInfo(page) {
         .filter(shown)
         .map((b) => b.getAttribute('aria-label') || b.textContent),
       actionsRight: Math.max(
-        ...[...sr.querySelectorAll('.toolbar .btn, .seg')]
+        ...[...sr.querySelectorAll('.toolbar .btn, .format-box')]
           .filter(shown)
           .map((b) => b.getBoundingClientRect().right),
       ),
-      focused: sr.activeElement ? sr.activeElement.className || sr.activeElement.dataset.format : null,
+      focused: sr.activeElement ? sr.activeElement.className : null,
     };
   });
 }
@@ -267,23 +272,27 @@ async function clickPreview(page, selector) {
   await page.mouse.move(r.x, r.y);
   await page.mouse.click(r.x, r.y);
 }
+// Pick a format in the overlay's Format dropdown.
+async function chooseFormat(page, format) {
+  await page.locator('[data-websnap-ui="preview"] select.format').selectOption(format);
+}
 async function closePreviewOverlay(page) {
   await clickPreview(page, '.close');
   await waitFor(async () => !(await previewInfo(page)), { label: 'preview overlay closed' });
 }
-async function waitForPreview(page) {
+async function waitForPreview(page, timeout = 15000) {
   return waitFor(
     async () => {
       const info = await previewInfo(page);
       return info && (info.ready || info.error) ? info : null;
     },
-    { label: 'preview overlay' },
+    { label: 'preview overlay', timeout },
   );
 }
 // Start the select-element picker, hover `selector` (scrolled into view unless `scroll: false`),
 // widen the highlight with ArrowUp until it names `widenTo` (e.g. 'table' when the pointer is over
 // a cell) and click: the real user flow up to the preview overlay.
-async function pickElement(page, tabId, selector, { scroll = true, widenTo = null } = {}) {
+async function pickElement(page, tabId, selector, { scroll = true, widenTo = null, timeout = 15000 } = {}) {
   if (scroll) {
     await page.evaluate(
       (s) => document.querySelector(s).scrollIntoView({ block: 'center', behavior: 'instant' }),
@@ -304,7 +313,7 @@ async function pickElement(page, tabId, selector, { scroll = true, widenTo = nul
     await page.keyboard.press('ArrowUp');
   await page.mouse.down();
   await page.mouse.up();
-  return waitForPreview(page);
+  return waitForPreview(page, timeout);
 }
 // The `n` most recent completed downloads matching `pred` (oldest first).
 async function waitForDownloads(pred, n, timeoutMs = 30000) {
@@ -327,6 +336,140 @@ async function waitForDownload(pred, timeoutMs = 30000) {
   }
   throw new Error('download did not complete');
 }
+// --- page and article preview helpers ----------------------------------------------------
+const LAZY_LONG = 'lazy/loader.html?loader=io,lodash,native&n=100&gap=2000&t=100&fixedbar=1';
+const PIXEL_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const badge = (tabId) => sw.evaluate((id) => chrome.action.getBadgeText({ tabId: id }), tabId);
+const workerState = (tabId) => sw.evaluate((id) => globalThis.__websnap.pageState(id), tabId);
+const command = (name, tabId) =>
+  sw.evaluate(({ name, tabId }) => globalThis.__websnap.command(name, tabId), { name, tabId });
+const menu = (item, tabId) =>
+  sw.evaluate(({ item, tabId }) => globalThis.__websnap.menu(item, tabId), { item, tabId });
+const hostCount = (page) => page.evaluate(() => document.querySelectorAll('[data-websnap-ui]').length);
+const overlayOpen = (page) => page.evaluate(() => !!document.querySelector('[data-websnap-ui="preview"]'));
+const downloadCount = () => sw.evaluate(async () => (await chrome.downloads.search({})).length);
+// Records every message the worker sends to a tab and every screenshot it asks Chrome for, and can
+// hold ps:prepare or one CDP method back. Installed once; tests reset it with resetWorkerLog().
+async function instrumentWorker() {
+  await sw.evaluate(() => {
+    if (globalThis.__instrumented) return;
+    globalThis.__instrumented = true;
+    globalThis.__tabMsgs = [];
+    globalThis.__holdPrepareMs = 0;
+    globalThis.__cdp = { shots: 0, hold: null, onShot: null };
+    globalThis.__rt = [];
+    chrome.runtime.onMessage.addListener((m) => {
+      if (m && typeof m.type === 'string') globalThis.__rt.push({ type: m.type, requestId: m.requestId });
+    });
+    const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+    chrome.tabs.sendMessage = async (tabId, msg, ...rest) => {
+      const rec = { type: msg.type, requestId: msg.requestId, t: Date.now() };
+      if (msg.type === 'ps:show-preview') {
+        rec.prefixes = msg.parts.map((p) => p.dataUrl.slice(0, 23));
+        rec.bytes = JSON.stringify(msg).length;
+      }
+      globalThis.__tabMsgs.push(rec);
+      if (msg.type === 'ps:prepare' && globalThis.__holdPrepareMs)
+        await new Promise((r) => setTimeout(r, globalThis.__holdPrepareMs));
+      rec.sentAt = Date.now();
+      const res = await send(tabId, msg, ...rest);
+      rec.repliedAt = Date.now();
+      if (res) {
+        rec.reused = res.reused;
+        rec.aborted = res.aborted;
+        rec.lazy = res.lazy;
+        rec.ok = res.ok;
+      }
+      return res;
+    };
+    const cdp = chrome.debugger.sendCommand.bind(chrome.debugger);
+    chrome.debugger.sendCommand = async (target, method, params) => {
+      if (method === 'Page.captureScreenshot' && params && params.captureBeyondViewport) {
+        globalThis.__cdp.shots++;
+        if (globalThis.__cdp.onShot) await globalThis.__cdp.onShot(globalThis.__cdp.shots, target);
+      }
+      const hold = globalThis.__cdp.hold;
+      if (hold && hold.method === method) {
+        hold.hit = true;
+        await new Promise((r) => setTimeout(r, hold.ms));
+      }
+      return cdp(target, method, params);
+    };
+  });
+}
+async function resetWorkerLog() {
+  await instrumentWorker();
+  await sw.evaluate(() => {
+    globalThis.__tabMsgs.length = 0;
+    globalThis.__rt.length = 0;
+    globalThis.__holdPrepareMs = 0;
+    globalThis.__cdp.shots = 0;
+    globalThis.__cdp.hold = null;
+    globalThis.__cdp.onShot = null;
+  });
+}
+const received = (type) => sw.evaluate((type) => globalThis.__rt.filter((m) => m.type === type), type);
+const workerMsgs = (type) =>
+  sw.evaluate((type) => globalThis.__tabMsgs.filter((m) => !type || m.type === type), type);
+// Records scrollY (and the overlay host's display) on every scroll event of the page.
+async function recordScrolls(page) {
+  await page.evaluate(() => {
+    window.__sc = [];
+    addEventListener('scroll', () => {
+      const h = document.querySelector('[data-websnap-ui="preview"]');
+      window.__sc.push({ t: performance.now(), y: scrollY, d: h ? getComputedStyle(h).display : null });
+    });
+  });
+}
+const scrollLog = (page) => page.evaluate(() => ({ now: performance.now(), sc: window.__sc }));
+// popup.html as a background tab of the fixture's window (as the real popup resolves its tab), with
+// window.close recorded because a script-opened tab is not the toolbar popup.
+async function openPopupFor(tabId, page) {
+  const tab = await sw.evaluate((id) => chrome.tabs.get(id), tabId);
+  await page.bringToFront();
+  const url = `chrome-extension://${extensionId}/src/popup/popup.html`;
+  const [popup] = await Promise.all([
+    context.waitForEvent('page', { predicate: (p) => p.url() === url, timeout: 10000 }),
+    sw.evaluate(({ url, windowId }) => chrome.tabs.create({ url, windowId, active: false }), {
+      url,
+      windowId: tab.windowId,
+    }),
+  ]);
+  await popup.waitForSelector('body[data-state]');
+  await popup.waitForFunction(() => !document.documentElement.hasAttribute('data-boot'));
+  await popup.evaluate(() => {
+    window.__closed = 0;
+    window.close = () => window.__closed++;
+  });
+  return popup;
+}
+const popupSend = (popup, msg) => popup.evaluate((m) => chrome.runtime.sendMessage(m), msg);
+async function waitForOverlay(page, label = 'preview overlay') {
+  return waitFor(async () => ((await overlayOpen(page)) ? true : null), { label });
+}
+// The preview's canvas pixel at a document position (CSS px), over the parts it is split into.
+const canvasPixelAt = (page, x, y) =>
+  page.evaluate(
+    ({ x, y }) => {
+      const sr = document.querySelector('[data-websnap-ui="preview"]').shadowRoot;
+      let top = 0;
+      for (const c of sr.querySelectorAll('.stage canvas')) {
+        const cssH = c.height / (c.width / parseFloat(c.style.width));
+        if (y < top + cssH + 0.5) {
+          const k = c.width / parseFloat(c.style.width);
+          const d = c
+            .getContext('2d')
+            .getImageData(Math.round(x * k), Math.min(c.height - 1, Math.round((y - top) * k)), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        }
+        top += cssH;
+      }
+      return null;
+    },
+    { x, y },
+  );
+const bigText = (n) => '<p>filler</p>'.repeat(n);
 // Minimal PNG decoder (8-bit RGB/RGBA, all filter types) for pixel checks.
 function decodePng(buf) {
   if (buf.readUInt32BE(0) !== 0x89504e47) throw new Error('not a PNG');
@@ -1522,18 +1665,19 @@ await test('preview: picker click opens the full-page overlay with a preview of 
     info.buttons.join('|') === 'Download|Reselect|Toggle light / dark|Close',
     `toolbar actions with PDF (${info.buttons.join('|')})`,
   );
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   let now = await previewInfo(page);
   check(now.checked === 'png' && now.copyVisible, 'choosing PNG selects it and shows "Copy image"');
   check(
     now.buttons.join('|') === 'Copy image|Download|Reselect|Toggle light / dark|Close',
     `toolbar actions with PNG (${now.buttons.join('|')})`,
   );
-  await page.keyboard.press('ArrowRight');
+  await page.locator('[data-websnap-ui="preview"] select.format').focus();
+  await page.keyboard.press('j');
   now = await previewInfo(page);
   check(
     now.checked === 'jpeg' && now.copyVisible && !now.downloadDisabled,
-    `arrow keys move to JPEG; Copy image stays available for JPEG (${now.checked})`,
+    `type-ahead moves to JPEG; Copy image stays available for JPEG (${now.checked})`,
   );
   // The page is already back to normal while the overlay is open.
   const st = await pageState(tabId);
@@ -1579,7 +1723,7 @@ await test('preview: Copy image puts a PNG on the clipboard for PNG and JPEG', a
     });
   for (const format of ['png', 'jpeg']) {
     await page.evaluate(() => navigator.clipboard.writeText('-')); // clear
-    await clickPreview(page, `.seg [data-format="${format}"]`);
+    await chooseFormat(page, format);
     await clickPreview(page, '.copy');
     const clip = await waitFor(
       async () => {
@@ -1648,7 +1792,7 @@ await test('preview: toolbar wraps at 360 px and keeps keyboard focus inside the
   // emulation (the window itself cannot be narrower than 500 px).
   await page.setViewportSize({ width: 360, height: 740 });
   await wait(100);
-  await clickPreview(page, '.seg [data-format="jpeg"]');
+  await chooseFormat(page, 'jpeg');
   const now = await previewInfo(page);
   check(now.viewport.width === 360, `viewport is 360 px wide (${now.viewport.width})`);
   await page.screenshot({ path: path.join(outDir, 'preview-overlay-360.png') }); // for visual review
@@ -1690,7 +1834,7 @@ await test('preview: Download PNG saves the element at settings.imageScale; JPEG
   await setSettings({ imageScale: 2, filenameTemplate: '{title} {time}' });
   const { page, tabId } = await openTab('element.html');
   await pickElement(page, tabId, '#red');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.png$/.test(i.filename));
   check(
@@ -1738,7 +1882,7 @@ await test('preview: Download PDF saves a PDF with only the element (overlay not
   await page.evaluate(() => window.scrollTo({ top: 4700, behavior: 'instant' }));
   const before = await snapshot(page);
   await pickElement(page, tabId, '#red', { scroll: false });
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.pdf$/.test(i.filename), 60000);
   const text = execFileSync('pdftotext', ['-layout', item.filename, '-'], { encoding: 'utf8' });
@@ -1794,7 +1938,12 @@ await test('split: a 400×3700 element is shown and saved as 3 parts (1600 / 160
     info.parts.map((p) => p.label).join('|') === 'Part 1 of 3|Part 2 of 3|Part 3 of 3',
     `part headers (${info.parts.map((p) => p.label).join('|')})`,
   );
-  check(info.splitNote === 'Split into 3 parts for easier viewing', `split note (${info.splitNote})`);
+  check(info.checked === 'pdf', `PDF is selected by default (${info.checked})`);
+  check(
+    info.splitNote === '' && info.partHeads.length === 3 && info.partHeads.every((h) => !h),
+    `PDF selected: no split note and no part headers (${JSON.stringify([info.splitNote, info.partHeads])})`,
+  );
+  check(info.partsGap === '0px', `PDF selected: the parts touch (gap ${info.partsGap})`);
   // Each canvas shows its own slice of the element (stripes 0, 16 and 32 at the top).
   const tops = [];
   for (const [i, first] of [
@@ -1808,17 +1957,23 @@ await test('split: a 400×3700 element is shown and saved as 3 parts (1600 / 160
   }
   check(tops.every(Boolean), `each part starts at its own stripe (${tops})`);
   // PDF selected: parts have no per-part actions; the toolbar says Download.
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   let now = await previewInfo(page);
   check(
     now.parts.every((p) => !p.copy && !p.download) && now.downloadLabel === 'Download',
     `PDF: no per-part buttons, "${now.downloadLabel}"`,
   );
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   now = await previewInfo(page);
   check(
     now.parts.every((p) => p.copy && p.download) && now.downloadLabel === 'Download all parts',
     `PNG: per-part Copy / Download, toolbar "${now.downloadLabel}"`,
+  );
+  check(
+    now.splitNote === 'Split into 3 parts for easier viewing' &&
+      now.partHeads.every(Boolean) &&
+      now.partsGap === '24px',
+    `PNG selected: split note, part headers and the 24 px gap (${now.splitNote}, ${now.partsGap})`,
   );
   check(/Part 1 of 3/.test(now.copyTitle), `toolbar Copy tooltip names part 1 (${now.copyTitle})`);
 
@@ -1933,7 +2088,7 @@ await test('capture: 20000 px tall element needs no reduction once split (13 par
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#huge');
   check(info.ready && info.parts.length === 13, `preview in 13 parts (${info.parts.length})`);
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const withPng = await previewInfo(page);
   check(!withPng.warning, `no size warning (${withPng.warning})`);
   await closePreviewOverlay(page);
@@ -1968,10 +2123,10 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
   await setSettings({ imageScale: 2 });
   const { page, tabId } = await openTab('element.html');
   const info = await pickElement(page, tabId, '#wide');
-  await clickPreview(page, '.seg [data-format="pdf"]');
+  await chooseFormat(page, 'pdf');
   const withPdf = await previewInfo(page);
   check(info.ready && !withPdf.warning, 'preview shown, no warning while PDF is selected');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const withPng = await previewInfo(page);
   check(
     /16,384|16384/.test(withPng.warning) && /1\.82/.test(withPng.warning),
@@ -2004,7 +2159,7 @@ await test('capture: very wide element is capped at 16384 px with a warning', as
   check(/16,384|16384/.test(res.warning || ''), `export returns a warning (${res.warning})`);
   // Through the overlay: a download that comes back with a warning keeps the overlay open to show it.
   await pickElement(page, tabId, '#wide');
-  await clickPreview(page, '.seg [data-format="png"]');
+  await chooseFormat(page, 'png');
   const t0 = new Date().toISOString();
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /Element Fixture.*\.png$/.test(i.filename) && i.startTime >= t0);
@@ -2113,7 +2268,7 @@ await test('markdown: preview overlay offers Markdown only when enabled; downloa
     info.formats.includes('markdown') && info.labels.includes('Markdown'),
     `Markdown option shown when enabled (${info.labels})`,
   );
-  await clickPreview(page, '.seg [data-format="markdown"]');
+  await chooseFormat(page, 'markdown');
   await clickPreview(page, '.download');
   const item = await waitForDownload((i) => /\.md$/.test(i.filename));
   const md = fs.readFileSync(item.filename, 'utf8');
@@ -2125,6 +2280,1501 @@ await test('markdown: preview overlay offers Markdown only when enabled; downloa
   check(!md.includes('MD-TITLE-MARK') && !md.includes('Intro with'), 'only the picked element');
   await page.close();
   await setSettings({});
+});
+
+// --- 8. page and article previews -----------------------------------------------------------
+
+await test('preview: Full page card opens the preview overlay', async () => {
+  const { page, tabId } = await openTab('article.html');
+  const popup = await openPopupFor(tabId, page);
+  const downloadsBefore = await downloadCount();
+  await popup.click('#act-page');
+  await waitForOverlay(page);
+  const info = await waitForPreview(page);
+  check(info.title === 'Export this page' && info.ready, `overlay "Export this page" ready (${info.title})`);
+  await page.screenshot({ path: path.join(outDir, 'preview-page.png') });
+  check(/^\d+×\d+ px$/.test(info.caption), `caption is a size with no selector (${info.caption})`);
+  check(
+    await waitFor(() => popup.evaluate(() => window.__closed >= 1), { label: 'popup.close()' }),
+    'the popup closes itself',
+  );
+  check((await downloadCount()) === downloadsBefore, 'nothing downloaded before Download is clicked');
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const item = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0);
+  check(!!item, 'Download saves the PDF');
+  await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+  await popup.close();
+  await page.close();
+});
+
+await test('preview: Article card opens the preview overlay', async () => {
+  const { page, tabId } = await openTab('article.html');
+  const popup = await openPopupFor(tabId, page);
+  await popup.click('#act-article');
+  await waitForOverlay(page);
+  const info = await waitForPreview(page);
+  const story = await rectOf(page, '#story');
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  check(info.title === 'Export this article', `title (${info.title})`);
+  await page.screenshot({ path: path.join(outDir, 'preview-article.png') });
+  check(/^\d+×\d+ px$/.test(info.caption), `caption is a size with no selector (${info.caption})`);
+  check(
+    info.canvases.every((c) => c.cssWidth === Math.round(story.width) + 'px') &&
+      Math.round(story.width) < pageWidth - 200,
+    `canvases have the article's CSS width ${Math.round(story.width)}px, narrower than the page (${info.canvases.map((c) => c.cssWidth)})`,
+  );
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const item = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0);
+  const text = pdfText(fs.readFileSync(item.filename), 'article-preview.pdf');
+  check(text.includes('ARTICLE-MARK') && !text.includes('SIDEBAR-MARK'), 'the article PDF has no sidebar');
+  await popup.close();
+  await page.close();
+});
+
+await test('preview: Article preview shows an error when no article is found', async () => {
+  const { page, tabId } = await openTab('picker.html');
+  const popup = await openPopupFor(tabId, page);
+  const before = await snapshot(page);
+  await popup.click('#act-article');
+  const status = await waitFor(
+    async () => {
+      const t = await popup.textContent('#status');
+      return /Could not detect an article/.test(t) ? t : null;
+    },
+    { label: 'the no-article error in the popup' },
+  );
+  check(/Could not detect an article/.test(status), `popup shows the error (${status})`);
+  check((await popup.evaluate(() => window.__closed)) === 0, 'the popup stays open');
+  check((await hostCount(page)) === 0, 'no overlay host exists');
+  await expectRestored(page, before, 'snapshotDom is unchanged');
+  check((await badge(tabId)) === '!', `badge is ! (${await badge(tabId)})`);
+  await popup.close();
+  await page.close();
+});
+
+await test('preview: shortcuts and menu entries open the preview', async () => {
+  const { page, tabId } = await openTab('article.html');
+  const downloadsBefore = await downloadCount();
+  const cases = [
+    ['save-pdf', () => command('save-pdf', tabId), 'Export this page'],
+    ['save-article', () => command('save-article', tabId), 'Export this article'],
+    ['menu page', () => menu('page', tabId), 'Export this page'],
+    ['menu article', () => menu('article', tabId), 'Export this article'],
+  ];
+  for (const [label, run, title] of cases) {
+    await run();
+    await waitForOverlay(page, label);
+    const info = await waitForPreview(page);
+    check(info.title === title && info.ready, `${label} opens "${title}" (${info.title})`);
+    await page.keyboard.press('Escape');
+    await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+    await waitFor(async () => !(await workerState(tabId)).busy, { label: 'the tab to be released' });
+  }
+  check((await downloadCount()) === downloadsBefore, 'no download started');
+  await page.close();
+  const none = await openTab('picker.html');
+  await menu('article', none.tabId);
+  await wait(500);
+  check((await hostCount(none.page)) === 0, 'menu article on a page without an article opens no overlay');
+  check((await badge(none.tabId)) === '!', `and sets the badge to ! (${await badge(none.tabId)})`);
+  await none.page.close();
+});
+
+await test('preview: the format dropdown changes what Download saves', async () => {
+  await setSettings({ imageScale: 2, filenameTemplate: 'dd' });
+  const { page, tabId } = await openTab('article.html');
+  await command('save-pdf', tabId);
+  const info = await waitForPreview(page);
+  const height = Number(/×(\d+) px/.exec(info.caption)[1]);
+  check(
+    info.formats.join() === 'pdf,png,jpeg' && info.checked === 'pdf',
+    `options PDF, PNG, JPEG, PDF selected (${info.formats})`,
+  );
+  await chooseFormat(page, 'png');
+  await page.screenshot({ path: path.join(outDir, 'preview-page-png-selected.png') });
+  const parts = Math.ceil(height / 1600);
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const files = await waitForDownloads((i) => /dd-\d+\.png$/.test(i.filename) && i.startTime >= t0, parts);
+  const total = files.reduce((n, f) => n + decodePng(fs.readFileSync(f.filename)).height, 0);
+  check(
+    files.length === parts && Math.abs(total - height * 2) <= parts,
+    `PNG: ${parts} files, ${total} px high for a ${height} px page at scale 2`,
+  );
+  await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  await chooseFormat(page, 'jpeg');
+  const t1 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const jpgs = await waitForDownloads((i) => /dd-\d+\.jpg$/.test(i.filename) && i.startTime >= t1, parts);
+  check(jpgs.length === parts, `JPEG saves ${parts} .jpg files`);
+  await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  await chooseFormat(page, 'pdf');
+  const t2 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const pdf = await waitForDownload((i) => /dd\.pdf$/.test(i.filename) && i.startTime >= t2);
+  check(!!pdf, 'PDF saves one PDF');
+  await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+  await setSettings({ markdownEnabled: true, filenameTemplate: 'dd' });
+  await command('save-pdf', tabId);
+  const withMd = await waitForPreview(page);
+  check(
+    withMd.formats.join() === 'pdf,png,jpeg,markdown',
+    `Markdown is offered when enabled (${withMd.formats})`,
+  );
+  await chooseFormat(page, 'markdown');
+  const t3 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const md = await waitForDownload((i) => /dd\.md$/.test(i.filename) && i.startTime >= t3);
+  check(fs.readFileSync(md.filename, 'utf8').includes('ARTICLE-MARK'), 'Markdown saves the page as .md');
+  await page.close();
+  await setSettings({});
+});
+
+await test('preview: the Format label, first focus on Close and the keyboard', async () => {
+  const { page, tabId } = await openTab('article.html');
+  const focusInfo = () =>
+    page.evaluate(() => {
+      const sr = document.querySelector('[data-websnap-ui="preview"]').shadowRoot;
+      const a = sr.activeElement;
+      const sel = sr.querySelector('select.format');
+      const lab = sel.labels[0];
+      const r = (el) => el.getBoundingClientRect();
+      const tb = sr.querySelector('.toolbar');
+      return {
+        active: a ? a.className : null,
+        label: lab ? lab.textContent : null,
+        overflow: tb.scrollWidth <= tb.clientWidth,
+        inView:
+          !!lab &&
+          r(lab).left >= 0 &&
+          r(lab).right <= innerWidth &&
+          r(sel).left >= 0 &&
+          r(sel).right <= innerWidth,
+      };
+    });
+  await command('save-pdf', tabId);
+  await waitForOverlay(page);
+  let f = await focusInfo();
+  check(/\bclose\b/.test(f.active), `focus starts on Close while the preview loads (${f.active})`);
+  await waitForPreview(page);
+  f = await focusInfo();
+  check(f.label === 'Format', `the select's label is "Format" (${f.label})`);
+  check(/\bclose\b/.test(f.active), `focus is still on Close after the image lands (${f.active})`);
+  const visited = [];
+  for (let i = 0; i < 4 && !/\bformat\b/.test(f.active || ''); i++) {
+    await page.keyboard.press('Tab');
+    f = await focusInfo();
+    visited.push(f.active);
+  }
+  check(
+    /\bformat\b/.test(f.active) && visited.every(Boolean),
+    `Tab from Close reaches the Format dropdown and never leaves the overlay (${visited})`,
+  );
+  await page.keyboard.press('j');
+  check((await previewInfo(page)).checked === 'jpeg', 'type-ahead "j" selects JPEG');
+  await page.keyboard.press('Escape');
+  check(!(await overlayOpen(page)), 'Esc closes the overlay');
+  await waitFor(async () => !(await workerState(tabId)).busy, { label: 'the tab to be released' });
+  await setSettings({ language: 'de' });
+  await page.setViewportSize({ width: 360, height: 800 });
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  f = await focusInfo();
+  await page.screenshot({ path: path.join(outDir, 'preview-360px-de.png') });
+  check(
+    f.overflow && f.inView,
+    `360 px, German: no toolbar overflow, label and select in view (${JSON.stringify(f)})`,
+  );
+  check(
+    (await previewInfo(page)).title === 'Diese Seite exportieren',
+    'the overlay is translated into German',
+  );
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await setSettings({});
+  await page.close();
+});
+
+await test('preview: every part is a JPEG data URL', async () => {
+  await resetWorkerLog();
+  const { page, tabId } = await openTab('article.html');
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  const shown = await workerMsgs('ps:show-preview');
+  check(
+    shown.length === 1 &&
+      shown[0].prefixes.length > 1 &&
+      shown[0].prefixes.every((p) => p === 'data:image/jpeg;base64,'),
+    `ps:show-preview carries ${shown[0] && shown[0].prefixes.length} JPEG parts (${shown[0] && shown[0].prefixes[0]}), ${shown[0] && (shown[0].bytes / 1e6).toFixed(2)} MB`,
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: page preview loads lazy images with the overlay up', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await recordScrolls(page);
+  const last = await page.evaluate(() => {
+    const r = [...document.querySelectorAll('img.lazy')].pop().getBoundingClientRect();
+    return { x: r.left + 150, y: r.top + scrollY + 60 };
+  });
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  const done = await page.evaluate(() => ({ loaded: window.__lazyLoaded, total: window.__lazyTotal }));
+  check(
+    done.loaded === done.total && done.total > 0,
+    `every lazy image loaded (${done.loaded} of ${done.total})`,
+  );
+  const px = await canvasPixelAt(page, last.x, last.y);
+  check(px && px[2] > 150 && px[0] < 140, `the last lazy image is drawn, not gray (${px})`);
+  const { sc } = await scrollLog(page);
+  const moving = sc.filter((e) => e.y > 0);
+  const lastMoving = sc.lastIndexOf(moving[moving.length - 1]);
+  check(
+    moving.length >= 3 &&
+      moving.every((e) => e.d === 'block') &&
+      sc.slice(0, lastMoving + 1).every((e) => e.d !== 'none'),
+    `the overlay host is displayed over the whole lazy scroll (${moving.length} scroll events, ${[...new Set(sc.map((e) => e.d))]})`,
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: page preview of a scroll-locked page covers the whole document', async () => {
+  const { page, tabId } = await openTab('body-fixed.html');
+  await command('save-pdf', tabId);
+  const info = await waitForPreview(page);
+  const height = Number(/×(\d+) px/.exec(info.caption)[1]);
+  const sum = info.canvases.reduce((n, c) => n + c.height, 0);
+  const measured = (await send(tabId, { type: 'ps:measure' })).height;
+  check(height >= 3000 && height > 800 * 2, `the caption height is the document's (${height} px)`);
+  check(
+    sum === height && info.canvases.length > 1,
+    `${info.canvases.length} canvases add up to it (${sum} px)`,
+  );
+  check(Math.abs(measured - height) < 100 || measured >= 800, `ps:measure agrees it is long (${measured})`);
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: page preview of a page wider than the window covers its width', async () => {
+  const { page, tabId } = await openTab('big.html');
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  await command('save-pdf', tabId);
+  const info = await waitForPreview(page);
+  const width = Number(/(\d+)×\d+ px/.exec(info.caption)[1]);
+  check(scrollWidth > 1250, `big.html overflows the window sideways (${scrollWidth} px)`);
+  check(width >= scrollWidth - 1, `the preview is as wide as the document (${width} px)`);
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: page and article previews restore the page', async () => {
+  const { page, tabId } = await openTab('article.html');
+  const before = await snapshot(page);
+  for (const [cmd, how] of [
+    ['save-pdf', 'Esc'],
+    ['save-article', 'Close'],
+    ['save-pdf', 'Download'],
+  ]) {
+    await command(cmd, tabId);
+    await waitForPreview(page);
+    await expectRestored(page, before, `${cmd}: the page is restored while the preview is open`);
+    if (how === 'Esc') await page.keyboard.press('Escape');
+    else if (how === 'Close') await clickPreview(page, '.close');
+    else {
+      await clickPreview(page, '.download');
+      await waitForDownload((i) => /\.pdf$/.test(i.filename));
+    }
+    await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+    await expectRestored(page, before, `${cmd} + ${how}: the page is as before`);
+    await waitFor(async () => !(await workerState(tabId)).busy, { label: 'the tab to be released' });
+  }
+  await page.close();
+});
+
+await test('preview: refused while an export holds the tab', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await page.evaluate(
+    (h) => document.getElementById('body').insertAdjacentHTML('beforeend', h),
+    bigText(1500),
+  );
+  const popup = await openPopupFor(tabId, page);
+  await sw.evaluate((id) => {
+    globalThis.__heldExport = globalThis.__websnap
+      .generate({ tabId: id, prep: 'article', output: 'return', settings: { loadLazy: true } })
+      .then(
+        (r) => ({ ok: r.ok }),
+        (e) => ({ error: e.message }),
+      );
+  }, tabId);
+  try {
+    await waitFor(() => page.evaluate(() => !!document.querySelector('[data-websnap-root]')), {
+      interval: 10,
+      label: 'prepare() to mark the article root',
+    });
+    const res = await popupSend(popup, { type: 'ps:open-preview', tabId, kind: 'page' });
+    check(
+      res.ok === false && res.error === 'Wait for the current export to finish before previewing.',
+      `ps:open-preview is refused (${JSON.stringify(res)})`,
+    );
+    check((await hostCount(page)) === 0, 'no overlay host appears');
+    check((await badge(tabId)) === '!', `the badge is ! (${await badge(tabId)})`);
+    const done = await sw.evaluate(() => globalThis.__heldExport);
+    check(done.ok === true, 'the held export succeeds', JSON.stringify(done));
+  } finally {
+    await sw.evaluate(() => globalThis.__heldExport);
+    await send(tabId, { type: 'ps:reset-page' });
+    await popup.close();
+    await page.close();
+  }
+});
+
+await test('preview: a stale preview is ignored', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await send(tabId, { type: 'ps:ping' });
+  await stubSendMessage(tabId);
+  const target = { type: 'ps:set-target', kind: 'page', strings: {}, theme: 'light' };
+  const lastRequest = async () => {
+    const sent = (await readSentMessages(tabId)).filter((m) => m.type === 'ps:preview-element');
+    return sent[sent.length - 1];
+  };
+  const shown = (requestId) => ({
+    type: 'ps:show-preview',
+    requestId,
+    parts: [{ dataUrl: 'data:image/png;base64,' + PIXEL_PNG, width: 10, height: 10 }],
+    width: 10,
+    height: 10,
+    description: '',
+    format: 'pdf',
+    imageWarning: null,
+    markdownEnabled: false,
+    strings: {},
+    theme: 'light',
+  });
+  await send(tabId, target);
+  const a = await lastRequest();
+  check(
+    a && a.prep === 'none' && Number.isInteger(a.requestId),
+    `the overlay asks for a capture (${JSON.stringify(a)})`,
+  );
+  await send(tabId, shown(a.requestId + 99));
+  await wait(150);
+  check((await previewInfo(page)).loading, '(a) a preview with another id leaves the overlay loading');
+  await send(tabId, shown(a.requestId));
+  check((await waitForPreview(page)).ready, '(a) the recorded id shows the image');
+  await page.keyboard.press('Escape');
+  await send(tabId, target);
+  const b = await lastRequest();
+  check(
+    b.requestId !== a.requestId,
+    `(b) the next overlay gets a new id (${a.requestId} then ${b.requestId})`,
+  );
+  await send(tabId, shown(a.requestId));
+  await wait(150);
+  check((await previewInfo(page)).loading, '(b) a preview for the closed overlay leaves the new one loading');
+  await page.keyboard.press('Escape');
+  await send(tabId, shown(b.requestId));
+  await wait(150);
+  check(!(await overlayOpen(page)), '(c) a preview after Esc opens no overlay');
+  await send(tabId, { type: 'ps:reset-page' });
+  await page.close();
+});
+
+await test('preview: Select part narrows a page preview to one element', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await command('save-pdf', tabId);
+  const info = await waitForPreview(page);
+  check(info.buttons.includes('Select part'), `the button reads "Select part" (${info.buttons})`);
+  await clickPreview(page, '.reselect');
+  await waitFor(
+    () =>
+      page.evaluate(
+        () =>
+          !!document.querySelector('[data-websnap-ui=""]') &&
+          !document.querySelector('[data-websnap-ui="preview"]'),
+      ),
+    { label: 'the picker to replace the overlay' },
+  );
+  const r = await rectOf(page, '#sidebar');
+  await page.mouse.move(r.left + 20, r.top + 20);
+  await wait(50);
+  await page.mouse.down();
+  await page.mouse.up();
+  const el = await waitForPreview(page);
+  check(
+    el.title === 'Export this element' && /aside#sidebar/.test(el.caption),
+    `element preview (${el.title}, ${el.caption})`,
+  );
+  check(el.buttons.includes('Reselect'), 'an element preview keeps "Reselect"');
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const item = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0);
+  const text = pdfText(fs.readFileSync(item.filename), 'select-part.pdf');
+  check(text.includes('SIDEBAR-MARK') && !text.includes('ARTICLE-MARK'), 'the PDF holds only the sidebar');
+  await page.close();
+});
+
+await test('preview: a large photo-like element stays under the message limit', async () => {
+  const big = await launchExtension({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 2 });
+  try {
+    const url = `${big.base}/element.html`;
+    const page = await big.context.newPage();
+    await page.goto(url, { waitUntil: 'load' });
+    const tabId = await tabIdForUrl(big.sw, url);
+    await page.bringToFront();
+    await page.evaluate(() => {
+      const c = document.createElement('canvas');
+      c.id = 'photo';
+      c.width = 1200;
+      c.height = 6000;
+      c.style.display = 'block';
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(1200, 6000);
+      const d = img.data;
+      const noise = new Uint8Array(65536);
+      for (let i = 0; i < d.length; i += 4) {
+        const px = i >> 2;
+        if ((i & 0xffff) === 0) crypto.getRandomValues(noise);
+        const n = noise[(i & 0xffff) >> 2] & 31;
+        d[i] = ((px % 1200) * 255) / 1200 + n;
+        d[i + 1] = ((px / 1200) * 255) / 6000 + n;
+        d[i + 2] = 128 + n;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      document.body.append(c);
+      c.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
+    await big.sw.evaluate(() => {
+      globalThis.__sizes = [];
+      const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+      chrome.tabs.sendMessage = (tabId, msg, ...rest) => {
+        if (msg.type === 'ps:show-preview') globalThis.__sizes.push(JSON.stringify(msg).length);
+        return send(tabId, msg, ...rest);
+      };
+    });
+    await big.sw.evaluate((id) => globalThis.__websnap.startPicker(id, 'print'), tabId);
+    await page.mouse.move(300, 300);
+    await wait(50);
+    await page.mouse.down();
+    await page.mouse.up();
+    const info = await waitFor(
+      () =>
+        page.evaluate(() => {
+          const host = document.querySelector('[data-websnap-ui="preview"]');
+          if (!host) return null;
+          const cs = [...host.shadowRoot.querySelectorAll('.stage canvas')];
+          const err = host.shadowRoot.querySelector('.placeholder.error');
+          if (err) return { error: err.textContent };
+          return cs.length && cs.every((c) => c.dataset.ready)
+            ? { first: { width: cs[0].width, css: parseFloat(cs[0].style.width) }, n: cs.length }
+            : null;
+        }),
+      { timeout: 60000, label: 'the large preview' },
+    );
+    const sizes = await big.sw.evaluate(() => globalThis.__sizes);
+    check(!info.error, `the preview renders (${info.error || info.n + ' parts'})`);
+    check(
+      info.first && info.first.width === info.first.css * 2,
+      `the first canvas is at device scale 2 (${info.first && info.first.width} px for ${info.first && info.first.css} CSS px)`,
+    );
+    check(
+      sizes.length === 1 && sizes[0] < 32e6,
+      `the message is ${(sizes[0] / 1e6).toFixed(2)} MB, under Chrome's limit`,
+    );
+    await page.close();
+  } finally {
+    await big.close();
+  }
+});
+
+await test('preview: the overlay is not in the image or the PDF', async () => {
+  await setSettings({ filenameTemplate: 'ov', imageScale: 2 });
+  const { page, tabId } = await openTab('article.html');
+  await page.evaluate(() => (document.body.style.background = 'rgb(200, 40, 40)'));
+  const base = await sw.evaluate(
+    (id) => globalThis.__websnap.exportElementImage(id, 'png', { prep: 'none', output: 'return' }),
+    tabId,
+  );
+  const baseline = decodePng(Buffer.from(base.parts[0].base64, 'base64'));
+  const expected = baseline.pixel(1200, 40);
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  const previewPx = await canvasPixelAt(page, 600, 20);
+  check(
+    previewPx && previewPx.every((v, i) => Math.abs(v - expected[i]) <= 8),
+    `the preview pixel at (600, 20) is the page's (${previewPx} vs ${expected})`,
+  );
+  await chooseFormat(page, 'png');
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const files = await waitForDownloads((i) => /ov-1\.png$/.test(i.filename) && i.startTime >= t0, 1);
+  const png = decodePng(fs.readFileSync(files[0].filename));
+  check(
+    isColor(png.pixel(1200, 40), expected),
+    `the PNG pixel matches an export with no overlay (${png.pixel(1200, 40)})`,
+  );
+  await waitFor(async () => !(await overlayOpen(page)), { label: 'overlay to close' });
+  await command('save-pdf', tabId);
+  await waitForPreview(page);
+  await chooseFormat(page, 'pdf');
+  const t1 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const pdf = await waitForDownload((i) => /ov\.pdf$/.test(i.filename) && i.startTime >= t1);
+  const text = pdfText(fs.readFileSync(pdf.filename), 'overlay-not-in-pdf.pdf');
+  check(!text.includes('Export this page') && !/\bFormat\b/.test(text), 'the PDF has no overlay text');
+  await page.close();
+  await setSettings({});
+});
+
+await test("preview: the remove bar's Preview opens the page preview", async () => {
+  const { page, tabId } = await openTab('article.html');
+  await startPicker(tabId, 'remove');
+  const r = await rectOf(page, '#sidebar');
+  await page.mouse.move(r.left + 20, r.top + 20);
+  await wait(50);
+  await page.mouse.down();
+  await page.mouse.up();
+  const downloadsBefore = await downloadCount();
+  const btn = await page.evaluate(() => {
+    const host = document.querySelector('[data-websnap-ui=""]');
+    const b = [...host.shadowRoot.querySelectorAll('.bar button')].find((x) =>
+      x.classList.contains('primary'),
+    );
+    const rr = b.getBoundingClientRect();
+    return { text: b.textContent, x: rr.left + rr.width / 2, y: rr.top + rr.height / 2 };
+  });
+  check(btn.text === 'Preview', `the bar's button reads "Preview" (${btn.text})`);
+  await page.mouse.move(btn.x, btn.y);
+  await page.mouse.click(btn.x, btn.y);
+  const info = await waitForPreview(page);
+  check(info.title === 'Export this page', `the overlay "Export this page" opens (${info.title})`);
+  check((await downloadCount()) === downloadsBefore, 'nothing downloads');
+  const t0 = new Date().toISOString();
+  await clickPreview(page, '.download');
+  const pdf = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0);
+  const text = pdfText(fs.readFileSync(pdf.filename), 'remove-preview.pdf');
+  check(!text.includes('SIDEBAR-MARK') && text.includes('ARTICLE-MARK'), 'the PDF lacks the removed sidebar');
+  await send(tabId, { type: 'ps:reset-page' });
+  await page.close();
+});
+
+await test('preview: Download fails when the previewed article left the page', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await command('save-article', tabId);
+  await waitForPreview(page);
+  await page.evaluate(() => {
+    const a = document.querySelector('article');
+    a.replaceWith(a.cloneNode(true));
+  });
+  const downloadsBefore = await downloadCount();
+  await clickPreview(page, '.download');
+  const info = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && /gone/.test(i.status) ? i : null;
+    },
+    { label: 'the element-gone status' },
+  );
+  check(
+    info.status === 'The selected element is gone. Select it again.',
+    `the overlay says the element is gone (${info.status})`,
+  );
+  await wait(300);
+  check((await downloadCount()) === downloadsBefore, 'no file is saved');
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: an unknown prep is refused', async () => {
+  const { page, tabId } = await openTab('article.html');
+  await send(tabId, { type: 'ps:ping' });
+  const downloadsBefore = await downloadCount();
+  const replies = await sw.evaluate(async (tabId) => {
+    const [r] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        const out = [];
+        for (const type of ['ps:generate-from-content', 'ps:preview-element', 'ps:export-element'])
+          out.push(await chrome.runtime.sendMessage({ type, prep: 'bogus', format: 'png' }));
+        return out;
+      },
+    });
+    return r.result;
+  }, tabId);
+  check(
+    replies.length === 3 && replies.every((r) => r.ok === false && r.error === 'Unknown export target.'),
+    `each message is refused (${JSON.stringify(replies)})`,
+  );
+  check((await downloadCount()) === downloadsBefore, 'no download starts');
+  await page.close();
+});
+
+// --- 9. cancelling a capture or a Download ---------------------------------------------------
+
+const hostShown = (page) =>
+  page.evaluate(() => {
+    const h = document.querySelector('[data-websnap-ui="preview"]');
+    return !!h && getComputedStyle(h).display !== 'none';
+  });
+// Presses Esc in the page and returns performance.now() of the page at that moment.
+async function pressEsc(page) {
+  await page.evaluate(() =>
+    addEventListener('keydown', (e) => e.key === 'Escape' && (window.__escAt = performance.now()), true),
+  );
+  await page.keyboard.press('Escape');
+  return page.evaluate(() => window.__escAt);
+}
+// Polls until the page matches `before` and the tab is released; returns the ms it took.
+async function restoredWithin(page, tabId, before, limit = 1000, { overlay = false } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < limit + 2000) {
+    const same = diffSnapshots(before, await snapshot(page)).length === 0;
+    if (same && (overlay || !(await overlayOpen(page))) && !(await workerState(tabId)).busy)
+      return Date.now() - t0;
+    await wait(25);
+  }
+  return null;
+}
+const noNewPassScroll = async (page, escAt) => {
+  const { sc } = await scrollLog(page);
+  const late = sc.filter((e) => e.t > escAt + 100);
+  // One step may be in flight when Esc lands; the pass must not run on to the end of the page.
+  const before = sc.filter((e) => e.t <= escAt);
+  const yAtEsc = before.length ? before[before.length - 1].y : 0;
+  const furthest = Math.max(0, ...sc.filter((e) => e.t > escAt).map((e) => e.y));
+  return {
+    ok: late.length <= 1 && late.every((e) => e.y === 0) && furthest <= yAtEsc + 1500,
+    late: late.length,
+    total: sc.length,
+  };
+};
+
+await test('preview: Esc while loading cancels the capture and restores the page', async () => {
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await recordScrolls(page);
+  const downloadsBefore = await downloadCount();
+  // (a) Esc during the scroll of a ~200,000 px page.
+  for (const round of ['first', 'second']) {
+    await command('save-pdf', tabId);
+    await waitFor(async () => (await hostShown(page)) && (await page.evaluate(() => scrollY)) > 0, {
+      interval: 20,
+      label: `the ${round} pass to scroll under the overlay`,
+    });
+    const escAt = await pressEsc(page);
+    const took = await restoredWithin(page, tabId, before);
+    check(took !== null && took <= 1000, `(a) ${round}: the page is restored ${took} ms after Esc`);
+    const late = await noNewPassScroll(page, escAt);
+    check(
+      late.ok,
+      `(a) ${round}: no pass scroll later than 100 ms after Esc (${late.late} of ${late.total})`,
+    );
+    check((await badge(tabId)) !== '!', `(a) ${round}: no error badge`);
+  }
+  check((await downloadCount()) === downloadsBefore, '(a) no download exists');
+  const prepares = await workerMsgs('ps:prepare');
+  check(
+    prepares.length === 2 && prepares.every((p) => p.aborted === true),
+    `(a) both prepares came back aborted (${prepares.length})`,
+  );
+  await page.close();
+
+  // (b) Esc during the bottom wait for an image that never loads.
+  const art = await openTab('article.html');
+  await art.page.evaluate(() => {
+    const img = document.createElement('img');
+    img.src = '/__hang';
+    document.body.append(img);
+  });
+  const artBefore = await snapshot(art.page);
+  await recordScrolls(art.page);
+  await command('save-pdf', art.tabId);
+  await waitFor(
+    async () => {
+      const { sc } = await scrollLog(art.page);
+      const max = await art.page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      return sc.some((e) => e.y >= max - 2) && sc[sc.length - 1].y <= 10;
+    },
+    { interval: 20, label: 'the pass to reach the bottom and come back' },
+  );
+  await wait(300);
+  await pressEsc(art.page);
+  const tookB = await restoredWithin(art.page, art.tabId, artBefore);
+  check(tookB !== null && tookB <= 1000, `(b) the bottom wait is cut short: restored ${tookB} ms after Esc`);
+  await art.page.close();
+
+  // (c) Esc while ps:prepare is held back: the signal is fired when it arrives.
+  const held = await openTab('article.html');
+  await resetWorkerLog();
+  await recordScrolls(held.page);
+  await sw.evaluate(() => (globalThis.__holdPrepareMs = 500));
+  await command('save-pdf', held.tabId);
+  await waitFor(async () => (await workerMsgs('ps:prepare')).length === 1, {
+    interval: 10,
+    label: 'ps:prepare to be held',
+  });
+  await wait(100);
+  await held.page.keyboard.press('Escape');
+  await waitFor(async () => (await workerMsgs('ps:prepare'))[0].repliedAt, { label: 'the prepare reply' });
+  const [prep] = await workerMsgs('ps:prepare');
+  const { sc: heldScrolls } = await scrollLog(held.page);
+  check(
+    prep.aborted === true && prep.repliedAt - prep.sentAt <= 50,
+    `(c) the held prepare is answered "aborted" ${prep.repliedAt - prep.sentAt} ms after it is released`,
+  );
+  check(heldScrolls.length === 0, `(c) the page saw no scroll from that prepare (${heldScrolls.length})`);
+  await resetWorkerLog();
+  await held.page.close();
+});
+
+await test('preview: Esc during the screenshots cancels the capture', async () => {
+  await setSettings({ loadLazy: false });
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await sw.evaluate(() => {
+    globalThis.__cdp.onShot = (n, target) =>
+      n === 2
+        ? chrome.scripting.executeScript({
+            target: { tabId: target.tabId },
+            func: () =>
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })),
+          })
+        : undefined;
+  });
+  await command('save-pdf', tabId);
+  await waitFor(() => sw.evaluate(() => globalThis.__cdp.shots >= 2), {
+    interval: 10,
+    label: 'the second screenshot',
+  });
+  const took = await restoredWithin(page, tabId, before);
+  await wait(500);
+  const shots = await sw.evaluate(() => globalThis.__cdp.shots);
+  check(shots <= 4, `the capture stops within two screenshots of the Esc (${shots} taken)`);
+  check(took !== null && took <= 1000, `the page is restored ${took} ms after the Esc`);
+  check((await workerMsgs('ps:show-preview')).length === 0, 'no ps:show-preview reaches the page');
+  check((await badge(tabId)) !== '!', 'no error badge');
+  await resetWorkerLog();
+  await setSettings({});
+  await page.close();
+});
+
+await test('preview: a second request while loading', async () => {
+  await resetWorkerLog();
+  const { page, tabId } = await openTab(LAZY_LONG);
+  const before = await snapshot(page);
+  await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), tabId);
+  await command('save-pdf', tabId);
+  await waitFor(async () => (await workerState(tabId)).busy === true, {
+    interval: 10,
+    label: 'the capture to hold the tab',
+  });
+  await command('save-pdf', tabId);
+  check((await badge(tabId)) !== '!', `a repeat of the same kind sets no badge (${await badge(tabId)})`);
+  check(
+    (await received('ps:preview-element')).length === 1,
+    'exactly one ps:preview-element reaches the worker',
+  );
+  await command('save-article', tabId);
+  check((await badge(tabId)) === '!', 'another kind is refused with the badge');
+  const info = await previewInfo(page);
+  check(
+    info.title === 'Export this page' && info.loading,
+    `the page overlay is still loading (${info.title})`,
+  );
+  await page.keyboard.press('Escape');
+  check((await restoredWithin(page, tabId, before)) !== null, 'Esc restores the page');
+  await resetWorkerLog();
+  await page.close();
+});
+
+await test('preview: a new preview is refused while the overlay downloads', async () => {
+  const { page, tabId } = await openTab('element.html');
+  await pickElement(page, tabId, '#red');
+  await sw.evaluate(async (id) => {
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      func: () => {
+        chrome.runtime.sendMessage = () => new Promise(() => {});
+      },
+    });
+    await chrome.action.setBadgeText({ tabId: id, text: '' });
+  }, tabId);
+  await clickPreview(page, '.download');
+  await waitFor(async () => (await previewInfo(page)).downloadDisabled, {
+    label: 'the overlay to turn busy',
+  });
+  await command('save-pdf', tabId);
+  check((await badge(tabId)) === '!', 'the new preview is refused with the badge');
+  const info = await previewInfo(page);
+  check(
+    info.title === 'Export this element' && info.downloadDisabled && /Saving/.test(info.status),
+    `the element overlay is still there and busy (${info.title}, ${info.status})`,
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test('preview: Esc or Close during a Download cancels it and saves nothing', async () => {
+  const P6 = 'lazy/loader.html?root=section&top=500&n=100&gap=2000&loader=lodash&t=50';
+  const savedFiles = () => sw.evaluate(async () => (await chrome.downloads.search({})).length);
+  const cancelDuringPass = async (label, how) => {
+    const { page, tabId } = await openTab(P6);
+    const before = await snapshot(page);
+    await pickElement(page, tabId, 'section', { scroll: false, timeout: 90000 });
+    await chooseFormat(page, 'pdf');
+    await recordScrolls(page);
+    const files = await savedFiles();
+    await clickPreview(page, '.download');
+    await waitFor(async () => (await page.evaluate(() => scrollY)) > 0, {
+      interval: 20,
+      label: 'the Download pass to scroll',
+    });
+    let escAt;
+    if (how === 'Close') {
+      escAt = await page.evaluate(() => performance.now());
+      await clickPreview(page, '.close');
+    } else escAt = await pressEsc(page);
+    const took = await restoredWithin(page, tabId, before);
+    const late = await noNewPassScroll(page, escAt);
+    check(took !== null && took <= 1000, `${label}: restored ${took} ms after ${how}`);
+    check(late.ok, `${label}: no pass scroll later than 100 ms after ${how} (${late.late})`);
+    check((await badge(tabId)) !== '!', `${label}: no error badge`);
+    await wait(5000);
+    check((await savedFiles()) === files, `${label}: no file is saved`);
+    return { page, tabId };
+  };
+  let r = await cancelDuringPass('PDF, Esc', 'Esc');
+  await r.page.close();
+  r = await cancelDuringPass('PDF, Close', 'Close');
+  await r.page.close();
+
+  await resetWorkerLog();
+  const png = await openTab('lazy/loader.html?root=section&top=500&n=100&gap=2000&loader=lodash&t=50');
+  const pngBefore = await snapshot(png.page);
+  await pickElement(png.page, png.tabId, 'section', { scroll: false, timeout: 90000 });
+  await chooseFormat(png.page, 'png');
+  const files = await savedFiles();
+  await sw.evaluate(() => {
+    globalThis.__cdp.shots = 0;
+    globalThis.__cdp.onShot = (n, target) =>
+      n === 3
+        ? chrome.scripting.executeScript({
+            target: { tabId: target.tabId },
+            func: () =>
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })),
+          })
+        : undefined;
+  });
+  await clickPreview(png.page, '.download');
+  // A part of this PNG is a 2400 x 3200 screenshot of about 0.6 to 1.3 s, and the one in flight finishes.
+  const tookPng = await restoredWithin(png.page, png.tabId, pngBefore, 3000);
+  await wait(3000);
+  check(tookPng !== null && tookPng <= 3000, `PNG, Esc: restored ${tookPng} ms after Esc`);
+  check((await savedFiles()) === files, 'PNG, Esc: no file is saved');
+  await resetWorkerLog();
+  await png.page.close();
+
+  const held = await openTab('article.html');
+  await pickElement(held.page, held.tabId, '#story');
+  const heldBefore = await snapshot(held.page);
+  await chooseFormat(held.page, 'pdf');
+  const filesHeld = await savedFiles();
+  await sw.evaluate(() => (globalThis.__cdp.hold = { method: 'Page.printToPDF', ms: 2500, hit: false }));
+  await clickPreview(held.page, '.download');
+  await waitFor(() => sw.evaluate(() => globalThis.__cdp.hold.hit), {
+    interval: 10,
+    label: 'printToPDF to start',
+  });
+  await held.page.keyboard.press('Escape');
+  const tookHeld = await restoredWithin(held.page, held.tabId, heldBefore, 4000);
+  await wait(1500);
+  check(tookHeld !== null, 'PDF held at printToPDF: the page is restored after Esc');
+  check((await savedFiles()) === filesHeld, 'PDF held at printToPDF: no file is saved after the hold');
+  await resetWorkerLog();
+  await command('save-pdf', held.tabId);
+  check((await waitForPreview(held.page)).ready, 'a new preview opens and loads afterwards');
+  await held.page.keyboard.press('Escape');
+  await held.page.close();
+});
+
+await test('preview: the overlay is busy during any pass', async () => {
+  const { page, tabId } = await openTab('adv/lazyroot.html?n=60');
+  await pickElement(page, tabId, '#root', { timeout: 90000 });
+  await page.evaluate(() => (window.__scrolls = 0));
+  await sw.evaluate((id) => {
+    globalThis.__held = globalThis.__websnap.generate({ tabId: id, prep: 'none', output: 'return' }).then(
+      (r) => ({ ok: r.ok, base64: r.base64 }),
+      (e) => ({ error: e.message }),
+    );
+  }, tabId);
+  await waitFor(() => page.evaluate(() => window.__scrolls > 3), {
+    interval: 20,
+    label: 'the export pass to scroll',
+  });
+  const states = () =>
+    page.evaluate(() => {
+      const sr = document.querySelector('[data-websnap-ui="preview"]').shadowRoot;
+      const dis = (s) => [...sr.querySelectorAll(s)].map((b) => b.disabled);
+      return {
+        download: dis('.download'),
+        reselect: dis('.reselect'),
+        copy: dis('.copy'),
+        format: dis('select.format'),
+        parts: dis('.part-copy, .part-download'),
+        close: dis('.close'),
+      };
+    });
+  const mid = await states();
+  await page.screenshot({ path: path.join(outDir, 'preview-busy-during-pass.png') });
+  check(
+    mid.download[0] &&
+      mid.reselect[0] &&
+      mid.copy[0] &&
+      mid.format[0] &&
+      mid.parts.length > 0 &&
+      mid.parts.every(Boolean) &&
+      !mid.close[0],
+    `(a) every control but Close is disabled during the pass (${JSON.stringify(mid)})`,
+  );
+  await page.evaluate(() =>
+    document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('.reselect').click(),
+  );
+  await wait(200);
+  const st = await send(tabId, { type: 'ps:state' });
+  check(
+    !st.pickerActive && st.previewOpen,
+    `(a) a dispatched click on Reselect starts no picker (${JSON.stringify(st)})`,
+  );
+  const done = await sw.evaluate(() => globalThis.__held);
+  const pdf = lazyPdf(done, 'busy-pass.pdf');
+  check(
+    pdf.images === 60 && pdf.text.includes('ROOT-START-MARK'),
+    `(a) the export holds ${pdf.images} of 60 images and the root`,
+  );
+  const after = await states();
+  check(
+    !after.download[0] &&
+      !after.reselect[0] &&
+      !after.copy[0] &&
+      !after.format[0] &&
+      after.parts.every((d) => !d),
+    '(a) every control is enabled again after the export',
+  );
+  await page.keyboard.press('Escape');
+  await page.close();
+
+  const pv = await openTab('adv/lazyroot.html?n=60');
+  const pvBefore = await snapshot(pv.page);
+  await command('save-pdf', pv.tabId);
+  await waitFor(() => pv.page.evaluate(() => window.__scrolls > 3), {
+    interval: 20,
+    label: 'the preview pass to scroll',
+  });
+  const sel = await pv.page.evaluate(() => {
+    const b = document.querySelector('[data-websnap-ui="preview"]').shadowRoot.querySelector('.reselect');
+    const wasDisabled = b.disabled;
+    b.click();
+    return wasDisabled;
+  });
+  await wait(200);
+  const st2 = await send(pv.tabId, { type: 'ps:state' });
+  check(
+    sel && !st2.pickerActive,
+    `(b) Select part is disabled during the preview's own pass and starts no picker`,
+  );
+  await pv.page.keyboard.press('Escape');
+  await restoredWithin(pv.page, pv.tabId, pvBefore);
+  await pv.page.close();
+});
+
+await test('preview: a dismissed debugging bar stops the export with a plain message', async () => {
+  const CLOSED = "The export stopped because Chrome's debugging bar was closed. Try again.";
+  const raw = (t) => /tab with (given )?id/.test(t) || /\d{6,}/.test(t);
+  await sw.evaluate(() => {
+    globalThis.__dismiss = async (tabId, withEvent) => {
+      await chrome.debugger.detach({ tabId }).catch(() => {});
+      if (withEvent) globalThis.__websnap.debuggerDetached({ tabId }, 'canceled_by_user');
+    };
+  });
+  const dismiss = (tabId, withEvent) =>
+    sw.evaluate(({ tabId, withEvent }) => globalThis.__dismiss(tabId, withEvent), { tabId, withEvent });
+  const arm = (withEvent, nth) =>
+    sw.evaluate(
+      ({ withEvent, nth }) => {
+        globalThis.__cdp.onShot = (n, target) =>
+          n === nth ? globalThis.__dismiss(target.tabId, withEvent) : undefined;
+      },
+      { withEvent, nth },
+    );
+  const errorText = async (page) => {
+    const i = await waitFor(
+      async () => {
+        const x = await previewInfo(page);
+        return x && (x.error || /bar/.test(x.status)) ? x : null;
+      },
+      { label: 'the plain message' },
+    );
+    return i.error || i.status;
+  };
+  // (a) during the lazy pass.
+  await resetWorkerLog();
+  const a = await openTab(LAZY_LONG);
+  const aBefore = await snapshot(a.page);
+  await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), a.tabId);
+  const filesA = await downloadCount();
+  await command('save-pdf', a.tabId);
+  await waitFor(async () => (await hostShown(a.page)) && (await a.page.evaluate(() => scrollY)) > 0, {
+    interval: 20,
+    label: 'the pass to scroll',
+  });
+  await dismiss(a.tabId, true);
+  const tookA = await restoredWithin(a.page, a.tabId, aBefore, 1000, { overlay: true });
+  const textA = await errorText(a.page);
+  check(textA === CLOSED && !raw(textA), `(a) the overlay says the bar was closed (${textA})`);
+  check((await badge(a.tabId)) === '!', '(a) the badge is !');
+  check((await downloadCount()) === filesA, '(a) no file is saved');
+  check(tookA !== null && tookA <= 1000, `(a) the page is restored ${tookA} ms after the bar was dismissed`);
+  await setSettings({ loadLazy: false });
+  await a.page.keyboard.press('Escape');
+  await command('save-pdf', a.tabId);
+  check((await waitForPreview(a.page, 120000)).ready, '(a) the next preview on the tab loads');
+  await a.page.keyboard.press('Escape');
+  await a.page.close();
+
+  // (b) during the screenshots, with the event and with the detach alone.
+  for (const withEvent of [true, false]) {
+    await resetWorkerLog();
+    const b = await openTab(LAZY_LONG);
+    const bBefore = await snapshot(b.page);
+    await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), b.tabId);
+    await arm(withEvent, 2);
+    await command('save-pdf', b.tabId);
+    const t = await errorText(b.page);
+    const took = await restoredWithin(b.page, b.tabId, bBefore, 1000, { overlay: true });
+    check(
+      t === CLOSED && !raw(t),
+      `(b${withEvent ? '' : ', detach only'}) the overlay says the bar was closed (${t})`,
+    );
+    check(
+      (await badge(b.tabId)) === '!' && took !== null,
+      `(b${withEvent ? '' : ', detach only'}) badge ! and the page is restored`,
+    );
+    await b.page.close();
+  }
+
+  // (c) at the start of printToPDF, with the event and with the detach alone.
+  for (const withEvent of [true, false]) {
+    await resetWorkerLog();
+    const c = await openTab('article.html');
+    await pickElement(c.page, c.tabId, '#story');
+    const cBefore = await snapshot(c.page);
+    await chooseFormat(c.page, 'pdf');
+    await sw.evaluate((id) => chrome.action.setBadgeText({ tabId: id, text: '' }), c.tabId);
+    const filesC = await downloadCount();
+    await sw.evaluate(() => (globalThis.__cdp.hold = { method: 'Page.printToPDF', ms: 1500, hit: false }));
+    await clickPreview(c.page, '.download');
+    await waitFor(() => sw.evaluate(() => globalThis.__cdp.hold.hit), {
+      interval: 10,
+      label: 'printToPDF to start',
+    });
+    await dismiss(c.tabId, withEvent);
+    const t = await errorText(c.page);
+    const took = await restoredWithin(c.page, c.tabId, cBefore, 4000, { overlay: true });
+    check(
+      t === CLOSED && !raw(t),
+      `(c${withEvent ? '' : ', detach only'}) the status says the bar was closed (${t})`,
+    );
+    check(
+      (await badge(c.tabId)) === '!' && took !== null && (await downloadCount()) === filesC,
+      `(c${withEvent ? '' : ', detach only'}) badge !, page restored, no file`,
+    );
+    await c.page.close();
+  }
+  await resetWorkerLog();
+  await setSettings({});
+});
+
+// --- 10. one lazy pass for the preview and its Download --------------------------------------
+
+const imageCount = (file, min = 100) =>
+  execFileSync('pdfimages', ['-list', file], { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .slice(2)
+    .map((l) => l.trim().split(/\s+/))
+    .filter((c) => Number(c[3]) >= min).length;
+const lastPrepare = async () => {
+  const all = await workerMsgs('ps:prepare');
+  return all[all.length - 1];
+};
+const scrolls = (page) => page.evaluate(() => window.__scrolls);
+async function settledViewport(page, quietMs = 700) {
+  let last = await page.evaluate(() => innerHeight);
+  let since = Date.now();
+  while (Date.now() - since < quietMs) {
+    await wait(50);
+    const now = await page.evaluate(() => innerHeight);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    }
+  }
+}
+// A page preview of adv/lazyroot.html with the image landed, the worker log cleared and the scroll
+// counter reset, ready for a Download.
+async function previewReady(n = 20) {
+  const { page, tabId } = await openTab(`adv/lazyroot.html?n=${n}`);
+  await command('save-pdf', tabId);
+  await waitForPreview(page, 60000);
+  await resetWorkerLog();
+  await page.evaluate(() => (window.__scrolls = 0));
+  return { page, tabId };
+}
+async function downloadPdfFrom(page) {
+  const t0 = new Date().toISOString();
+  await chooseFormat(page, 'pdf');
+  await clickPreview(page, '.download');
+  return waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+}
+
+await test("preview: Download reuses the preview's lazy pass on an unchanged page", async () => {
+  const { page } = await previewReady(20);
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  const n = await scrolls(page);
+  check(n <= 2, `the page saw ${n} scroll events during the Download`);
+  check(prep.reused === true, `the Download's ps:prepare reply says reused (${prep.reused})`);
+  check(prep.repliedAt - prep.sentAt < 600, `the prepare took ${prep.repliedAt - prep.sentAt} ms`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+
+  const el = await openTab('adv/lazyroot.html?n=20');
+  await pickElement(el.page, el.tabId, '#root', { timeout: 90000 });
+  await resetWorkerLog();
+  const gen = () =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, prep: 'element', output: 'return' })
+          .then((r) => ({ ok: r.ok, base64: r.base64 })),
+      el.tabId,
+    );
+  await gen();
+  await wait(200);
+  await el.page.evaluate(() => (window.__scrolls = 0));
+  const second = await gen();
+  const preps = await workerMsgs('ps:prepare');
+  check(
+    preps.length === 2 && preps[0].reused === undefined && preps[1].reused === true,
+    `element: the second export reuses the first one's pass (${preps.map((p) => p.reused)})`,
+  );
+  check(
+    (await scrolls(el.page)) <= 2,
+    `element: ${await scrolls(el.page)} scroll events in the second export`,
+  );
+  check(lazyPdf(second, 'reuse-element.pdf').images === 20, 'element: 20 of 20 images');
+  await el.page.close();
+});
+
+await test('preview: Download runs a new pass when the page grew', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => window.appendBlocks(30));
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(prep.reused === undefined, `the Download's prepare is a full pass (${prep.reused})`);
+  check((await scrolls(page)) > 2, `the page scrolls again (${await scrolls(page)} scroll events)`);
+  check(
+    imageCount(item.filename, 250) === 50,
+    `the PDF holds ${imageCount(item.filename, 250)} of 50 images`,
+  );
+  await page.close();
+});
+
+await test('preview: Download runs a new pass when the page grew without a DOM change', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => document.styleSheets[0].insertRule('.block { height: 2200px !important; }'));
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(
+    prep.reused === undefined,
+    `a taller page, no mutation record: the Download runs a full pass (${prep.reused})`,
+  );
+  check((await scrolls(page)) > 2, `the page scrolls again (${await scrolls(page)} scroll events)`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+});
+
+await test('preview: Download runs a new pass when the page re-rendered its images', async () => {
+  const { page } = await previewReady(20);
+  await page.evaluate(() => {
+    for (const img of document.querySelectorAll('img.lz')) {
+      const c = img.cloneNode(false);
+      c.removeAttribute('src');
+      img.replaceWith(c);
+    }
+  });
+  const item = await downloadPdfFrom(page);
+  const prep = await lastPrepare();
+  check(prep.reused === undefined, `the Download's prepare is a full pass (${prep.reused})`);
+  check(
+    imageCount(item.filename, 250) === 20,
+    `the PDF holds ${imageCount(item.filename, 250)} of 20 images`,
+  );
+  await page.close();
+});
+
+await test('preview: two exports in a row with the overlay open', async () => {
+  const gen = (tabId) =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, prep: 'none', output: 'return' })
+          .then((r) => ({ ok: r.ok, base64: r.base64 })),
+      tabId,
+    );
+  const mutations = {
+    unchanged: [() => {}, 20, 20],
+    grew: [() => window.appendBlocks(30), 50, 50],
+    rerendered: [
+      () => {
+        for (const img of document.querySelectorAll('img.lz')) {
+          const c = img.cloneNode(false);
+          c.removeAttribute('src');
+          img.replaceWith(c);
+        }
+      },
+      20,
+      20,
+    ],
+  };
+  for (const [name, [mutate, , expected]] of Object.entries(mutations)) {
+    const { page, tabId } = await openTab('adv/lazyroot.html?n=20');
+    await pickElement(page, tabId, '#root', { timeout: 90000 });
+    await resetWorkerLog();
+    await gen(tabId);
+    await page.evaluate(mutate);
+    await wait(200);
+    await page.evaluate(() => (window.__scrolls = 0));
+    const second = await gen(tabId);
+    const prep = await lastPrepare();
+    const images = lazyPdf(second, `two-${name}.pdf`).images;
+    check(images === expected, `(a) ${name}: the second PDF holds ${images} of ${expected} images`);
+    if (name === 'unchanged')
+      check(
+        prep.reused === true && (await scrolls(page)) <= 2 && prep.repliedAt - prep.sentAt < 600,
+        `(a) unchanged reuses (${prep.reused}, ${await scrolls(page)} scroll events, ${prep.repliedAt - prep.sentAt} ms)`,
+      );
+    else check(prep.reused === undefined, `(a) ${name} runs a new pass`);
+    await page.close();
+  }
+  const { page } = await previewReady(20);
+  await chooseFormat(page, 'png');
+  for (const part of [1, 2]) {
+    const t0 = new Date().toISOString();
+    await clickPreview(page, `.part[data-part="${part}"] .part-download`);
+    await waitForDownload((i) => /\.png$/.test(i.filename) && i.startTime >= t0, 60000);
+    await waitFor(async () => !(await previewInfo(page)).downloadDisabled, {
+      label: 'the overlay to be idle again',
+    });
+    const prep = await lastPrepare();
+    check(
+      (await overlayOpen(page)) && prep.reused === true,
+      `(b) part ${part}: the overlay stays open and the pass is reused (${prep.reused})`,
+    );
+  }
+  check((await scrolls(page)) <= 2, `(b) ${await scrolls(page)} scroll events across both part Downloads`);
+  await page.close();
+});
+
+await test('preview: Download reuses an incomplete pass and shows its warning', async () => {
+  const { page, tabId } = await openTab('lazy/loader.html?n=0&feed=1');
+  await command('save-pdf', tabId);
+  await waitForPreview(page, 90000);
+  await resetWorkerLog();
+  const t0 = new Date().toISOString();
+  await chooseFormat(page, 'pdf');
+  await clickPreview(page, '.download');
+  await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+  const prep = await lastPrepare();
+  check(prep.reused === true, `the Download reuses the preview's pass (${prep.reused})`);
+  check(
+    prep.lazy && prep.lazy.complete === false,
+    `the reused pass is still incomplete (${JSON.stringify(prep.lazy)})`,
+  );
+  const info = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && i.warning ? i : null;
+    },
+    { label: 'the lazy-load warning' },
+  );
+  check(info.warning === lazyWarning(), `the overlay shows the warning the pass earned (${info.warning})`);
+  await page.keyboard.press('Escape');
+  await page.close();
+});
+
+await test("preview: resize and orientation galleries keep main's image count", async () => {
+  const direct = (tabId) =>
+    sw.evaluate(
+      (id) =>
+        globalThis.__websnap
+          .generate({ tabId: id, output: 'return', settings: { loadLazy: true } })
+          .then((r) => ({ base64: r.base64 })),
+      tabId,
+    );
+  const countOf = (r, name) => {
+    const file = path.join(outDir, name);
+    fs.writeFileSync(file, Buffer.from(r.base64, 'base64'));
+    return imageCount(file);
+  };
+  for (const [id, url] of [
+    ['reset0-io', 'lazy/adv.html?loader=io&mode=reset&rd=0'],
+    ['orient-mq-io', 'lazy/adv.html?loader=io&mode=mq'],
+  ]) {
+    // main's export of the URL on a fresh tab, and after a preview was shown and closed. A headless
+    // run leaves Chrome's debugging bar up after a preview's capture, and its slide-in at the next
+    // attach resizes the page under any export, so the second count (give or take the few frames
+    // the resizes race) is the fair floor for a Download. A record reused wrongly gives 1 here.
+    const fresh = await openTab(url);
+    const expected = countOf(await direct(fresh.tabId), `gallery-${id}-fresh.pdf`);
+    await fresh.page.close();
+    const after = await openTab(url);
+    await command('save-pdf', after.tabId);
+    await waitForPreview(after.page, 90000);
+    await after.page.keyboard.press('Escape');
+    await waitFor(async () => !(await workerState(after.tabId)).busy, { label: 'the tab to be released' });
+    await settledViewport(after.page);
+    const floor = countOf(await direct(after.tabId), `gallery-${id}-after-preview.pdf`);
+    await after.page.close();
+    const { page, tabId } = await openTab(url);
+    await command('save-pdf', tabId);
+    await waitForPreview(page, 90000);
+    await settledViewport(page);
+    const t0 = new Date().toISOString();
+    await chooseFormat(page, 'pdf');
+    await clickPreview(page, '.download');
+    const item = await waitForDownload((i) => /\.pdf$/.test(i.filename) && i.startTime >= t0, 60000);
+    const got = imageCount(item.filename);
+    check(
+      got >= floor - 5 && got > 1,
+      `${id}: preview + Download saves ${got} images; main exports ${expected} on a fresh tab and ${floor} after a preview`,
+    );
+    await page.close();
+  }
+});
+
+// --- 11. the page going away mid-export ------------------------------------------------------
+
+await test('preview: a page that goes away mid-export gets a plain message', async () => {
+  const messages = JSON.parse(
+    fs.readFileSync(path.join(root, 'extension/_locales/en/messages.json'), 'utf8'),
+  );
+  const de = JSON.parse(fs.readFileSync(path.join(root, 'extension/_locales/de/messages.json'), 'utf8'));
+  const raw = /message channel|Receiving end|No tab with|port closed/i;
+  for (const [language, expected] of [
+    ['en', messages.preview_errorInterrupted.message],
+    ['de', de.preview_errorInterrupted.message],
+  ]) {
+    await setSettings({ language });
+    for (const how of ['navigates', 'closes']) {
+      const { page, tabId } = await openTab(LAZY_LONG);
+      const popup = await openPopupFor(tabId, page);
+      const pending = popupSend(popup, { type: 'ps:export-element', tabId, format: 'png', prep: 'none' });
+      await waitFor(() => page.evaluate(() => scrollY > 0), { interval: 20, label: 'the pass to scroll' });
+      if (how === 'navigates') await page.goto(`${base}/body-fixed.html`);
+      else await page.close();
+      const res = await pending;
+      check(
+        res.ok === false && res.error === expected && !raw.test(res.error),
+        `${language}, tab ${how}: "${res.error}"`,
+      );
+      await popup.close();
+      if (how === 'navigates') await page.close();
+    }
+  }
+  await setSettings({});
+
+  const { page, tabId } = await openTab('article.html');
+  await send(tabId, { type: 'ps:ping' });
+  const lost =
+    'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received';
+  await sw.evaluate(
+    async ({ tabId, lost }) => {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (lost) => {
+          chrome.runtime.sendMessage = () => Promise.reject(new Error(lost));
+        },
+        args: [lost],
+      });
+    },
+    { tabId, lost },
+  );
+  const strings = { preview_errorInterrupted: 'INTERRUPTED', preview_errorGeneric: 'GENERIC' };
+  await send(tabId, { type: 'ps:set-target', kind: 'page', strings, theme: 'light' });
+  const info = await waitForPreview(page);
+  check(
+    info.error === 'INTERRUPTED',
+    `the overlay shows the plain message for a lost capture (${info.error})`,
+  );
+  await page.keyboard.press('Escape');
+  await stubSendMessage(tabId);
+  await send(tabId, { type: 'ps:set-target', kind: 'page', strings, theme: 'light' });
+  const [req] = (await readSentMessages(tabId)).filter((m) => m.type === 'ps:preview-element').slice(-1);
+  await send(tabId, {
+    type: 'ps:show-preview',
+    requestId: req.requestId,
+    parts: [{ dataUrl: 'data:image/png;base64,' + PIXEL_PNG, width: 10, height: 10 }],
+    width: 10,
+    height: 10,
+    format: 'pdf',
+    strings,
+    theme: 'light',
+  });
+  await waitForPreview(page);
+  await sw.evaluate(
+    async ({ tabId, lost }) => {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (lost) => {
+          chrome.runtime.sendMessage = () => Promise.reject(new Error(lost));
+        },
+        args: [lost],
+      });
+    },
+    { tabId, lost },
+  );
+  await clickPreview(page, '.download');
+  const after = await waitFor(
+    async () => {
+      const i = await previewInfo(page);
+      return i && /INTERRUPTED/.test(i.status) ? i : null;
+    },
+    { label: 'the status line' },
+  );
+  check(
+    after.status === 'INTERRUPTED',
+    `the status line shows the plain message for a lost Download (${after.status})`,
+  );
+  await page.keyboard.press('Escape');
+  await send(tabId, { type: 'ps:reset-page' });
+  await page.close();
 });
 
 const failures = summary();
